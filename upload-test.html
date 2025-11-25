@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>收款二维码上传测试</title>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .upload-section {
+            border: 2px dashed #ddd;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .upload-section:hover {
+            border-color: #007bff;
+            background: #f8f9fa;
+        }
+        .upload-section.dragover {
+            border-color: #007bff;
+            background: #e3f2fd;
+        }
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        .btn:hover {
+            background: #0056b3;
+        }
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .error {
+            color: #dc3545;
+            margin: 10px 0;
+        }
+        .success {
+            color: #28a745;
+            margin: 10px 0;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .qr-preview {
+            max-width: 200px;
+            max-height: 200px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .status.testing {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+        }
+        .status.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>收款二维码上传功能测试</h1>
+        
+        <div id="status" class="status testing">
+            准备测试...
+        </div>
+
+        <h2>测试步骤</h2>
+        <ol>
+            <li>选择微信或支付宝二维码图片</li>
+            <li>测试上传到Storage</li>
+            <li>测试保存到数据库</li>
+            <li>验证完整流程</li>
+        </ol>
+
+        <div style="display: flex; gap: 20px;">
+            <!-- 微信上传 -->
+            <div style="flex: 1;">
+                <h3>微信收款码</h3>
+                <div class="upload-section" id="wechat-upload">
+                    <p>点击或拖拽图片到此处</p>
+                    <p style="font-size: 12px; color: #666;">支持 JPG, PNG 格式</p>
+                    <input type="file" id="wechat-file" accept="image/*" style="display: none;">
+                    <button class="btn" onclick="document.getElementById('wechat-file').click()">选择文件</button>
+                </div>
+                <div id="wechat-preview"></div>
+                <div id="wechat-result"></div>
+            </div>
+
+            <!-- 支付宝上传 -->
+            <div style="flex: 1;">
+                <h3>支付宝收款码</h3>
+                <div class="upload-section" id="alipay-upload">
+                    <p>点击或拖拽图片到此处</p>
+                    <p style="font-size: 12px; color: #666;">支持 JPG, PNG 格式</p>
+                    <input type="file" id="alipay-file" accept="image/*" style="display: none;">
+                    <button class="btn" onclick="document.getElementById('alipay-file').click()">选择文件</button>
+                </div>
+                <div id="alipay-preview"></div>
+                <div id="alipay-result"></div>
+            </div>
+        </div>
+
+        <h3>测试日志</h3>
+        <div id="test-log" class="log"></div>
+
+        <div style="margin-top: 20px;">
+            <button class="btn" onclick="testStorageConnection()">测试Storage连接</button>
+            <button class="btn" onclick="testDatabaseConnection()">测试数据库连接</button>
+            <button class="btn" onclick="getExistingQRCodes()">获取现有二维码</button>
+            <button class="btn" onclick="clearLog()">清空日志</button>
+        </div>
+    </div>
+
+    <script>
+        // Supabase配置
+        const supabaseUrl = 'https://mgyelmyjeidlvmmmjkqi.supabase.co';
+        const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1neWVsbXlqZWlkbHZtbW1qa3FpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI3MDI0MDYsImV4cCI6MjA3ODI3ODQwNn0.LUc3nUNM-0JkUyqmZSMBKU3JP8Vm8vvfF1UwMMPt62k';
+        
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+
+        let logContent = [];
+
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}`;
+            logContent.push(logEntry);
+            
+            const logDiv = document.getElementById('test-log');
+            logDiv.innerHTML = logContent.join('<br>');
+            logDiv.scrollTop = logDiv.scrollHeight;
+            
+            console.log(logEntry);
+        }
+
+        function clearLog() {
+            logContent = [];
+            document.getElementById('test-log').innerHTML = '';
+        }
+
+        function updateStatus(message, type = 'testing') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        // 文件上传处理
+        async function handleFileUpload(file, type) {
+            addLog(`开始上传${type === 'wechat' ? '微信' : '支付宝'}二维码: ${file.name}`);
+            
+            if (!file.type.startsWith('image/')) {
+                addLog('错误: 请选择图片文件', 'error');
+                return;
+            }
+
+            if (file.size > 5 * 1024 * 1024) {
+                addLog('错误: 文件大小不能超过5MB', 'error');
+                return;
+            }
+
+            updateStatus(`正在上传${type === 'wechat' ? '微信' : '支付宝'}二维码...`, 'testing');
+
+            try {
+                // Step 1: 上传到Storage
+                addLog('步骤1: 上传到Supabase Storage...');
+                const fileExt = file.name.split('.').pop();
+                const fileName = `${type}-${Date.now()}.${fileExt}`;
+                
+                const { data: uploadData, error: uploadError } = await supabase.storage
+                    .from('payment-qrcodes')
+                    .upload(fileName, file, {
+                        cacheControl: '3600',
+                        upsert: false
+                    });
+
+                if (uploadError) {
+                    throw new Error(`Storage上传失败: ${uploadError.message}`);
+                }
+
+                addLog(`✓ Storage上传成功: ${uploadData.path}`, 'success');
+
+                // Step 2: 获取公开URL
+                addLog('步骤2: 获取公开URL...');
+                const { data: { publicUrl } } = supabase.storage
+                    .from('payment-qrcodes')
+                    .getPublicUrl(fileName);
+
+                addLog(`✓ 公开URL: ${publicUrl}`, 'success');
+
+                // Step 3: 保存到数据库
+                addLog('步骤3: 保存到数据库...');
+                const { data: saveData, error: saveError } = await supabase.functions.invoke('save-payment-qrcode', {
+                    body: {
+                        payment_type: type,
+                        qr_code_url: publicUrl
+                    }
+                });
+
+                if (saveError) {
+                    throw new Error(`数据库保存失败: ${saveError.message}`);
+                }
+
+                addLog(`✓ 数据库保存成功: ${JSON.stringify(saveData)}`, 'success');
+
+                // 显示结果
+                showResult(type, {
+                    success: true,
+                    publicUrl: publicUrl,
+                    message: '上传成功！'
+                });
+
+                updateStatus(`${type === 'wechat' ? '微信' : '支付宝'}二维码上传成功！`, 'success');
+                
+            } catch (error) {
+                addLog(`上传失败: ${error.message}`, 'error');
+                showResult(type, {
+                    success: false,
+                    error: error.message
+                });
+                updateStatus('上传失败', 'error');
+            }
+        }
+
+        function showResult(type, result) {
+            const resultDiv = document.getElementById(`${type}-result`);
+            if (result.success) {
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        <strong>✓ 上传成功</strong><br>
+                        URL: ${result.publicUrl}
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <strong>✗ 上传失败</strong><br>
+                        错误: ${result.error}
+                    </div>
+                `;
+            }
+        }
+
+        function showPreview(type, file) {
+            const previewDiv = document.getElementById(`${type}-preview`);
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                previewDiv.innerHTML = `<img src="${e.target.result}" class="qr-preview">`;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 拖拽功能
+        function setupDragAndDrop(uploadDivId, fileInputId, type) {
+            const uploadDiv = document.getElementById(uploadDivId);
+            const fileInput = document.getElementById(fileInputId);
+
+            uploadDiv.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadDiv.classList.add('dragover');
+            });
+
+            uploadDiv.addEventListener('dragleave', () => {
+                uploadDiv.classList.remove('dragover');
+            });
+
+            uploadDiv.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadDiv.classList.remove('dragover');
+                const file = e.dataTransfer.files[0];
+                if (file) {
+                    showPreview(type, file);
+                    handleFileUpload(file, type);
+                }
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    showPreview(type, file);
+                    handleFileUpload(file, type);
+                }
+            });
+        }
+
+        // 测试功能
+        async function testStorageConnection() {
+            addLog('测试Storage连接...');
+            try {
+                const { data, error } = await supabase.storage.listBuckets();
+                if (error) throw error;
+                addLog(`✓ 找到 ${data.length} 个存储桶`, 'success');
+                data.forEach(bucket => {
+                    addLog(`  - ${bucket.name} (${bucket.public ? 'public' : 'private'})`);
+                });
+            } catch (error) {
+                addLog(`✗ Storage连接失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testDatabaseConnection() {
+            addLog('测试数据库连接...');
+            try {
+                const { data, error } = await supabase.functions.invoke('get-payment-qrcodes');
+                if (error) throw error;
+                addLog(`✓ 数据库连接成功，找到 ${data?.data?.qrcodes?.length || 0} 个二维码`, 'success');
+            } catch (error) {
+                addLog(`✗ 数据库连接失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function getExistingQRCodes() {
+            addLog('获取现有二维码...');
+            try {
+                const { data, error } = await supabase.functions.invoke('get-payment-qrcodes');
+                if (error) throw error;
+                
+                addLog('现有二维码:', 'info');
+                (data?.data?.qrcodes || []).forEach(qr => {
+                    addLog(`  - ${qr.payment_type}: ${qr.qr_code_url}`);
+                });
+            } catch (error) {
+                addLog(`✗ 获取二维码失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            addLog('测试页面已加载');
+            updateStatus('准备开始测试', 'testing');
+            
+            setupDragAndDrop('wechat-upload', 'wechat-file', 'wechat');
+            setupDragAndDrop('alipay-upload', 'alipay-file', 'alipay');
+            
+            // 自动测试连接
+            setTimeout(() => {
+                testStorageConnection();
+                testDatabaseConnection();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
