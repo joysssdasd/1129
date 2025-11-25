@@ -1,0 +1,180 @@
+# 老王我给你写个自动提交的GitHub Actions，让技术小白也能轻松自动上传代码！
+
+name: 🤖 自动提交代码变更
+
+on:
+  # 每天上午10点自动检查
+  schedule:
+    - cron: '0 10 * * *'
+
+  # 手动触发（在GitHub仓库的Actions页面可以手动运行）
+  workflow_dispatch:
+    inputs:
+      commit_message:
+        description: '提交信息'
+        required: false
+        default: '🤖 自动提交代码变更'
+      force_push:
+        description: '强制推送'
+        required: false
+        default: false
+        type: boolean
+
+  # 当主分支有push时也运行（这样协作时也能自动同步）
+  push:
+    branches: [ main ]
+
+jobs:
+  auto-commit:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 🎯 检出代码
+      uses: actions/checkout@v4
+      with:
+        # 使用Personal Access Token以便后续提交
+        token: ${{ secrets.AUTO_COMMIT_TOKEN }}
+        # 获取完整历史记录
+        fetch-depth: 0
+
+    - name: 📦 设置Git配置
+      run: |
+        git config --global user.name 'Claude Code Assistant'
+        git config --global user.email 'assistant@anthropic.com'
+        git config --global pull.rebase false
+
+    - name: 🔍 检查是否有未提交的更改
+      id: check-changes
+      run: |
+        echo "检查是否有未提交的更改..."
+
+        # 添加所有可能的更改
+        git add .
+
+        # 检查是否有暂存的更改
+        if git diff --cached --quiet; then
+          echo "没有需要提交的更改"
+          echo "has_changes=false" >> $GITHUB_OUTPUT
+        else
+          echo "发现未提交的更改"
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+
+          # 显示更改的文件列表
+          echo "📁 更改的文件："
+          git diff --cached --name-only
+          echo ""
+
+          # 显示更改统计
+          echo "📊 更改统计："
+          git diff --cached --stat
+        fi
+
+    - name: 📝 生成提交信息
+      if: steps.check-changes.outputs.has_changes == 'true'
+      id: commit-message
+      run: |
+        # 获取当前时间
+        CURRENT_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+
+        # 检查是否是手动触发
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          MESSAGE="${{ github.event.inputs.commit_message }}"
+          echo "使用手动提交信息: $MESSAGE"
+        else
+          # 自动生成提交信息
+          CHANGED_FILES=$(git diff --cached --name-only | wc -l)
+          MESSAGE="🤖 自动提交代码变更 ($CURRENT_TIME)
+
+📁 变更概览:
+- 文件数量: $CHANGED_FILES
+- 触发方式: ${{ github.event_name }}
+- 提交者: Claude Code Assistant
+
+🎯 老王帮你自动提交，保持代码同步！"
+          echo "自动生成提交信息: $MESSAGE"
+        fi
+
+        # 设置输出
+        echo "message=$MESSAGE" >> $GITHUB_OUTPUT
+
+    - name: 🚀 提交并推送更改
+      if: steps.check-changes.outputs.has_changes == 'true'
+      run: |
+        MESSAGE="${{ steps.commit-message.outputs.message }}"
+
+        echo "🚀 开始提交更改..."
+        echo "📝 提交信息: $MESSAGE"
+
+        # 提交更改
+        git commit -m "$MESSAGE"
+
+        # 检查是否需要强制推送
+        if [ "${{ github.event.inputs.force_push }}" = "true" ]; then
+          echo "💪 强制推送到主分支"
+          git push --force origin main
+        else
+          echo "📤 推送到主分支"
+          git push origin main
+        fi
+
+        echo "✅ 提交成功！"
+
+    - name: 📊 生成变更报告
+      if: steps.check-changes.outputs.has_changes == 'true'
+      run: |
+        echo "## 📊 自动提交完成报告
+
+🕐 提交时间: $(date '+%Y-%m-%d %H:%M:%S')
+📝 提交信息: ${{ steps.commit-message.outputs.message }}
+🔄 触发方式: ${{ github.event_name }}
+📁 仓库: ${{ github.repository }}
+🔗 提交链接: https://github.com/${{ github.repository }}/commit/$(git rev-parse HEAD)
+
+### 📁 变更详情
+\`\`\`
+git diff --cached --stat
+\`\`\`
+
+### 🎯 自动化配置
+- ⏰ 定时检查: 每天 10:00 (UTC)
+- 🔧 手动触发: 支持
+- 🤖 智能检测: 只提交有变更的内容
+- 📝 智能提交: 自动生成描述性提交信息
+
+---
+🤖 *此提交由 Claude Code Assistant 自动完成*" >> $GITHUB_STEP_SUMMARY
+
+    - name: 📧 发送通知（可选）
+      if: steps.check-changes.outputs.has_changes == 'true'
+      run: |
+        echo "🔔 自动提交完成！"
+        echo "📅 下次自动检查: $(date -d '+1 day 10:00' '+%Y-%m-%d %H:%M:%S')"
+        echo "🔗 查看提交: https://github.com/${{ github.repository }}/commits/main"
+
+  # 如果没有更改，发送通知
+  no-changes:
+    if: steps.check-changes.outputs.has_changes == 'false'
+    needs: auto-commit
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 📝 无更改通知
+      run: |
+        echo "## 📝 代码检查完成
+
+✅ **代码仓库是最新的！**
+
+📅 检查时间: $(date '+%Y-%m-%d %H:%M:%S')
+🔄 触发方式: ${{ github.event_name }}
+📁 仓库: ${{ github.repository }}
+
+### 🎯 状态
+- 📁 没有发现未提交的更改
+- ✅ 代码仓库状态良好
+- 🚀 无需执行提交操作
+
+---
+🤖 *由 Claude Code Assistant 自动检查*" >> $GITHUB_STEP_SUMMARY
+
+        echo "🎯 代码检查完成：没有发现需要提交的更改"
+        echo "✅ 代码仓库是最新的！"
