@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../../services/supabase'
 import { Sparkles, ArrowRight, Check, X, Edit } from 'lucide-react'
 
 interface AIBatchPublishProps {

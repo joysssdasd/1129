@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useUser } from '../contexts/UserContext'
-import { supabase } from '../lib/supabase'
+import { useUser } from '../../contexts/UserContext'
+import { supabase } from '../../services/supabase'
 import { Home, PlusCircle, User, Search, LogOut, RefreshCw } from 'lucide-react'
 
 interface Post {

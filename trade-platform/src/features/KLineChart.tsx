@@ -1,7 +1,7 @@
 // K-line Chart Component for Price Analytics
 import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../services/supabase';
 import { Download, TrendingUp, Calendar } from 'lucide-react';
 
 interface KLineChartProps {

@@ -1,8 +1,8 @@
 // Invitation Statistics Component
 import { useState, useEffect } from 'react';
 import { Users, Gift, TrendingUp, Share2 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import ShareModal from './ShareModal';
+import { supabase } from '../services/supabase';
+import ShareModal from './ui/ShareModal';
 
 interface InvitationStats {
     inviteCode: string;

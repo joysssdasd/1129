@@ -1,11 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { UserProvider, useUser } from './contexts/UserContext'
-import LoginPage from './pages/LoginPage'
-import HomePage from './pages/HomePage'
-import PostDetailPage from './pages/PostDetailPage'
-import PublishPage from './pages/PublishPage'
-import ProfilePage from './pages/ProfilePage'
-import AdminPage from './pages/AdminPage'
+import LoginPage from './components/pages/LoginPage'
+import HomePage from './components/pages/HomePage'
+import PostDetailPage from './components/pages/PostDetailPage'
+import PublishPage from './components/pages/PublishPage'
+import ProfilePage from './components/pages/ProfilePage'
+import AdminPage from './components/pages/AdminPage'
 import './App.css'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {

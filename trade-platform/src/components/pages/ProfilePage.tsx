@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useUser } from '../contexts/UserContext'
-import { supabase } from '../lib/supabase'
+import { useUser } from '../../contexts/UserContext'
+import { supabase } from '../../services/supabase'
 import { ArrowLeft, Copy, Upload, MessageCircle, Receipt, TrendingUp, FileText, Edit, Trash2, Clock, CheckCircle, XCircle, Key, Users } from 'lucide-react'
-import InvitationStatistics from '../components/InvitationStatistics'
+import InvitationStatistics from '../../features/InvitationStatistics'
 
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState('overview')

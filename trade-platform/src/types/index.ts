@@ -10,7 +10,11 @@ export interface User {
   invite_code: string
   points: number
   success_rate: number
+  deal_rate?: number
+  total_posts?: number
+  total_invites?: number
   is_admin: boolean
+  role?: string
   created_at: string
   updated_at: string
 }

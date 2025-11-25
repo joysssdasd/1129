@@ -116,7 +116,7 @@ export const useValidation = <T extends Record<string, any>>(
   /**
    * 批量更新值
    */
-  const setValues = useCallback((newValues: Partial<T>) => {
+  const updateValues = useCallback((newValues: Partial<T>) => {
     setValues(prev => ({ ...prev, ...newValues }));
 
     // 验证已触碰的字段
@@ -203,6 +203,7 @@ export const useValidation = <T extends Record<string, any>>(
     // 方法
     setValue,
     setValues,
+    updateValues,
     setFieldTouched,
     setAllTouched,
     validateField,

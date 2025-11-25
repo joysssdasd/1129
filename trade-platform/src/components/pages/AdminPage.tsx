@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useUser } from '../contexts/UserContext'
-import { supabase } from '../lib/supabase'
+import { useUser } from '../../contexts/UserContext'
+import { supabase } from '../../services/supabase'
 import { ArrowLeft, Users, FileText, DollarSign, Sparkles, TrendingUp } from 'lucide-react'
-import QRCodeManager from '../components/QRCodeManager'
-import AIBatchPublish from '../components/AIBatchPublish'
-import KLineChart from '../components/KLineChart'
+import QRCodeManager from '../../features/QRCodeManager'
+import AIBatchPublish from '../../features/forms/AIBatchPublish'
+import KLineChart from '../../features/KLineChart'
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState('users')

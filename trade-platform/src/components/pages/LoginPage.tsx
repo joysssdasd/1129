@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useUser } from '../contexts/UserContext'
-import { supabase } from '../lib/supabase'
+import { useUser } from '../../contexts/UserContext'
+import { supabase } from '../../services/supabase'
 
 type LoginMode = 'password' | 'code'
 

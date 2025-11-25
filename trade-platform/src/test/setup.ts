@@ -3,7 +3,7 @@
  */
 
 import '@testing-library/jest-dom';
-import { vi } from 'vitest';
+import { vi, expect } from 'vitest';
 
 // Mock Supabase
 vi.mock('@supabase/supabase-js', () => ({
@@ -78,8 +78,8 @@ global.IntersectionObserver = vi.fn().mockImplementation(() => ({
 }));
 
 // Mock environment variables
-vi.mock('@/constants', async () => {
-  const actual = await vi.importActual('@/constants');
+vi.mock('../../constants', async () => {
+  const actual = await vi.importActual('../../constants') as any;
   return {
     ...actual,
     DEV_CONFIG: {

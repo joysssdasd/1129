@@ -46,8 +46,8 @@ export const usePosts = (initialParams?: Partial<PaginationParams>) => {
       }
 
       setPagination({
-        page: response.page,
-        limit: response.limit,
+        page: response.page as 1,
+        limit: response.limit as 20,
         total: response.total,
         hasMore: response.hasMore,
       });

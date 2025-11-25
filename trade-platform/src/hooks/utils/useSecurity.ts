@@ -54,6 +54,7 @@ export const useRateLimit = (maxAttempts: number = 5, timeWindow: number = 60000
 
     // 增加计数
     setState(prev => ({
+      ...prev,
       count: prev.count + 1,
       lastAttempt: now,
     }));

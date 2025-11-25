@@ -220,14 +220,14 @@ export class ErrorHandler {
    * 处理网络错误
    */
   handleNetworkError(error: Error): NetworkError {
-    let message = ERROR_MESSAGES.NETWORK_ERROR;
-    let code = ERROR_CODES.NETWORK_ERROR;
+    let message: string = ERROR_MESSAGES.NETWORK_ERROR;
+    let code: string = ERROR_CODES.NETWORK_ERROR;
 
     if (error.name === 'AbortError') {
-      message = '请求超时';
+      message = ERROR_MESSAGES.TIMEOUT_ERROR;
       code = ERROR_CODES.TIMEOUT_ERROR;
     } else if (error.message.includes('Failed to fetch')) {
-      message = '网络连接失败';
+      message = ERROR_MESSAGES.CONNECTION_ERROR;
       code = ERROR_CODES.NETWORK_ERROR;
     }
 

@@ -33,7 +33,8 @@ export const STORAGE_KEYS = {
   AUTH_TOKEN: 'auth_token',
   USER_INFO: 'user_info',
   THEME: 'theme',
-  LANGUAGE: 'language'
+  LANGUAGE: 'language',
+  LAST_ACTIVITY: 'last_activity'
 } as const
 
 /**
@@ -203,6 +204,8 @@ export const ERROR_MESSAGES = {
   PHONE_ALREADY_EXISTS: '该手机号已注册',
   UPLOAD_FAILED: '上传失败',
   SERVER_ERROR: '服务器错误，请稍后重试',
+  TIMEOUT_ERROR: '请求超时',
+  CONNECTION_ERROR: '网络连接失败',
 } as const
 
 /**

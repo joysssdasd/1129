@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useUser } from '../contexts/UserContext'
-import { supabase } from '../lib/supabase'
+import { useUser } from '../../contexts/UserContext'
+import { supabase } from '../../services/supabase'
 import { ArrowLeft } from 'lucide-react'
 
 export default function PublishPage() {

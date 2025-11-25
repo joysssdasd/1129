@@ -171,7 +171,7 @@ export class AuthService extends BaseApiService {
       }
 
       if (!data.user) {
-        throw new ApiError(ERROR_MESSAGES.INVALID_CREDENTIALS, ERROR_CODES.UNAUTHORIZED, 401);
+        throw new ApiError(ERROR_MESSAGES.INVALID_PHONE, ERROR_CODES.UNAUTHORIZED, 401);
       }
 
       toast.success(SUCCESS_MESSAGES.LOGIN_SUCCESS);
