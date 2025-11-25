@@ -204,46 +204,46 @@ export default function UserAIBatchPublish({
   }
 
   return (
-    <div className=\"max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg\">
-      <div className=\"flex items-center justify-between mb-6\">
-        <h2 className=\"text-2xl font-bold flex items-center gap-2\">
-          <Sparkles className=\"w-6 h-6 text-yellow-500\" />
+    <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold flex items-center gap-2">
+          <Sparkles className="w-6 h-6 text-yellow-500" />
           AI批量发布
         </h2>
 
         {/* 积分状态显示 */}
-        <div className=\"flex items-center gap-4 text-sm\">
-          <div className=\"flex items-center gap-2\">
-            <span className=\"text-gray-600\">当前积分:</span>
-            <span className=\"font-bold text-blue-600\">{user?.points || 0}</span>
+        <div className="flex items-center gap-4 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-600">当前积分:</span>
+            <span className="font-bold text-blue-600">{user?.points || 0}</span>
           </div>
-          <div className=\"flex items-center gap-2\">
-            <span className=\"text-gray-600\">可发布:</span>
-            <span className=\"font-bold text-green-600\">{remainingPosts}个</span>
+          <div className="flex items-center gap-2">
+            <span className="text-gray-600">可发布:</span>
+            <span className="font-bold text-green-600">{remainingPosts}个</span>
           </div>
-          <div className=\"flex items-center gap-2\">
-            <span className=\"text-gray-600\">消耗:</span>
-            <span className=\"font-bold text-red-600\">{POINTS.PUBLISH_POST_COST}积分/个</span>
+          <div className="flex items-center gap-2">
+            <span className="text-gray-600">消耗:</span>
+            <span className="font-bold text-red-600">{POINTS.PUBLISH_POST_COST}积分/个</span>
           </div>
         </div>
       </div>
 
       {/* 用户微信号显示 */}
       {userWechatId && (
-        <div className=\"mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200\">
-          <p className=\"text-sm text-blue-700\">
-            <strong>联系方式:</strong> 将自动使用您的微信号 <span className=\"font-mono bg-white px-2 py-1 rounded\">{userWechatId}</span>
+        <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+          <p className="text-sm text-blue-700">
+            <strong>联系方式:</strong> 将自动使用您的微信号 <span className="font-mono bg-white px-2 py-1 rounded">{userWechatId}</span>
           </p>
         </div>
       )}
 
       {/* 积分不足警告 */}
       {!canPublish && (
-        <div className=\"mb-4 p-3 bg-red-50 rounded-lg border border-red-200 flex items-start gap-2\">
-          <AlertTriangle className=\"w-5 h-5 text-red-500 flex-shrink-0 mt-0.5\" />
+        <div className="mb-4 p-3 bg-red-50 rounded-lg border border-red-200 flex items-start gap-2">
+          <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
           <div>
-            <p className=\"text-sm text-red-700 font-medium\">积分不足</p>
-            <p className=\"text-xs text-red-600 mt-1\">
+            <p className="text-sm text-red-700 font-medium">积分不足</p>
+            <p className="text-xs text-red-600 mt-1">
               发布帖子需要 {POINTS.PUBLISH_POST_COST} 积分，您当前只有 {user?.points || 0} 积分。请先充值后再发布。
             </p>
           </div>
@@ -251,138 +251,138 @@ export default function UserAIBatchPublish({
       )}
 
       {/* 输入区域 */}
-      <div className=\"mb-6\">
-        <label className=\"block text-sm font-medium text-gray-700 mb-2\">
+      <div className="mb-6">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
           描述您要批量发布的商品信息
         </label>
         <textarea
           value={aiText}
           onChange={(e) => setAiText(e.target.value)}
-          placeholder=\"请描述您要发布的商品，例如：我有一批苹果手机要转让，包括iPhone 13、14等型号，价格在3000-6000元之间...\"
-          className=\"w-full h-32 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none\"
+          placeholder="请描述您要发布的商品，例如：我有一批苹果手机要转让，包括iPhone 13、14等型号，价格在3000-6000元之间..."
+          className="w-full h-32 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
           disabled={!canPublish}
         />
-        <p className=\"text-xs text-gray-500 mt-1\">
+        <p className="text-xs text-gray-500 mt-1">
           AI将根据您的描述自动生成多个吸引人的商品标题和价格
         </p>
       </div>
 
       {/* 生成按钮 */}
-      <div className=\"mb-6\">
+      <div className="mb-6">
         <button
           onClick={handleAIGenerate}
           disabled={aiLoading || !aiText.trim() || !canPublish}
-          className=\"flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium\"
+          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium"
         >
-          <Sparkles className=\"w-5 h-5\" />
+          <Sparkles className="w-5 h-5" />
           {aiLoading ? 'AI生成中...' : 'AI智能生成'}
         </button>
       </div>
 
       {/* 生成结果 */}
       {generatedPosts.length > 0 && (
-        <div className=\"space-y-4 mb-6\">
-          <h3 className=\"text-lg font-semibold flex items-center gap-2\">
-            <Check className=\"w-5 h-5 text-green-500\" />
+        <div className="space-y-4 mb-6">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Check className="w-5 h-5 text-green-500" />
             AI为您生成了 {generatedPosts.length} 个商品信息
           </h3>
 
           {/* 过期时间提醒 */}
-          <div className=\"p-3 bg-amber-50 rounded-lg border border-amber-200 flex items-start gap-2\">
-            <Clock className=\"w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5\" />
+          <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 flex items-start gap-2">
+            <Clock className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
             <div>
-              <p className=\"text-sm text-amber-700 font-medium\">⏰ 自动下架提醒</p>
-              <p className=\"text-xs text-amber-600 mt-1\">
+              <p className="text-sm text-amber-700 font-medium">⏰ 自动下架提醒</p>
+              <p className="text-xs text-amber-600 mt-1">
                 所有商品信息将在发布3天后自动下架，请确保及时处理交易
               </p>
             </div>
           </div>
 
           {generatedPosts.map((post, index) => (
-            <div key={index} className=\"border rounded-lg p-4 bg-gray-50\">
+            <div key={index} className="border rounded-lg p-4 bg-gray-50">
               {postStatus[index] === 'success' && (
-                <div className=\"mb-2 p-2 bg-green-100 text-green-700 rounded text-sm flex items-center gap-2\">
-                  <Check className=\"w-4 h-4\" />
+                <div className="mb-2 p-2 bg-green-100 text-green-700 rounded text-sm flex items-center gap-2">
+                  <Check className="w-4 h-4" />
                   发布成功
                 </div>
               )}
               {postStatus[index] === 'error' && (
-                <div className=\"mb-2 p-2 bg-red-100 text-red-700 rounded text-sm flex items-center gap-2\">
-                  <X className=\"w-4 h-4\" />
+                <div className="mb-2 p-2 bg-red-100 text-red-700 rounded text-sm flex items-center gap-2">
+                  <X className="w-4 h-4" />
                   发布失败，请重试
                 </div>
               )}
 
-              <div className=\"grid grid-cols-1 md:grid-cols-2 gap-4\">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className=\"block text-sm font-medium text-gray-700 mb-1\">商品标题</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">商品标题</label>
                   {editingIndex === index ? (
                     <input
-                      type=\"text\"
+                      type="text"
                       value={post.title}
                       onChange={(e) => handleSaveEdit(index, 'title', e.target.value)}
-                      className=\"w-full p-2 border border-gray-300 rounded\"
+                      className="w-full p-2 border border-gray-300 rounded"
                     />
                   ) : (
-                    <p className=\"text-gray-900 font-medium\">{post.title}</p>
+                    <p className="text-gray-900 font-medium">{post.title}</p>
                   )}
                 </div>
 
                 <div>
-                  <label className=\"block text-sm font-medium text-gray-700 mb-1\">价格 (元)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">价格 (元)</label>
                   {editingIndex === index ? (
                     <input
-                      type=\"number\"
+                      type="number"
                       value={post.price}
                       onChange={(e) => handleSaveEdit(index, 'price', e.target.value)}
-                      className=\"w-full p-2 border border-gray-300 rounded\"
+                      className="w-full p-2 border border-gray-300 rounded"
                     />
                   ) : (
-                    <p className=\"text-gray-900 font-medium\">¥{post.price}</p>
+                    <p className="text-gray-900 font-medium">¥{post.price}</p>
                   )}
                 </div>
 
                 <div>
-                  <label className=\"block text-sm font-medium text-gray-700 mb-1\">关键词</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">关键词</label>
                   {editingIndex === index ? (
                     <input
-                      type=\"text\"
+                      type="text"
                       value={post.keywords}
                       onChange={(e) => handleSaveEdit(index, 'keywords', e.target.value)}
-                      className=\"w-full p-2 border border-gray-300 rounded\"
+                      className="w-full p-2 border border-gray-300 rounded"
                     />
                   ) : (
-                    <p className=\"text-gray-900\">{post.keywords}</p>
+                    <p className="text-gray-900">{post.keywords}</p>
                   )}
                 </div>
 
                 <div>
-                  <label className=\"block text-sm font-medium text-gray-700 mb-1\">交易类型</label>
-                  <p className=\"text-gray-900\">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">交易类型</label>
+                  <p className="text-gray-900">
                     {post.trade_type === 'transfer' ? '转让' : '求购'}
                   </p>
                 </div>
 
-                <div className=\"md:col-span-2\">
-                  <label className=\"block text-sm font-medium text-gray-700 mb-1\">描述</label>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">描述</label>
                   {editingIndex === index ? (
                     <textarea
                       value={post.description || ''}
                       onChange={(e) => handleSaveEdit(index, 'description', e.target.value)}
-                      className=\"w-full p-2 border border-gray-300 rounded h-16 resize-none\"
+                      className="w-full p-2 border border-gray-300 rounded h-16 resize-none"
                     />
                   ) : (
-                    <p className=\"text-gray-900\">{post.description || '无描述'}</p>
+                    <p className="text-gray-900">{post.description || '无描述'}</p>
                   )}
                 </div>
               </div>
 
-              <div className=\"mt-4 flex justify-end gap-2\">
+              <div className="mt-4 flex justify-end gap-2">
                 {editingIndex === index ? (
                   <>
                     <button
                       onClick={() => setEditingIndex(null)}
-                      className=\"px-3 py-1 text-gray-600 hover:text-gray-800 transition-colors\"
+                      className="px-3 py-1 text-gray-600 hover:text-gray-800 transition-colors"
                     >
                       完成
                     </button>
@@ -391,18 +391,18 @@ export default function UserAIBatchPublish({
                   <>
                     <button
                       onClick={() => handleEditPost(index)}
-                      className=\"flex items-center gap-1 px-3 py-1 text-blue-600 hover:text-blue-800 transition-colors\"
+                      className="flex items-center gap-1 px-3 py-1 text-blue-600 hover:text-blue-800 transition-colors"
                       disabled={postStatus[index] !== 'pending'}
                     >
-                      <Edit className=\"w-4 h-4\" />
+                      <Edit className="w-4 h-4" />
                       编辑
                     </button>
                     <button
                       onClick={() => handleRemovePost(index)}
-                      className=\"flex items-center gap-1 px-3 py-1 text-red-600 hover:text-red-800 transition-colors\"
+                      className="flex items-center gap-1 px-3 py-1 text-red-600 hover:text-red-800 transition-colors"
                       disabled={postStatus[index] !== 'pending'}
                     >
-                      <X className=\"w-4 h-4\" />
+                      <X className="w-4 h-4" />
                       删除
                     </button>
                   </>
@@ -415,23 +415,23 @@ export default function UserAIBatchPublish({
 
       {/* 批量发布按钮 */}
       {generatedPosts.length > 0 && (
-        <div className=\"flex justify-between items-center pt-6 border-t\">
-          <div className=\"text-sm text-gray-600\">
+        <div className="flex justify-between items-center pt-6 border-t">
+          <div className="text-sm text-gray-600">
             共 {generatedPosts.length} 个商品，预计消耗 {generatedPosts.length * POINTS.PUBLISH_POST_COST} 积分
           </div>
-          <div className=\"flex gap-3\">
+          <div className="flex gap-3">
             <button
               onClick={onViewPublished}
-              className=\"px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors\"
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
             >
               查看已发布
             </button>
             <button
               onClick={handleBatchPublish}
               disabled={aiLoading || generatedPosts.length === 0 || !canPublish}
-              className=\"flex items-center gap-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors\"
+              className="flex items-center gap-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              <ArrowRight className=\"w-5 h-5\" />
+              <ArrowRight className="w-5 h-5" />
               {aiLoading ? '发布中...' : `确认发布 (${generatedPosts.length}个)`}
             </button>
           </div>
