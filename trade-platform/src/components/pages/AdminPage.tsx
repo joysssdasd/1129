@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../../contexts/UserContext'
 import { supabase } from '../../services/supabase'
-import { ArrowLeft, Users, FileText, DollarSign, Sparkles, TrendingUp } from 'lucide-react'
+import { ArrowLeft, Users, FileText, DollarSign, Sparkles, TrendingUp, BarChart3 } from 'lucide-react'
 import QRCodeManager from '../../features/QRCodeManager'
 import AIBatchPublish from '../../features/forms/AIBatchPublish'
 import KLineChart from '../../features/KLineChart'
+import AnalyticsDashboard from '../../features/analytics/AnalyticsDashboard'
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState('users')
@@ -238,8 +239,8 @@ export default function AdminPage() {
                 activeTab === 'analytics' ? 'bg-purple-100 text-purple-700' : 'text-gray-600'
               }`}
             >
-              <TrendingUp className="w-4 h-4" />
-              Data Analysis
+              <BarChart3 className="w-4 h-4" />
+              数据分析
             </button>
           </div>
         </div>
@@ -452,17 +453,7 @@ export default function AdminPage() {
           />
         )}
 
-        {activeTab === 'analytics' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-2xl font-bold mb-2">Keyword Price Analytics</h2>
-              <p className="text-gray-600 mb-6">
-                Analyze price trends and market data to make informed decisions
-              </p>
-              <KLineChart />
-            </div>
-          </div>
-        )}
+        {activeTab === 'analytics' && <AnalyticsDashboard />}
       </div>
     </div>
   )

@@ -65,7 +65,7 @@ export default function KLineChart({ keyword, tradeType }: KLineChartProps) {
 
         const option = {
             title: {
-                text: `Price Trend Analysis${selectedKeyword ? ': ' + selectedKeyword : ''}`,
+                text: `价格走势分析${selectedKeyword ? ': ' + selectedKeyword : ''}`,
                 left: 'center',
                 textStyle: {
                     fontSize: 18,
@@ -83,18 +83,18 @@ export default function KLineChart({ keyword, tradeType }: KLineChartProps) {
                     return `
                         <div style="padding: 10px;">
                             <div style="font-weight: bold; margin-bottom: 5px;">${data.date}</div>
-                            <div>Open: ${data.open.toFixed(2)}</div>
-                            <div>Close: ${data.close.toFixed(2)}</div>
-                            <div>High: ${data.high.toFixed(2)}</div>
-                            <div>Low: ${data.low.toFixed(2)}</div>
-                            <div>Avg: ${data.avg.toFixed(2)}</div>
-                            <div>Posts: ${data.volume}</div>
+                            <div>开盘价: ¥${data.open.toFixed(2)}</div>
+                            <div>收盘价: ¥${data.close.toFixed(2)}</div>
+                            <div>最高价: ¥${data.high.toFixed(2)}</div>
+                            <div>最低价: ¥${data.low.toFixed(2)}</div>
+                            <div>平均价: ¥${data.avg.toFixed(2)}</div>
+                            <div>信息数量: ${data.volume}</div>
                         </div>
                     `;
                 }
             },
             legend: {
-                data: ['K-Line', 'Volume'],
+                data: ['K线图', '成交量'],
                 top: 35
             },
             grid: [
@@ -169,7 +169,7 @@ export default function KLineChart({ keyword, tradeType }: KLineChartProps) {
             ],
             series: [
                 {
-                    name: 'K-Line',
+                    name: 'K线图',
                     type: 'candlestick',
                     data: values,
                     itemStyle: {
@@ -180,7 +180,7 @@ export default function KLineChart({ keyword, tradeType }: KLineChartProps) {
                     }
                 },
                 {
-                    name: 'Volume',
+                    name: '成交量',
                     type: 'bar',
                     xAxisIndex: 1,
                     yAxisIndex: 1,
@@ -211,7 +211,7 @@ export default function KLineChart({ keyword, tradeType }: KLineChartProps) {
     };
 
     const exportToCSV = () => {
-        const headers = ['Date', 'Open', 'Close', 'High', 'Low', 'Average', 'Volume'];
+        const headers = ['日期', '开盘价', '收盘价', '最高价', '最低价', '平均价', '信息数量'];
         const rows = chartData.map(d => [
             d.date,
             d.open.toFixed(2),
@@ -230,7 +230,7 @@ export default function KLineChart({ keyword, tradeType }: KLineChartProps) {
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `price_analytics_${selectedKeyword || 'all'}_${new Date().toISOString().split('T')[0]}.csv`;
+        link.download = `价格分析_${selectedKeyword || '全部'}_${new Date().toISOString().split('T')[0]}.csv`;
         link.click();
     };
 
@@ -240,14 +240,14 @@ export default function KLineChart({ keyword, tradeType }: KLineChartProps) {
                 <div className="flex flex-wrap gap-4 items-center">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Keyword
+                            关键词
                         </label>
                         <select
                             value={selectedKeyword}
                             onChange={(e) => setSelectedKeyword(e.target.value)}
                             className="border border-gray-300 rounded px-3 py-2 text-sm"
                         >
-                            <option value="">All Keywords</option>
+                            <option value="">全部关键词</option>
                             {availableKeywords.map(kw => (
                                 <option key={kw} value={kw}>{kw}</option>
                             ))}
@@ -256,17 +256,17 @@ export default function KLineChart({ keyword, tradeType }: KLineChartProps) {
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Time Range
+                            时间范围
                         </label>
                         <select
                             value={days}
                             onChange={(e) => setDays(Number(e.target.value))}
                             className="border border-gray-300 rounded px-3 py-2 text-sm"
                         >
-                            <option value={7}>Last 7 days</option>
-                            <option value={30}>Last 30 days</option>
-                            <option value={90}>Last 90 days</option>
-                            <option value={180}>Last 180 days</option>
+                            <option value={7}>最近7天</option>
+                            <option value={30}>最近30天</option>
+                            <option value={90}>最近90天</option>
+                            <option value={180}>最近180天</option>
                         </select>
                     </div>
                 </div>
@@ -277,18 +277,18 @@ export default function KLineChart({ keyword, tradeType }: KLineChartProps) {
                     className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
                 >
                     <Download className="w-4 h-4" />
-                    Export CSV
+                    导出CSV
                 </button>
             </div>
 
             {loading ? (
                 <div className="h-[600px] flex items-center justify-center">
-                    <div className="text-gray-500">Loading chart data...</div>
+                    <div className="text-gray-500">加载图表数据中...</div>
                 </div>
             ) : chartData.length === 0 ? (
                 <div className="h-[600px] flex flex-col items-center justify-center text-gray-500">
                     <TrendingUp className="w-16 h-16 mb-4 text-gray-300" />
-                    <div>No data available for the selected period</div>
+                    <div>所选时间段暂无数据</div>
                 </div>
             ) : (
                 <div ref={chartRef} style={{ width: '100%', height: '600px' }} />
@@ -297,25 +297,25 @@ export default function KLineChart({ keyword, tradeType }: KLineChartProps) {
             {chartData.length > 0 && (
                 <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-blue-50 p-4 rounded">
-                        <div className="text-xs text-gray-600 mb-1">Latest Price</div>
+                        <div className="text-xs text-gray-600 mb-1">最新价格</div>
                         <div className="text-xl font-bold text-blue-600">
                             {chartData[chartData.length - 1]?.close.toFixed(2)}
                         </div>
                     </div>
                     <div className="bg-red-50 p-4 rounded">
-                        <div className="text-xs text-gray-600 mb-1">Highest</div>
+                        <div className="text-xs text-gray-600 mb-1">最高价</div>
                         <div className="text-xl font-bold text-red-600">
                             {Math.max(...chartData.map(d => d.high)).toFixed(2)}
                         </div>
                     </div>
                     <div className="bg-green-50 p-4 rounded">
-                        <div className="text-xs text-gray-600 mb-1">Lowest</div>
+                        <div className="text-xs text-gray-600 mb-1">最低价</div>
                         <div className="text-xl font-bold text-green-600">
                             {Math.min(...chartData.map(d => d.low)).toFixed(2)}
                         </div>
                     </div>
                     <div className="bg-purple-50 p-4 rounded">
-                        <div className="text-xs text-gray-600 mb-1">Total Posts</div>
+                        <div className="text-xs text-gray-600 mb-1">信息总数</div>
                         <div className="text-xl font-bold text-purple-600">
                             {chartData.reduce((sum, d) => sum + d.volume, 0)}
                         </div>

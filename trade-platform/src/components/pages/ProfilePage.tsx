@@ -2,12 +2,16 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../../contexts/UserContext'
 import { supabase } from '../../services/supabase'
-import { ArrowLeft, Copy, Upload, MessageCircle, Receipt, TrendingUp, FileText, Edit, Trash2, Clock, CheckCircle, XCircle, Key, Users } from 'lucide-react'
+import { ArrowLeft, Copy, Upload, MessageCircle, Receipt, TrendingUp, FileText, Edit, Trash2, Clock, CheckCircle, XCircle, Key, Users, Sparkles, Archive, AlertTriangle } from 'lucide-react'
 import InvitationStatistics from '../../features/InvitationStatistics'
+import UserAIBatchPublish from '../../features/forms/UserAIBatchPublish'
+import { autoHideService } from '../../services/autoHideService'
+import { POST_STATUS } from '../../constants'
 
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState('overview')
   const [myPosts, setMyPosts] = useState<any[]>([])
+  const [expiredPosts, setExpiredPosts] = useState<any[]>([])
   const [viewHistory, setViewHistory] = useState<any[]>([])
   const [pointTransactions, setPointTransactions] = useState<any[]>([])
   const [rechargeRecords, setRechargeRecords] = useState<any[]>([])
@@ -18,17 +22,18 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [paymentQRCodes, setPaymentQRCodes] = useState<{wechat?: string, alipay?: string}>({})
-  
+
   // 修改密码相关
   const [oldPassword, setOldPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  
+
   const { user, setUser } = useUser()
   const navigate = useNavigate()
 
   useEffect(() => {
     if (activeTab === 'posts') loadMyPosts()
+    if (activeTab === 'expired') loadExpiredPosts()
     if (activeTab === 'history') loadViewHistory()
     if (activeTab === 'points') loadPointTransactions()
     if (activeTab === 'rechargeHistory') loadRechargeRecords()
@@ -68,6 +73,17 @@ export default function ProfilePage() {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
     setMyPosts(data || [])
+  }
+
+  const loadExpiredPosts = async () => {
+    if (!user) return
+    try {
+      const expiredPosts = await autoHideService.getUserExpiredPosts(user.id)
+      setExpiredPosts(expiredPosts)
+    } catch (error) {
+      console.error('加载过期帖子失败:', error)
+      setExpiredPosts([])
+    }
   }
 
   const loadViewHistory = async () => {
@@ -426,6 +442,16 @@ export default function ProfilePage() {
                   </div>
                 </button>
                 <button
+                  onClick={() => setActiveTab('aiPublish')}
+                  className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-purple-400 hover:bg-purple-50 transition-all"
+                >
+                  <Sparkles className="w-5 h-5 text-purple-600" />
+                  <div className="text-left">
+                    <div className="font-medium text-sm">AI批量发布</div>
+                    <div className="text-xs text-gray-500">智能生成</div>
+                  </div>
+                </button>
+                <button
                   onClick={() => setActiveTab('history')}
                   className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all"
                 >
@@ -433,6 +459,16 @@ export default function ProfilePage() {
                   <div className="text-left">
                     <div className="font-medium text-sm">查看历史</div>
                     <div className="text-xs text-gray-500">最近记录</div>
+                  </div>
+                </button>
+                <button
+                  onClick={() => setActiveTab('expired')}
+                  className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-orange-400 hover:bg-orange-50 transition-all"
+                >
+                  <Archive className="w-5 h-5 text-orange-600" />
+                  <div className="text-left">
+                    <div className="font-medium text-sm">过期帖子</div>
+                    <div className="text-xs text-gray-500">已下架</div>
                   </div>
                 </button>
                 <button
@@ -1067,6 +1103,107 @@ export default function ProfilePage() {
                 >
                   {loading ? '修改中...' : '确认修改'}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* AI批量发布标签页 */}
+        {activeTab === 'aiPublish' && (
+          <div>
+            <button
+              onClick={() => setActiveTab('overview')}
+              className="text-blue-600 text-sm flex items-center gap-1 mb-4"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              返回
+            </button>
+            <UserAIBatchPublish
+              userId={user?.id || ''}
+              userWechatId={user?.wechat_id}
+              onComplete={() => {
+                setActiveTab('posts')
+                loadMyPosts()
+              }}
+              onViewPublished={() => setActiveTab('posts')}
+            />
+          </div>
+        )}
+
+        {/* 过期帖子标签页 */}
+        {activeTab === 'expired' && (
+          <div>
+            <button
+              onClick={() => setActiveTab('overview')}
+              className="text-blue-600 text-sm flex items-center gap-1 mb-4"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              返回
+            </button>
+            <div className="space-y-4">
+              <div className="bg-white rounded-lg p-6">
+                <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                  <Archive className="w-5 h-5 text-orange-500" />
+                  过期帖子管理
+                </h2>
+                <p className="text-sm text-gray-600 mb-4">
+                  以下是3天后自动下架或手动下架的帖子记录
+                </p>
+
+                {expiredPosts.length === 0 ? (
+                  <div className="bg-white rounded-lg p-8 text-center text-gray-500">
+                    <Archive className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p>暂无过期帖子</p>
+                    <p className="text-xs mt-1">上架的帖子将在3天后自动下架</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {expiredPosts.map((post) => (
+                      <div key={post.id} className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="font-medium flex-1">{post.title}</h3>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs px-2 py-1 bg-orange-100 text-orange-700 rounded">
+                              {post.status === POST_STATUS.EXPIRED ? '3天到期' : '已下架'}
+                            </span>
+                            {post.hide_reason && (
+                              <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
+                                {post.hide_reason === 'auto_expired' ? '自动到期' :
+                                 post.hide_reason === 'manual' ? '手动下架' : '管理员下架'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="text-sm text-gray-600 mb-2">
+                          <span className="mr-4">价格: ¥{post.price}</span>
+                          <span className="mr-4">类型: {post.trade_type === 'transfer' ? '转让' : '求购'}</span>
+                        </div>
+
+                        <div className="text-xs text-gray-500 mb-2">
+                          发布时间: {new Date(post.created_at).toLocaleString()}
+                          {post.auto_hide_at && (
+                            <span className="ml-4">
+                              下架时间: {new Date(post.auto_hide_at).toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+
+                        {post.status === POST_STATUS.ACTIVE && autoHideService.isExpiringSoon(post.created_at) && (
+                          <div className="flex items-start gap-2 p-2 bg-amber-100 text-amber-700 rounded text-sm">
+                            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-medium">即将过期提醒</p>
+                              <p className="text-xs">
+                                此帖子将在 {autoHideService.getRemainingHours(post.created_at)} 小时后自动下架
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>

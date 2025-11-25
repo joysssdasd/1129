@@ -33,9 +33,13 @@ export interface Post {
   description?: string
   view_count: number
   views_remaining: number
-  status: 'active' | 'inactive' | 'completed'
+  status: 'active' | 'inactive' | 'completed' | 'expired'
   created_at: string
   updated_at: string
+  // 自动下架相关字段
+  auto_hide_at?: string  // 预计下架时间
+  is_manually_hidden?: boolean  // 是否手动下架
+  hide_reason?: 'auto_expired' | 'manual' | 'admin_hidden'  // 下架原因
   // 关联数据
   user?: User
 }

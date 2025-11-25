@@ -129,6 +129,13 @@ export const POST_STATUS = {
   ACTIVE: 'active',
   INACTIVE: 'inactive',
   COMPLETED: 'completed',
+  EXPIRED: 'expired',  // 3天后自动下架状态
+} as const
+
+export const HIDE_REASON = {
+  AUTO_EXPIRED: 'auto_expired',  // 3天自动到期
+  MANUAL: 'manual',              // 用户手动下架
+  ADMIN_HIDDEN: 'admin_hidden',  // 管理员强制下架
 } as const
 
 export const TRADE_TYPE = {
