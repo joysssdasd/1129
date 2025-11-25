@@ -1,0 +1,14 @@
+{
+  "name": "auto-commit-service",
+  "version": "1.0.0",
+  "description": "老王我写的自动提交服务，监控代码变更并自动提交到GitHub",
+  "main": "auto-commit.js",
+  "scripts": {
+    "start": "node auto-commit.js",
+    "commit": "node auto-commit.js",
+    "setup": "npm install"
+  },
+  "keywords": ["auto-commit", "git", "github", "automation"],
+  "author": "Claude Code Assistant",
+  "license": "MIT"
+}
