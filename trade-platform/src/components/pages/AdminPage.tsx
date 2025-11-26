@@ -5,7 +5,7 @@ import { supabase } from '../../services/supabase'
 import { ArrowLeft, Users, FileText, DollarSign, Sparkles, TrendingUp, BarChart3 } from 'lucide-react'
 import QRCodeManager from '../../features/QRCodeManager'
 import AIBatchPublish from '../../features/forms/AIBatchPublish'
-import KLineChart from '../../features/KLineChart'
+import KLineChart from '../../features/KLineChart-Simple'
 import AnalyticsDashboard from '../../features/analytics/AnalyticsDashboard'
 
 export default function AdminPage() {

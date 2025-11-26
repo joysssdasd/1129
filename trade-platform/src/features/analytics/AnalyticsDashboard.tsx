@@ -5,7 +5,7 @@ import HourlyStats from './HourlyStats'
 import PriceAnalysis from './PriceAnalysis'
 import ArbitrageDetector from './ArbitrageDetector'
 import DailyReport from './DailyReport'
-import KLineChart from '../KLineChart'
+import KLineChart from '../KLineChart-Fixed'
 
 interface AnalyticsStats {
   totalUsers: number

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../../contexts/UserContext'
 import { supabase } from '../../services/supabase'
@@ -12,8 +12,55 @@ export default function PublishPage() {
   const [deliveryDate, setDeliveryDate] = useState('')
   const [extraInfo, setExtraInfo] = useState('')
   const [loading, setLoading] = useState(false)
+  const [titleSuggestions, setTitleSuggestions] = useState<string[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
   const { user, setUser } = useUser()
   const navigate = useNavigate()
+
+  // 标题建议数据（可以根据实际情况扩展）
+  const commonTitlePatterns = [
+    '演唱会', '音乐会', '音乐节', '话剧', '舞台剧',
+    '门票', '票', '邀请函', '代录', '转让',
+    '周杰伦', '林俊杰', '五月天', '陈奕迅', '邓紫棋',
+    '成都', '北京', '上海', '广州', '深圳', '杭州',
+    '体育馆', '体育中心', '大剧院', '音乐厅',
+    '看台', '内场', 'VIP', '包厢', '前排',
+    'iPhone 15', 'iPhone 16', '华为Mate', '小米', '三星',
+    'PS5', 'Xbox', 'Switch', '显卡', 'CPU', '内存',
+    '红色', '蓝色', '黑色', '白色', '粉色', '金色',
+    '全新', '9成新', '95新', '拆封未用', '仅激活'
+  ]
+
+  // 标题输入处理和自动补全
+  const handleTitleChange = (value: string) => {
+    setTitle(value)
+
+    if (value.length > 0) {
+      // 根据输入内容过滤建议
+      const filtered = commonTitlePatterns.filter(pattern =>
+        pattern.toLowerCase().includes(value.toLowerCase())
+      )
+      setTitleSuggestions(filtered.slice(0, 8)) // 限制显示8个建议
+      setShowSuggestions(true)
+    } else {
+      setShowSuggestions(false)
+    }
+  }
+
+  // 选择建议
+  const handleSelectSuggestion = (suggestion: string) => {
+    // 在现有标题基础上添加建议，避免覆盖
+    const newTitle = title.includes(suggestion) ? title : `${title} ${suggestion}`.trim()
+    setTitle(newTitle)
+    setShowSuggestions(false)
+  }
+
+  // 点击外部关闭建议
+  useEffect(() => {
+    const handleClickOutside = () => setShowSuggestions(false)
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -68,19 +115,37 @@ export default function PublishPage() {
       <div className="max-w-2xl mx-auto px-4 py-6">
         <div className="bg-white rounded-lg shadow-sm p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
+            <div className="relative">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 标题 *
               </label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                maxLength={30}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="请输入标题（不超过30字）"
-                required
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => handleTitleChange(e.target.value)}
+                  onFocus={() => title.length > 0 && setShowSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                  maxLength={30}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="请将商品关键字标出，例如歌手，城市，日期，票档，产品型号颜色等"
+                  required
+                />
+                {showSuggestions && titleSuggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {titleSuggestions.map((suggestion, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={() => handleSelectSuggestion(suggestion)}
+                        className="w-full text-left px-4 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 text-sm"
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="text-right text-sm text-gray-400 mt-1">
                 {title.length}/30
               </div>
@@ -88,18 +153,21 @@ export default function PublishPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                关键词 *
+                补充信息
               </label>
-              <input
-                type="text"
-                value={keywords}
-                onChange={(e) => setKeywords(e.target.value)}
+              <textarea
+                value={extraInfo}
+                onChange={(e) => setExtraInfo(e.target.value)}
+                maxLength={30}
+                rows={3}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="请输入3-5个关键词，用英文逗号分隔"
-                required
+                placeholder="请勿填写任何联系方式，主要是对商品信息交易方式的补充"
               />
+              <div className="text-right text-sm text-gray-400 mt-1">
+                {extraInfo.length}/30
+              </div>
               <div className="text-sm text-gray-500 mt-1">
-                例如：演唱会,门票,转让
+                非必填项，请勿填写联系方式
               </div>
             </div>
 
@@ -146,37 +214,20 @@ export default function PublishPage() {
               </div>
             </div>
 
-            {(tradeType === 3 || tradeType === 4) && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    交割时间 *
-                  </label>
-                  <input
-                    type="date"
-                    value={deliveryDate}
-                    onChange={(e) => setDeliveryDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    补充信息 *
-                  </label>
-                  <input
-                    type="text"
-                    value={extraInfo}
-                    onChange={(e) => setExtraInfo(e.target.value)}
-                    maxLength={20}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="请输入补充信息（不超过20字）"
-                    required
-                  />
-                </div>
-              </>
+            {tradeType === 3 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  交割时间 *
+                </label>
+                <input
+                  type="date"
+                  value={deliveryDate}
+                  onChange={(e) => setDeliveryDate(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
             )}
 
             <div className="bg-blue-50 rounded-lg p-4">
