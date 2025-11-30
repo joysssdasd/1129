@@ -22,3 +22,30 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# 🔐 老王的环境变量文件，不能提交！
+.env
+.env.local
+.env.*.local
+
+# 🔐 MCP配置文件包含密钥，不能提交！
+.mcp.json
+
+# 🗑️ 老王的垃圾文件备份目录
+trash_backup/
+../trash_backup/
+
+# 🗑️ 老王的数据库设置临时脚本
+*setup*.js
+*fix*.js
+*test*.js
+*create*.js
+*direct*.js
+*setup*.sql
+*fix*.sql
+*database*.sql
+*table*.sql
+simple-db-*
+init-db-*
+complete-*
+final-*

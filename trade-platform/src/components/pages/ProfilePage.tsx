@@ -42,24 +42,25 @@ export default function ProfilePage() {
 
   const loadPaymentQRCodes = async () => {
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-payment-qrcodes`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
-          }
-        }
-      )
+      // 临时解决方案：直接从Supabase获取二维码数据
+      const { data, error } = await supabase
+        .from('payment_qrcodes')
+        .select('payment_type, qr_code_url')
+        .eq('status', 'active') // 只获取激活的二维码
+        .order('created_at', { ascending: false })
 
-      if (response.ok) {
-        const data = await response.json()
-        setPaymentQRCodes({
-          wechat: data.wechat?.qr_code_url,
-          alipay: data.alipay?.qr_code_url
-        })
+      if (error) {
+        console.error('获取收款二维码失败：', error)
+        return
       }
+
+      const wechat = data?.find((q: any) => q.payment_type === 'wechat')
+      const alipay = data?.find((q: any) => q.payment_type === 'alipay')
+
+      setPaymentQRCodes({
+        wechat: wechat?.qr_code_url,
+        alipay: alipay?.qr_code_url
+      })
     } catch (error) {
       console.error('获取收款二维码失败：', error)
     }
