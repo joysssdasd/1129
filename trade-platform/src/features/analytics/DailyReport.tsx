@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Calendar, Download, FileText, Users, DollarSign, TrendingUp, RefreshCw, BarChart3 } from 'lucide-react'
 import { supabase } from '../../services/supabase'
+import { log } from '../../utils/logger'
 
 interface DailyStats {
   date: string
@@ -39,7 +40,7 @@ interface DailyReport {
   }
 }
 
-export default function DailyReport() {
+function DailyReport() {
   const [report, setReport] = useState<DailyReport | null>(null)
   const [loading, setLoading] = useState(false)
   const [dateRange, setDateRange] = useState<'7days' | '30days' | '90days'>('7days')
@@ -65,7 +66,7 @@ export default function DailyReport() {
         await calculateReportFrontend()
       }
     } catch (error) {
-      console.error('生成日报失败:', error)
+      log.error('生成日报失败:', error)
       await calculateReportFrontend()
     } finally {
       setLoading(false)
@@ -226,7 +227,7 @@ export default function DailyReport() {
         trends
       })
     } catch (error) {
-      console.error('前端日报计算失败:', error)
+      log.error('前端日报计算失败:', error)
       setReport(null)
     }
   }
@@ -544,3 +545,5 @@ export default function DailyReport() {
     </div>
   )
 }
+
+export default React.memo(DailyReport)

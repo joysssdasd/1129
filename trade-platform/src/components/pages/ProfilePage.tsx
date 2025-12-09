@@ -7,6 +7,7 @@ import InvitationStatistics from '../../features/InvitationStatistics'
 import UserAIBatchPublish from '../../features/forms/UserAIBatchPublish'
 import { autoHideService } from '../../services/autoHideService'
 import { POST_STATUS } from '../../constants'
+import { log } from '../../utils/logger'
 
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState('overview')
@@ -50,7 +51,7 @@ export default function ProfilePage() {
         .order('created_at', { ascending: false })
 
       if (error) {
-        console.error('获取收款二维码失败：', error)
+        log.error('获取收款二维码失败：', error)
         return
       }
 
@@ -62,7 +63,7 @@ export default function ProfilePage() {
         alipay: alipay?.qr_code_url
       })
     } catch (error) {
-      console.error('获取收款二维码失败：', error)
+      log.error('获取收款二维码失败：', error)
     }
   }
 
@@ -82,7 +83,7 @@ export default function ProfilePage() {
       const expiredPosts = await autoHideService.getUserExpiredPosts(user.id)
       setExpiredPosts(expiredPosts)
     } catch (error) {
-      console.error('加载过期帖子失败:', error)
+      log.error('加载过期帖子失败:', error)
       setExpiredPosts([])
     }
   }
@@ -137,7 +138,7 @@ export default function ProfilePage() {
         .eq('user_id', user?.id)
       
       if (error) {
-        console.error('删除错误：', error)
+        log.error('删除错误：', error)
         throw error
       }
       
@@ -161,7 +162,7 @@ export default function ProfilePage() {
       if (updatedUser) setUser(updatedUser)
       loadMyPosts()
     } catch (error: any) {
-      console.error('删除失败：', error)
+      log.error('删除失败：', error)
       alert(error.message || '删除失败，请稍后重试')
     } finally {
       setLoading(false)
@@ -169,7 +170,7 @@ export default function ProfilePage() {
   }
 
   const handleTogglePostStatus = async (postId: string, currentStatus: number, viewCount: number, viewLimit: number) => {
-    console.log('🔴 按钮被点击', { postId, currentStatus, viewCount, viewLimit })
+    log.log('🔴 按钮被点击', { postId, currentStatus, viewCount, viewLimit })
     
     // 如果是下架操作，提前计算并显示将返还的积分
     if (currentStatus === 1) {

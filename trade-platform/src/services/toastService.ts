@@ -4,6 +4,7 @@
 
 import { create } from 'zustand';
 import { SUCCESS_MESSAGES, ERROR_MESSAGES } from '@/constants';
+import { log } from '@/utils/logger';
 
 /**
  * Toast消息类型
@@ -238,8 +239,8 @@ export const handleBoundaryError = (error: Error, errorInfo: React.ErrorInfo) =>
         label: '查看详情',
         onClick: () => {
           console.group('Error Boundary Details');
-          console.error('Error:', error);
-          console.error('Error Info:', errorInfo);
+          log.error('Error:', error);
+          log.error('Error Info:', errorInfo);
           console.groupEnd();
         },
       },

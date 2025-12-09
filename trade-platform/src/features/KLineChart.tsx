@@ -1,15 +1,16 @@
 // K-line Chart Component for Price Analytics
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
 import { supabase } from '../services/supabase';
 import { Download, TrendingUp, Calendar } from 'lucide-react';
+import { log } from '../utils/logger';
 
 interface KLineChartProps {
     keyword?: string;
     tradeType?: number;
 }
 
-export default function KLineChart({ keyword, tradeType }: KLineChartProps) {
+function KLineChart({ keyword, tradeType }: KLineChartProps) {
     const chartRef = useRef<HTMLDivElement>(null);
     const [chartData, setChartData] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
@@ -54,7 +55,7 @@ export default function KLineChart({ keyword, tradeType }: KLineChartProps) {
                 setAvailableKeywords(data.data.availableKeywords || []);
             }
         } catch (error) {
-            console.error('Failed to fetch chart data:', error);
+            log.error('Failed to fetch chart data:', error);
         } finally {
             setLoading(false);
         }
@@ -433,3 +434,5 @@ export default function KLineChart({ keyword, tradeType }: KLineChartProps) {
         </div>
     );
 }
+
+export default React.memo(KLineChart)

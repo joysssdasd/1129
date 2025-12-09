@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
         }
 
         // 第一步：查找所有违规的帖子（view_count超过view_limit）
-        const违规PostsResponse = await fetch(
+        const violatingPostsResponse = await fetch(
             `${supabaseUrl}/rest/v1/posts?view_count=gt.view_limit&status=eq.1&select=*`,
             {
                 headers: {
@@ -30,9 +30,9 @@ Deno.serve(async (req) => {
             }
         );
 
-        const违规Posts = await违规PostsResponse.json();
+        const violatingPosts = await violatingPostsResponse.json();
 
-        if (!违规Posts ||违规Posts.length === 0) {
+        if (!violatingPosts || violatingPosts.length === 0) {
             return new Response(JSON.stringify({
                 data: {
                     message: '没有发现违规数据',
@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
         let totalRefundedPoints = 0;
         const cleanupLog = [];
 
-        for (const post of违规Posts) {
+        for (const post of violatingPosts) {
             try {
                 const excessViews = post.view_count - post.view_limit;
                 const refundPoints = Math.max(0, post.view_limit - post.view_count); // 确保不为负数
@@ -242,13 +242,13 @@ Deno.serve(async (req) => {
             data: {
                 message: '数据清理完成',
                 summary: {
-                    违规数据_count: processedCount,
-                    过期数据_count: expiredCount,
-                    总退还积分: totalRefundedPoints,
-                    总处理数量: processedCount + expiredCount
+                    violating_count: processedCount,
+                    expired_count: expiredCount,
+                    total_refunded_points: totalRefundedPoints,
+                    total_processed: processedCount + expiredCount
                 },
-                违规数据详情: cleanupLog,
-                时间: new Date().toISOString()
+                violating_details: cleanupLog,
+                timestamp: new Date().toISOString()
             }
         }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }

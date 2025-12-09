@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { supabase } from '../../services/supabase'
 import { Sparkles, ArrowRight, Check, X, Edit } from 'lucide-react'
 
@@ -8,7 +8,7 @@ interface AIBatchPublishProps {
   onViewPublished?: () => void
 }
 
-export default function AIBatchPublish({ userId, onComplete, onViewPublished }: AIBatchPublishProps) {
+function AIBatchPublish({ userId, onComplete, onViewPublished }: AIBatchPublishProps) {
   const [step, setStep] = useState(1)
   const [tradeType, setTradeType] = useState<number>(2)
   const [wechatId, setWechatId] = useState('')
@@ -134,64 +134,97 @@ export default function AIBatchPublish({ userId, onComplete, onViewPublished }: 
 
       {/* 步骤1: 配置 */}
       {step === 1 && (
-        <div className="space-y-4">
-          <h3 className="font-semibold text-lg mb-4">第一步：选择配置</h3>
+        <div className="space-y-5">
+          <h3 className="font-semibold text-lg flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-purple-600" />
+            AI智能批量发布
+          </h3>
           
-          <div>
-            <label className="block text-sm font-medium mb-2">交易类型</label>
-            <div className="flex gap-4">
-              <button
-                onClick={() => setTradeType(1)}
-                className={`flex-1 py-3 rounded-lg border-2 ${tradeType === 1 ? 'border-purple-600 bg-purple-50 text-purple-700' : 'border-gray-300'}`}
-              >
-                买入
-              </button>
-              <button
-                onClick={() => setTradeType(2)}
-                className={`flex-1 py-3 rounded-lg border-2 ${tradeType === 2 ? 'border-purple-600 bg-purple-50 text-purple-700' : 'border-gray-300'}`}
-              >
-                卖出
-              </button>
+          {/* 快速设置区域 */}
+          <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-medium text-gray-700 whitespace-nowrap">交易类型：</span>
+              <div className="flex gap-2 flex-1">
+                <button
+                  onClick={() => setTradeType(1)}
+                  className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
+                    tradeType === 1 
+                      ? 'bg-green-600 text-white shadow-sm' 
+                      : 'bg-white border border-gray-300 text-gray-600 hover:border-green-400'
+                  }`}
+                >
+                  🛒 我要买入
+                </button>
+                <button
+                  onClick={() => setTradeType(2)}
+                  className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
+                    tradeType === 2 
+                      ? 'bg-orange-600 text-white shadow-sm' 
+                      : 'bg-white border border-gray-300 text-gray-600 hover:border-orange-400'
+                  }`}
+                >
+                  💰 我要卖出
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-medium text-gray-700 whitespace-nowrap">联系方式：</span>
+              <input
+                type="text"
+                value={wechatId}
+                onChange={(e) => setWechatId(e.target.value)}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                placeholder="微信号（选填，留空使用默认）"
+              />
             </div>
           </div>
 
+          {/* 文本输入区域 */}
           <div>
-            <label className="block text-sm font-medium mb-2">微信号（选填）</label>
-            <input
-              type="text"
-              value={wechatId}
-              onChange={(e) => setWechatId(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-              placeholder="留空则使用账号默认微信号"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">交易描述文本</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              📝 粘贴票务信息
+            </label>
             <textarea
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
-              rows={10}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-              placeholder="例如：成都周深 2 号邀请函代录 399的900 699的1000 包厢的1150 929的1250"
+              rows={8}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 font-mono text-sm"
+              placeholder={`成都周深 2 号邀请函代录
+399的900
+699的1000
+包厢的1150
+929的1250
+
+说明：第一行是基础信息（演出+日期+票种）
+后面每行是"票档的价格"格式`}
             />
           </div>
 
-          <div className="bg-blue-50 rounded-lg p-4">
-            <p className="text-sm text-blue-800">
-              AI将自动解析文本中的交易信息，生成标题、价格、关键词等字段。请确保文本格式清晰。
-            </p>
+          {/* 格式说明 */}
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+            <p className="text-sm font-medium text-purple-800 mb-2">📋 格式说明</p>
+            <div className="text-sm text-purple-700 space-y-1">
+              <p>• <strong>第一行</strong>：演出名称 + 日期 + 票种（如：成都周深 2号 邀请函代录）</p>
+              <p>• <strong>后续每行</strong>：票档的价格（如：399的900 表示 399档 售价900元）</p>
+              <p>• AI会自动为每个票档生成独立的交易信息</p>
+            </div>
           </div>
 
           <button
             onClick={handleParse}
             disabled={loading || !textInput.trim()}
-            className="w-full py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg font-medium hover:from-purple-700 hover:to-purple-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md transition-all"
           >
-            {loading ? '解析中...' : (
+            {loading ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                AI正在解析...
+              </>
+            ) : (
               <>
                 <Sparkles className="w-5 h-5" />
-                AI解析并生成草稿
+                开始AI智能解析
                 <ArrowRight className="w-5 h-5" />
               </>
             )}
@@ -335,3 +368,5 @@ export default function AIBatchPublish({ userId, onComplete, onViewPublished }: 
     </div>
   )
 }
+
+export default React.memo(AIBatchPublish)

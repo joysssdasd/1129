@@ -32,6 +32,7 @@ import {
   withErrorHandling
 } from './errorHandler';
 import { toast } from './toastService';
+import { log } from '@/utils/logger';
 
 /**
  * API配置
@@ -134,7 +135,7 @@ export class AuthService extends BaseApiService {
       // 开发环境直接返回验证码
       if (import.meta.env.DEV) {
         const devCode = '123456'; // 开发环境固定验证码
-        console.log(`📱 开发环境验证码: ${devCode}`);
+        log.log(`📱 开发环境验证码: ${devCode}`);
         return { success: true, dev_code: devCode };
       }
 
@@ -545,9 +546,9 @@ export class ApiService {
     try {
       // 检查用户登录状态
       const user = await this.auth.getCurrentUser();
-      console.log('API服务初始化成功，用户状态:', user ? '已登录' : '未登录');
+      log.log('API服务初始化成功，用户状态:', user ? '已登录' : '未登录');
     } catch (error) {
-      console.error('API服务初始化失败:', error);
+      log.error('API服务初始化失败:', error);
     }
   }
 }

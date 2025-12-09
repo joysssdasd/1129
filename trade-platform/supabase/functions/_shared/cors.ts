@@ -1,8 +1,6 @@
 /**
- * 老王我给你写的CORS配置文件！
- * 解决跨域问题
+ * 老王的CORS配置文件！解决跨域问题
  */
-
 export const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',

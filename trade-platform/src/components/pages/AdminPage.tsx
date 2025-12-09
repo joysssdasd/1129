@@ -5,8 +5,37 @@ import { supabase } from '../../services/supabase'
 import { ArrowLeft, Users, FileText, DollarSign, Sparkles, TrendingUp, BarChart3 } from 'lucide-react'
 import QRCodeManager from '../../features/QRCodeManager'
 import AIBatchPublish from '../../features/forms/AIBatchPublish'
-import KLineChart from '../../features/KLineChart-Simple'
+import KLineChart from '../../features/KLineChart'
 import AnalyticsDashboard from '../../features/analytics/AnalyticsDashboard'
+
+const RECHARGE_PACKAGES = [
+  { amount: 50, points: 55, name: '充值套餐A' },
+  { amount: 100, points: 115, name: '充值套餐B' },
+  { amount: 300, points: 370, name: '充值套餐C' },
+  { amount: 500, points: 650, name: '充值套餐D' }
+]
+
+const deriveRechargeMeta = (amount?: number, points?: number) => {
+  if (!amount || !points) {
+    return {
+      packageName: '未知套餐',
+      isCustom: true
+    }
+  }
+
+  const preset = RECHARGE_PACKAGES.find(pkg => pkg.amount === amount && pkg.points === points)
+  if (preset) {
+    return {
+      packageName: preset.name,
+      isCustom: false
+    }
+  }
+
+  return {
+    packageName: '自定义充值',
+    isCustom: true
+  }
+}
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState('users')
@@ -79,9 +108,43 @@ export default function AdminPage() {
   const loadRechargeRequests = async () => {
     const { data } = await supabase
       .from('recharge_requests')
-      .select('*, users!recharge_requests_user_id_fkey(phone, wechat_id, points)')
+      .select('*')
       .order('created_at', { ascending: false })
-    setRechargeRequests(data || [])
+
+    if (!data || data.length === 0) {
+      setRechargeRequests([])
+      return
+    }
+
+    const userIds = Array.from(new Set(data.map(req => req.user_id).filter(Boolean)))
+    const userLookup: Record<string, any> = {}
+
+    if (userIds.length > 0) {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('id, phone, wechat_id, points')
+        .in('id', userIds)
+
+      userData?.forEach((u) => {
+        userLookup[u.id] = u
+      })
+    }
+
+    const enhanced = data.map((req) => {
+      const meta = deriveRechargeMeta(
+        typeof req.amount === 'number' ? req.amount : Number(req.amount),
+        typeof req.points === 'number' ? req.points : Number(req.points)
+      )
+
+      return {
+        ...req,
+        userProfile: userLookup[req.user_id] || null,
+        package_name: req.package_name || meta.packageName,
+        is_custom: typeof req.is_custom === 'boolean' ? req.is_custom : meta.isCustom
+      }
+    })
+
+    setRechargeRequests(enhanced)
   }
 
   const handleToggleUserStatus = async (userId: string, currentStatus: number) => {
@@ -324,7 +387,7 @@ export default function AdminPage() {
               </div>
             ) : (
               rechargeRequests.map((req) => {
-                const currentBalance = req.users?.points || 0
+                const currentBalance = req.userProfile?.points || 0
                 const newBalance = req.status === 1 ? currentBalance : currentBalance + req.points
                 
                 return (
@@ -353,7 +416,7 @@ export default function AdminPage() {
                           </div>
                           <div>
                             <span className="text-gray-500">用户：</span>
-                            <span className="font-medium">{req.users?.phone}</span>
+                            <span className="font-medium">{req.userProfile?.phone || '未知'}</span>
                           </div>
                           <div>
                             <span className="text-gray-500">当前积分：</span>

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { TrendingUp, DollarSign, AlertTriangle, CheckCircle, Clock, RefreshCw, Filter } from 'lucide-react'
 import { supabase } from '../../services/supabase'
+import { log } from '../../utils/logger'
 
 interface ArbitrageOpportunity {
   id: string
@@ -35,7 +36,7 @@ interface ArbitrageStats {
   totalPotentialProfit: number
 }
 
-export default function ArbitrageDetector() {
+function ArbitrageDetector() {
   const [opportunities, setOpportunities] = useState<ArbitrageOpportunity[]>([])
   const [stats, setStats] = useState<ArbitrageStats>({
     totalOpportunities: 0,
@@ -76,7 +77,7 @@ export default function ArbitrageDetector() {
         await calculateArbitrageFrontend()
       }
     } catch (error) {
-      console.error('套利检测失败:', error)
+      log.error('套利检测失败:', error)
       await calculateArbitrageFrontend()
     } finally {
       setLoading(false)
@@ -195,7 +196,7 @@ export default function ArbitrageDetector() {
         totalPotentialProfit
       })
     } catch (error) {
-      console.error('前端套利计算失败:', error)
+      log.error('前端套利计算失败:', error)
       setOpportunities([])
       setStats({
         totalOpportunities: 0,
@@ -446,3 +447,5 @@ export default function ArbitrageDetector() {
     </div>
   )
 }
+
+export default React.memo(ArbitrageDetector)

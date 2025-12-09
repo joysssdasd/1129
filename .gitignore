@@ -175,3 +175,23 @@ Thumbs.db
 .svelte-kit
 
 # End of https://www.gitignore.io/api/node
+*.env
+*.env.local
+*.env.production
+*.key
+*secret*
+*private*
+test-*.js
+test-*.cjs
+debug-*.html
+*-test.*
+.env*
+.mcp.json
+auto-fix-db.js
+create-tables.js
+fix-rls.js
+init-db-direct.js
+init-db-fix.js
+init-db-rest.js
+init-new-database.js
+database-init-for-new-project.sql

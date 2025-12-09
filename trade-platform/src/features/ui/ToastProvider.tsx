@@ -108,7 +108,7 @@ const ToastItem: React.FC<{ toast: Toast; onRemove: (id: string) => void }> = ({
 /**
  * Toast容器组件
  */
-export const ToastContainer: React.FC = () => {
+const ToastContainer: React.FC = () => {
   const { toasts, removeToast } = useToast();
 
   if (toasts.length === 0) {
@@ -127,7 +127,7 @@ export const ToastContainer: React.FC = () => {
 /**
  * Toast提供者组件
  */
-export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({
+const ToastProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   return (
@@ -171,4 +171,6 @@ export const useToastMessage = () => {
   };
 };
 
-export default ToastProvider;
+export const ToastContainerMemo = React.memo(ToastContainer);
+export const ToastProviderMemo = React.memo(ToastProvider);
+export default React.memo(ToastProvider);

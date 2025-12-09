@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { BarChart3, TrendingUp, Users, FileText, DollarSign, Eye } from 'lucide-react'
 import { supabase } from '../../services/supabase'
 import HourlyStats from './HourlyStats'
 import PriceAnalysis from './PriceAnalysis'
 import ArbitrageDetector from './ArbitrageDetector'
 import DailyReport from './DailyReport'
-import KLineChart from '../KLineChart-Fixed'
+import KLineChart from '../KLineChart'
+import { log } from '../../utils/logger'
 
 interface AnalyticsStats {
   totalUsers: number
@@ -16,7 +17,7 @@ interface AnalyticsStats {
   completedTransactions: number
 }
 
-export default function AnalyticsDashboard() {
+function AnalyticsDashboard() {
   const [activeAnalyticsTab, setActiveAnalyticsTab] = useState('overview')
   const [stats, setStats] = useState<AnalyticsStats>({
     totalUsers: 0,
@@ -65,7 +66,7 @@ export default function AnalyticsDashboard() {
         completedTransactions: completedTransactionsResult.count || 0
       })
     } catch (error) {
-      console.error('加载分析数据失败:', error)
+      log.error('加载分析数据失败:', error)
     } finally {
       setLoading(false)
     }
@@ -235,3 +236,5 @@ export default function AnalyticsDashboard() {
     </div>
   )
 }
+
+export default React.memo(AnalyticsDashboard)

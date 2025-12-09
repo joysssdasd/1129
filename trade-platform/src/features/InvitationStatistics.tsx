@@ -1,8 +1,9 @@
 // Invitation Statistics Component
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Users, Gift, TrendingUp, Share2 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import ShareModal from './ui/ShareModal';
+import { log } from '../utils/logger';
 
 interface InvitationStats {
     inviteCode: string;
@@ -15,7 +16,7 @@ interface InvitationStats {
     };
 }
 
-export default function InvitationStatistics() {
+function InvitationStatistics() {
     const [stats, setStats] = useState<InvitationStats | null>(null);
     const [loading, setLoading] = useState(true);
     const [showShareModal, setShowShareModal] = useState(false);
@@ -35,7 +36,7 @@ export default function InvitationStatistics() {
                 setStats(data.data);
             }
         } catch (error) {
-            console.error('Failed to fetch invitation info:', error);
+            log.error('Failed to fetch invitation info:', error);
         } finally {
             setLoading(false);
         }
@@ -161,3 +162,5 @@ export default function InvitationStatistics() {
         </>
     );
 }
+
+export default React.memo(InvitationStatistics)

@@ -2,6 +2,7 @@ import React from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Alert, AlertDescription } from '../../components/ui/alert';
+import { log } from '../../utils/logger';
 
 /**
  * 老王我给你写个更好的错误边界组件，让技术小白也能看懂哪里出错了！
@@ -52,8 +53,8 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     // 开发环境打印详细错误信息
     if (import.meta.env.DEV) {
       console.group('🚨 Error Boundary Caught an Error');
-      console.error('Error:', error);
-      console.error('Error Info:', errorInfo);
+      log.error('Error:', error);
+      log.error('Error Info:', errorInfo);
       console.groupEnd();
     }
   }

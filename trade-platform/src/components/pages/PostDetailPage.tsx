@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useUser } from '../../contexts/UserContext'
 import { supabase } from '../../services/supabase'
 import { ArrowLeft, Eye, Calendar, Tag } from 'lucide-react'
+import { log } from '../../utils/logger'
 
 export default function PostDetailPage() {
   const { id } = useParams()
@@ -57,7 +58,7 @@ export default function PostDetailPage() {
         }
       }
     } catch (error) {
-      console.error('加载失败:', error)
+      log.error('加载失败:', error)
     } finally {
       setLoading(false)
     }

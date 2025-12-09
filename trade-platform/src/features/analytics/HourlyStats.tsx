@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Clock, Users, FileText, DollarSign, TrendingUp, RefreshCw } from 'lucide-react'
 import { supabase } from '../../services/supabase'
+import { log } from '../../utils/logger'
 
 interface HourlyData {
   hour: string
@@ -10,7 +11,7 @@ interface HourlyData {
   activeUsers: number
 }
 
-export default function HourlyStats() {
+function HourlyStats() {
   const [data, setData] = useState<HourlyData[]>([])
   const [loading, setLoading] = useState(false)
   const [dateRange, setDateRange] = useState('today')
@@ -35,7 +36,7 @@ export default function HourlyStats() {
         setData(hourlyData.data)
       }
     } catch (error) {
-      console.error('加载小时统计数据失败:', error)
+      log.error('加载小时统计数据失败:', error)
       // 降级到前端计算
       await generateHourlyDataFrontend()
     } finally {
@@ -107,7 +108,7 @@ export default function HourlyStats() {
 
       setData(hours)
     } catch (error) {
-      console.error('生成前端数据失败:', error)
+      log.error('生成前端数据失败:', error)
       setData(hours)
     }
   }
@@ -342,3 +343,5 @@ export default function HourlyStats() {
     </div>
   )
 }
+
+export default React.memo(HourlyStats)

@@ -9,7 +9,7 @@ import { cn } from '@/services/utils';
 /**
  * 基础加载器组件
  */
-export const LoadingSpinner: React.FC<{
+const LoadingSpinner: React.FC<{
   size?: 'sm' | 'md' | 'lg';
   className?: string;
   text?: string;
@@ -272,4 +272,4 @@ export const ButtonLoader: React.FC<{
   );
 };
 
-export default LoadingSpinner;
+export default React.memo(LoadingSpinner);

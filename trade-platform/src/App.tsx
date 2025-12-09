@@ -1,3 +1,4 @@
+import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { UserProvider, useUser } from './contexts/UserContext'
 import LoginPage from './components/pages/LoginPage'
@@ -7,6 +8,9 @@ import PublishPage from './components/pages/PublishPage'
 import ProfilePage from './components/pages/ProfilePage'
 import AdminPage from './components/pages/AdminPage'
 import './App.css'
+
+// 🔐 老王我移除了EnvDebug组件，生产环境不需要调试工具
+// 开发环境如需调试，可以通过浏览器开发者工具查看
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user } = useUser()
@@ -76,4 +80,4 @@ function App() {
   )
 }
 
-export default App
+export default React.memo(App)

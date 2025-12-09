@@ -1,13 +1,7 @@
-/**
- * 老王我给你写用户端的AI批量发布组件！
- * 和管理员版本的区别：微信号自动使用用户自己的，不可选择
- */
-
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { supabase } from '../../services/supabase'
-import { Sparkles, ArrowRight, Check, X, Edit, Clock, AlertTriangle } from 'lucide-react'
+import { Sparkles, ArrowRight, Check, X, AlertTriangle } from 'lucide-react'
 import { useUser } from '../../contexts/UserContext'
-import { TRADE_TYPE, POINTS, TIME, POST_STATUS } from '../../constants'
 
 interface UserAIBatchPublishProps {
   userId: string
@@ -16,427 +10,381 @@ interface UserAIBatchPublishProps {
   onViewPublished?: () => void
 }
 
-interface GeneratedPost {
-  title: string
-  keywords: string
-  price: number
-  description?: string
-  trade_type: 'transfer' | 'request'
-  delivery_time: string
-}
-
-export default function UserAIBatchPublish({
+function UserAIBatchPublish({
   userId,
   userWechatId,
   onComplete,
   onViewPublished
 }: UserAIBatchPublishProps) {
-  const [aiText, setAiText] = useState('')
-  const [aiLoading, setAiLoading] = useState(false)
-  const [generatedPosts, setGeneratedPosts] = useState<GeneratedPost[]>([])
-  const [editingIndex, setEditingIndex] = useState<number | null>(null)
-  const [postStatus, setPostStatus] = useState<string[]>([])
+  const [step, setStep] = useState(1)
+  const [tradeType, setTradeType] = useState<number>(2)
+  const [textInput, setTextInput] = useState('')
+  const [drafts, setDrafts] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const [publishResult, setPublishResult] = useState<any>(null)
   const { user } = useUser()
 
-  // 检查用户积分是否足够
-  const canPublish = user?.points ? user.points >= POINTS.PUBLISH_POST_COST : false
-  const remainingPosts = Math.floor((user?.points || 0) / POINTS.PUBLISH_POST_COST)
-
-  const handleAIGenerate = async () => {
-    if (!aiText.trim()) {
-      alert('请输入要批量发布的商品描述')
+  const handleParse = async () => {
+    if (!textInput.trim()) {
+      alert('请输入交易描述文本')
       return
     }
 
-    if (!canPublish) {
-      alert(`积分不足！发布帖子需要 ${POINTS.PUBLISH_POST_COST} 积分，您当前只有 ${user?.points || 0} 积分`)
+    if (!userWechatId) {
+      alert('请先在个人中心设置您的微信号')
       return
     }
 
-    setAiLoading(true)
+    setLoading(true)
     try {
-      // 调用AI生成接口
-      const { data, error } = await supabase.functions.invoke('ai-generate-posts', {
+      const { data, error } = await supabase.functions.invoke('ai-batch-publish-v2', {
         body: {
-          userText: aiText,
-          userId: userId,
-          isUser: true, // 标识是用户端发布
-          userWechatId: userWechatId // 传递用户微信号
+          user_id: userId,
+          text_input: textInput,
+          trade_type: tradeType,
+          wechat_id: userWechatId,
+          step: 'parse'
         }
       })
 
-      if (error) {
-        console.error('AI生成失败:', error)
-        alert('AI生成失败，请重试')
-        return
-      }
+      if (error) throw error
 
-      const posts = data?.posts || []
-
-      // 限制生成数量，根据用户积分计算
-      const maxPosts = Math.min(posts.length, remainingPosts)
-      const limitedPosts = posts.slice(0, maxPosts)
-
-      setGeneratedPosts(limitedPosts)
-      setPostStatus(new Array(limitedPosts.length).fill('pending'))
-
-      if (limitedPosts.length < posts.length) {
-        alert(`AI生成了 ${posts.length} 个帖子，但根据您的积分只能发布 ${limitedPosts.length} 个`)
-      }
-    } catch (error) {
-      console.error('AI生成失败:', error)
-      alert('AI生成失败，请检查网络连接')
-    } finally {
-      setAiLoading(false)
-    }
-  }
-
-  const handleEditPost = (index: number) => {
-    setEditingIndex(index)
-  }
-
-  const handleSaveEdit = (index: number, field: keyof GeneratedPost, value: string | number) => {
-    const updatedPosts = [...generatedPosts]
-    updatedPosts[index] = {
-      ...updatedPosts[index],
-      [field]: field === 'price' ? Number(value) : value
-    }
-    setGeneratedPosts(updatedPosts)
-  }
-
-  const handleRemovePost = (index: number) => {
-    const updatedPosts = generatedPosts.filter((_, i) => i !== index)
-    const updatedStatus = postStatus.filter((_, i) => i !== index)
-    setGeneratedPosts(updatedPosts)
-    setPostStatus(updatedStatus)
-  }
-
-  const handleBatchPublish = async () => {
-    if (generatedPosts.length === 0) {
-      alert('没有要发布的帖子')
-      return
-    }
-
-    const totalCost = generatedPosts.length * POINTS.PUBLISH_POST_COST
-    if (totalCost > (user?.points || 0)) {
-      alert(`积分不足！发布 ${generatedPosts.length} 个帖子需要 ${totalCost} 积分，您当前只有 ${user?.points || 0} 积分`)
-      return
-    }
-
-    setAiLoading(true)
-    try {
-      const now = new Date().toISOString()
-      const autoHideAt = new Date(Date.now() + TIME.POST_AUTO_HIDE).toISOString()
-
-      // 使用RPC调用进行事务处理，确保发布和扣除积分的原子性
-      const { data, error } = await supabase.functions.invoke('batch-publish-posts', {
-        body: {
-          userId: userId,
-          posts: generatedPosts.map(post => ({
-            user_id: userId,
-            title: post.title,
-            keywords: post.keywords,
-            price: post.price,
-            trade_type: post.trade_type,
-            delivery_time: post.delivery_time,
-            description: post.description,
-            wechat_id: userWechatId,
-            status: POST_STATUS.ACTIVE,
-            view_count: 0,
-            views_remaining: 100, // 默认可见次数
-            created_at: now,
-            updated_at: now,
-            auto_hide_at: autoHideAt, // 使用常量，确保3天后自动下架
-          })),
-          totalCost: totalCost
-        }
-      })
-
-      if (error) {
-        console.error('批量发布失败:', error)
-        alert(`发布失败: ${error.message}`)
-        return
-      }
-
-      const { successCount, failedPosts } = data
-
-      // 更新状态
-      const newStatus = generatedPosts.map((_, index) => {
-        if (failedPosts && failedPosts.includes(index)) {
-          return 'error'
-        }
-        return index < successCount ? 'success' : 'pending'
-      })
-      setPostStatus(newStatus)
-
-      if (successCount > 0) {
-        alert(`成功发布 ${successCount} 个帖子！消耗 ${totalCost} 积分。所有帖子将在3天后自动下架。`)
-
-        // 清空表单
-        setGeneratedPosts([])
-        setPostStatus([])
-        setAiText('')
-
-        // 更新用户积分状态（从返回的数据中获取最新积分）
-        if (data.newPoints !== undefined) {
-          // 这里可以更新用户上下文中的积分
-        }
-
-        onComplete?.()
-        onViewPublished?.()
+      if (data?.data?.drafts) {
+        setDrafts(data.data.drafts)
+        setStep(2)
       } else {
-        alert('发布失败，请检查网络连接或联系管理员')
+        alert('未能解析出有效信息，请检查文本格式')
       }
-    } catch (error) {
-      console.error('批量发布失败:', error)
-      alert('批量发布失败，请重试')
+    } catch (error: any) {
+      alert(error.message || 'AI解析失败')
     } finally {
-      setAiLoading(false)
+      setLoading(false)
     }
   }
 
-  const getRemainingTime = (createdHours: number) => {
-    const totalHours = 72 // 3天 = 72小时
-    const remaining = totalHours - createdHours
-    if (remaining <= 0) return '已过期'
-    if (remaining <= 12) return `${remaining}小时后过期`
-    return `${Math.floor(remaining / 24)}天${remaining % 24}小时后过期`
+  const handleEditDraft = (index: number, field: string, value: any) => {
+    const newDrafts = [...drafts]
+    newDrafts[index][field] = value
+    setDrafts(newDrafts)
+  }
+
+  const handleRemoveDraft = (index: number) => {
+    setDrafts(drafts.filter((_, i) => i !== index))
+  }
+
+  const handlePublish = async () => {
+    if (drafts.length === 0) {
+      alert('没有可发布的草稿')
+      return
+    }
+
+    if (!window.confirm(`确定要发布${drafts.length}条信息吗？`)) {
+      return
+    }
+
+    setLoading(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-batch-publish-v2', {
+        body: {
+          user_id: userId,
+          drafts: drafts,
+          step: 'publish'
+        }
+      })
+
+      if (error) throw error
+
+      setPublishResult(data?.data)
+      setStep(3)
+      if (onComplete) onComplete()
+    } catch (error: any) {
+      alert(error.message || '发布失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleReset = () => {
+    setStep(1)
+    setTextInput('')
+    setDrafts([])
+    setPublishResult(null)
+  }
+
+  const handleViewPublished = () => {
+    if (onViewPublished) onViewPublished()
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold flex items-center gap-2">
-          <Sparkles className="w-6 h-6 text-yellow-500" />
-          AI批量发布
-        </h2>
-
-        {/* 积分状态显示 */}
-        <div className="flex items-center gap-4 text-sm">
-          <div className="flex items-center gap-2">
-            <span className="text-gray-600">当前积分:</span>
-            <span className="font-bold text-blue-600">{user?.points || 0}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-gray-600">可发布:</span>
-            <span className="font-bold text-green-600">{remainingPosts}个</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-gray-600">消耗:</span>
-            <span className="font-bold text-red-600">{POINTS.PUBLISH_POST_COST}积分/个</span>
-          </div>
-        </div>
-      </div>
-
-      {/* 用户微信号显示 */}
-      {userWechatId && (
-        <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-          <p className="text-sm text-blue-700">
-            <strong>联系方式:</strong> 将自动使用您的微信号 <span className="font-mono bg-white px-2 py-1 rounded">{userWechatId}</span>
-          </p>
-        </div>
-      )}
-
-      {/* 积分不足警告 */}
-      {!canPublish && (
-        <div className="mb-4 p-3 bg-red-50 rounded-lg border border-red-200 flex items-start gap-2">
-          <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm text-red-700 font-medium">积分不足</p>
-            <p className="text-xs text-red-600 mt-1">
-              发布帖子需要 {POINTS.PUBLISH_POST_COST} 积分，您当前只有 {user?.points || 0} 积分。请先充值后再发布。
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* 输入区域 */}
+    <div className="bg-white rounded-lg p-6">
+      {/* 步骤指示器 */}
       <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          描述您要批量发布的商品信息
-        </label>
-        <textarea
-          value={aiText}
-          onChange={(e) => setAiText(e.target.value)}
-          placeholder="请描述您要发布的商品，例如：我有一批苹果手机要转让，包括iPhone 13、14等型号，价格在3000-6000元之间..."
-          className="w-full h-32 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-          disabled={!canPublish}
-        />
-        <p className="text-xs text-gray-500 mt-1">
-          AI将根据您的描述自动生成多个吸引人的商品标题和价格
-        </p>
+        <div className="flex items-center justify-center mb-4">
+          <div className={`flex items-center ${step >= 1 ? 'text-purple-600' : 'text-gray-400'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-purple-600 text-white' : 'bg-gray-200'}`}>
+              {step > 1 ? <Check className="w-5 h-5" /> : '1'}
+            </div>
+            <span className="ml-2 text-sm font-medium">配置</span>
+          </div>
+          <div className={`w-16 h-1 mx-2 ${step >= 2 ? 'bg-purple-600' : 'bg-gray-200'}`}></div>
+          <div className={`flex items-center ${step >= 2 ? 'text-purple-600' : 'text-gray-400'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 2 ? 'bg-purple-600 text-white' : 'bg-gray-200'}`}>
+              {step > 2 ? <Check className="w-5 h-5" /> : '2'}
+            </div>
+            <span className="ml-2 text-sm font-medium">审核</span>
+          </div>
+          <div className={`w-16 h-1 mx-2 ${step >= 3 ? 'bg-purple-600' : 'bg-gray-200'}`}></div>
+          <div className={`flex items-center ${step >= 3 ? 'text-purple-600' : 'text-gray-400'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 3 ? 'bg-purple-600 text-white' : 'bg-gray-200'}`}>
+              {step >= 3 ? <Check className="w-5 h-5" /> : '3'}
+            </div>
+            <span className="ml-2 text-sm font-medium">完成</span>
+          </div>
+        </div>
       </div>
 
-      {/* 生成按钮 */}
-      <div className="mb-6">
-        <button
-          onClick={handleAIGenerate}
-          disabled={aiLoading || !aiText.trim() || !canPublish}
-          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium"
-        >
-          <Sparkles className="w-5 h-5" />
-          {aiLoading ? 'AI生成中...' : 'AI智能生成'}
-        </button>
-      </div>
-
-      {/* 生成结果 */}
-      {generatedPosts.length > 0 && (
-        <div className="space-y-4 mb-6">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Check className="w-5 h-5 text-green-500" />
-            AI为您生成了 {generatedPosts.length} 个商品信息
+      {/* 步骤1: 配置 */}
+      {step === 1 && (
+        <div className="space-y-5">
+          <h3 className="font-semibold text-lg flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-purple-600" />
+            AI智能批量发布
           </h3>
-
-          {/* 过期时间提醒 */}
-          <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 flex items-start gap-2">
-            <Clock className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm text-amber-700 font-medium">⏰ 自动下架提醒</p>
-              <p className="text-xs text-amber-600 mt-1">
-                所有商品信息将在发布3天后自动下架，请确保及时处理交易
-              </p>
+          
+          {/* 微信号显示（不可修改） */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-blue-700">联系方式：</span>
+              {userWechatId ? (
+                <span className="px-3 py-1 bg-white border border-blue-300 rounded-lg text-sm font-mono text-blue-800">
+                  {userWechatId}
+                </span>
+              ) : (
+                <span className="text-sm text-red-600 flex items-center gap-1">
+                  <AlertTriangle className="w-4 h-4" />
+                  未设置微信号，请先在个人中心设置
+                </span>
+              )}
+              <span className="text-xs text-blue-500 ml-2">（使用注册时的微信号）</span>
             </div>
           </div>
 
-          {generatedPosts.map((post, index) => (
-            <div key={index} className="border rounded-lg p-4 bg-gray-50">
-              {postStatus[index] === 'success' && (
-                <div className="mb-2 p-2 bg-green-100 text-green-700 rounded text-sm flex items-center gap-2">
-                  <Check className="w-4 h-4" />
-                  发布成功
-                </div>
-              )}
-              {postStatus[index] === 'error' && (
-                <div className="mb-2 p-2 bg-red-100 text-red-700 rounded text-sm flex items-center gap-2">
-                  <X className="w-4 h-4" />
-                  发布失败，请重试
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">商品标题</label>
-                  {editingIndex === index ? (
-                    <input
-                      type="text"
-                      value={post.title}
-                      onChange={(e) => handleSaveEdit(index, 'title', e.target.value)}
-                      className="w-full p-2 border border-gray-300 rounded"
-                    />
-                  ) : (
-                    <p className="text-gray-900 font-medium">{post.title}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">价格 (元)</label>
-                  {editingIndex === index ? (
-                    <input
-                      type="number"
-                      value={post.price}
-                      onChange={(e) => handleSaveEdit(index, 'price', e.target.value)}
-                      className="w-full p-2 border border-gray-300 rounded"
-                    />
-                  ) : (
-                    <p className="text-gray-900 font-medium">¥{post.price}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">关键词</label>
-                  {editingIndex === index ? (
-                    <input
-                      type="text"
-                      value={post.keywords}
-                      onChange={(e) => handleSaveEdit(index, 'keywords', e.target.value)}
-                      className="w-full p-2 border border-gray-300 rounded"
-                    />
-                  ) : (
-                    <p className="text-gray-900">{post.keywords}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">交易类型</label>
-                  <p className="text-gray-900">
-                    {post.trade_type === 'transfer' ? '转让' : '求购'}
-                  </p>
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">描述</label>
-                  {editingIndex === index ? (
-                    <textarea
-                      value={post.description || ''}
-                      onChange={(e) => handleSaveEdit(index, 'description', e.target.value)}
-                      className="w-full p-2 border border-gray-300 rounded h-16 resize-none"
-                    />
-                  ) : (
-                    <p className="text-gray-900">{post.description || '无描述'}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-4 flex justify-end gap-2">
-                {editingIndex === index ? (
-                  <>
-                    <button
-                      onClick={() => setEditingIndex(null)}
-                      className="px-3 py-1 text-gray-600 hover:text-gray-800 transition-colors"
-                    >
-                      完成
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => handleEditPost(index)}
-                      className="flex items-center gap-1 px-3 py-1 text-blue-600 hover:text-blue-800 transition-colors"
-                      disabled={postStatus[index] !== 'pending'}
-                    >
-                      <Edit className="w-4 h-4" />
-                      编辑
-                    </button>
-                    <button
-                      onClick={() => handleRemovePost(index)}
-                      className="flex items-center gap-1 px-3 py-1 text-red-600 hover:text-red-800 transition-colors"
-                      disabled={postStatus[index] !== 'pending'}
-                    >
-                      <X className="w-4 h-4" />
-                      删除
-                    </button>
-                  </>
-                )}
+          {/* 快速设置区域 */}
+          <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-medium text-gray-700 whitespace-nowrap">交易类型：</span>
+              <div className="flex gap-2 flex-1">
+                <button
+                  onClick={() => setTradeType(1)}
+                  className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
+                    tradeType === 1 
+                      ? 'bg-green-600 text-white shadow-sm' 
+                      : 'bg-white border border-gray-300 text-gray-600 hover:border-green-400'
+                  }`}
+                >
+                  🛒 我要买入
+                </button>
+                <button
+                  onClick={() => setTradeType(2)}
+                  className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
+                    tradeType === 2 
+                      ? 'bg-orange-600 text-white shadow-sm' 
+                      : 'bg-white border border-gray-300 text-gray-600 hover:border-orange-400'
+                  }`}
+                >
+                  💰 我要卖出
+                </button>
               </div>
             </div>
-          ))}
+          </div>
+
+          {/* 文本输入区域 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              📝 粘贴票务信息
+            </label>
+            <textarea
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              rows={8}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 font-mono text-sm"
+              placeholder={`成都周深 2 号邀请函代录
+399的900
+699的1000
+包厢的1150
+929的1250
+
+说明：第一行是基础信息（演出+日期+票种）
+后面每行是"票档的价格"格式`}
+            />
+          </div>
+
+          {/* 格式说明 */}
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+            <p className="text-sm font-medium text-purple-800 mb-2">📋 格式说明</p>
+            <div className="text-sm text-purple-700 space-y-1">
+              <p>• <strong>第一行</strong>：演出名称 + 日期 + 票种（如：成都周深 2号 邀请函代录）</p>
+              <p>• <strong>后续每行</strong>：票档的价格（如：399的900 表示 399档 售价900元）</p>
+              <p>• AI会自动为每个票档生成独立的交易信息</p>
+            </div>
+          </div>
+
+          <button
+            onClick={handleParse}
+            disabled={loading || !textInput.trim() || !userWechatId}
+            className="w-full py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg font-medium hover:from-purple-700 hover:to-purple-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md transition-all"
+          >
+            {loading ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                AI正在解析...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-5 h-5" />
+                开始AI智能解析
+                <ArrowRight className="w-5 h-5" />
+              </>
+            )}
+          </button>
         </div>
       )}
 
-      {/* 批量发布按钮 */}
-      {generatedPosts.length > 0 && (
-        <div className="flex justify-between items-center pt-6 border-t">
-          <div className="text-sm text-gray-600">
-            共 {generatedPosts.length} 个商品，预计消耗 {generatedPosts.length * POINTS.PUBLISH_POST_COST} 积分
+      {/* 步骤2: 审核草稿 */}
+      {step === 2 && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-semibold text-lg">第二步：审核草稿（共{drafts.length}条）</h3>
+            <button
+              onClick={() => setStep(1)}
+              className="text-sm text-gray-600 hover:text-gray-800"
+            >
+              返回上一步
+            </button>
           </div>
+
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {drafts.map((draft, index) => (
+              <div key={index} className="border rounded-lg p-4">
+                <div className="flex justify-between items-start mb-3">
+                  <span className="text-sm font-medium text-gray-600">草稿 {index + 1}</span>
+                  <button
+                    onClick={() => handleRemoveDraft(index)}
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-xs text-gray-500">标题</label>
+                    <input
+                      type="text"
+                      value={draft.title}
+                      onChange={(e) => handleEditDraft(index, 'title', e.target.value)}
+                      className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-gray-500">价格</label>
+                      <input
+                        type="number"
+                        value={draft.price}
+                        onChange={(e) => handleEditDraft(index, 'price', parseFloat(e.target.value))}
+                        className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">类型</label>
+                      <select
+                        value={draft.trade_type}
+                        onChange={(e) => handleEditDraft(index, 'trade_type', parseInt(e.target.value))}
+                        className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+                      >
+                        <option value={1}>买入</option>
+                        <option value={2}>卖出</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500">描述</label>
+                    <textarea
+                      value={draft.description || ''}
+                      onChange={(e) => handleEditDraft(index, 'description', e.target.value)}
+                      className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+                      rows={2}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button
+            onClick={handlePublish}
+            disabled={loading || drafts.length === 0}
+            className="w-full py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50"
+          >
+            {loading ? '发布中...' : `批量发布（${drafts.length}条）`}
+          </button>
+        </div>
+      )}
+
+      {/* 步骤3: 完成 */}
+      {step === 3 && publishResult && (
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+            <Check className="w-8 h-8 text-green-600" />
+          </div>
+          
+          <h3 className="font-semibold text-lg">发布完成</h3>
+          
+          <div className="bg-gray-50 rounded-lg p-4">
+            <div className="text-3xl font-bold text-purple-600 mb-2">
+              {publishResult.success_count} / {publishResult.total_count}
+            </div>
+            <div className="text-sm text-gray-600">
+              成功发布{publishResult.success_count}条，共{publishResult.total_count}条
+            </div>
+          </div>
+
+          {publishResult.errors && publishResult.errors.length > 0 && (
+            <div className="bg-red-50 rounded-lg p-4 text-left">
+              <p className="text-sm font-medium text-red-800 mb-2">失败列表：</p>
+              <ul className="text-sm text-red-700 space-y-1">
+                {publishResult.errors.map((err: any, idx: number) => (
+                  <li key={idx}>• {err.title}: {err.error}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="flex gap-3">
             <button
-              onClick={onViewPublished}
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              onClick={handleReset}
+              className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300"
             >
-              查看已发布
+              继续批量发布
             </button>
             <button
-              onClick={handleBatchPublish}
-              disabled={aiLoading || generatedPosts.length === 0 || !canPublish}
-              className="flex items-center gap-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              onClick={handleViewPublished}
+              className="flex-1 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700"
             >
-              <ArrowRight className="w-5 h-5" />
-              {aiLoading ? '发布中...' : `确认发布 (${generatedPosts.length}个)`}
+              查看发布的信息
             </button>
+          </div>
+          
+          <div className="bg-blue-50 rounded-lg p-4 mt-4">
+            <p className="text-sm text-blue-800">
+              💡 提示：发布成功的信息已自动上架，可在"信息管理"标签中查看和管理。
+            </p>
           </div>
         </div>
       )}
     </div>
   )
 }
+
+export default React.memo(UserAIBatchPublish)

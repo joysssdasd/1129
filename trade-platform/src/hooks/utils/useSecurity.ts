@@ -4,6 +4,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { STORAGE_KEYS, TIME } from '@/constants';
+import { log } from '@/utils/logger';
 
 /**
  * 频率限制接口
@@ -142,7 +143,7 @@ export const useSecureStorage = () => {
 
       localStorage.setItem(key, dataToStore);
     } catch (error) {
-      console.error('存储数据失败:', error);
+      log.error('存储数据失败:', error);
     }
   }, []);
 
@@ -160,7 +161,7 @@ export const useSecureStorage = () => {
 
       return data;
     } catch (error) {
-      console.error('读取数据失败:', error);
+      log.error('读取数据失败:', error);
       return null;
     }
   }, []);
@@ -172,7 +173,7 @@ export const useSecureStorage = () => {
     try {
       localStorage.removeItem(key);
     } catch (error) {
-      console.error('删除数据失败:', error);
+      log.error('删除数据失败:', error);
     }
   }, []);
 
@@ -185,7 +186,7 @@ export const useSecureStorage = () => {
         localStorage.removeItem(key);
       });
     } catch (error) {
-      console.error('清除数据失败:', error);
+      log.error('清除数据失败:', error);
     }
   }, []);
 
@@ -256,7 +257,7 @@ export const useSession = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       if (checkSessionExpired()) {
-        console.log('会话已过期');
+        log.log('会话已过期');
       }
     }, 60000); // 每分钟检查一次
 

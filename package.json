@@ -8,7 +8,20 @@
     "commit": "node auto-commit.js",
     "setup": "npm install"
   },
-  "keywords": ["auto-commit", "git", "github", "automation"],
+  "keywords": [
+    "auto-commit",
+    "git",
+    "github",
+    "automation"
+  ],
   "author": "Claude Code Assistant",
-  "license": "MIT"
+  "license": "MIT",
+  "directories": {
+    "doc": "docs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.86.0",
+    "dotenv": "^17.2.3",
+    "pg": "^8.16.3"
+  }
 }

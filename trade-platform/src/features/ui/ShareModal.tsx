@@ -1,6 +1,7 @@
 // Share Modal Component for Invitation System
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { X, Copy, Share2, Check } from 'lucide-react';
+import { log } from '../../utils/logger';
 
 interface ShareModalProps {
     isOpen: boolean;
@@ -9,7 +10,7 @@ interface ShareModalProps {
     inviteCode: string;
 }
 
-export default function ShareModal({ isOpen, onClose, invitationLink, inviteCode }: ShareModalProps) {
+function ShareModal({ isOpen, onClose, invitationLink, inviteCode }: ShareModalProps) {
     const [copied, setCopied] = useState(false);
 
     if (!isOpen) return null;
@@ -20,7 +21,7 @@ export default function ShareModal({ isOpen, onClose, invitationLink, inviteCode
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         } catch (error) {
-            console.error('Failed to copy:', error);
+            log.error('Failed to copy:', error);
         }
     };
 
@@ -125,3 +126,5 @@ export default function ShareModal({ isOpen, onClose, invitationLink, inviteCode
         </div>
     );
 }
+
+export default React.memo(ShareModal)

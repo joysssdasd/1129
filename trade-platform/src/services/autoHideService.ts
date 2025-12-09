@@ -5,6 +5,7 @@
 
 import { supabase } from './supabase';
 import { TIME, POST_STATUS, HIDE_REASON } from '../constants';
+import { log } from '../utils/logger';
 
 export class AutoHideService {
   private static instance: AutoHideService;
@@ -24,11 +25,11 @@ export class AutoHideService {
    */
   startAutoHideCheck(): void {
     if (this.intervalId) {
-      console.log('自动下架检查服务已在运行');
+      log.log('自动下架检查服务已在运行');
       return;
     }
 
-    console.log('🤖 启动自动下架检查服务');
+    log.log('🤖 启动自动下架检查服务');
 
     // 立即执行一次
     this.checkAndHideExpiredPosts();
@@ -46,7 +47,7 @@ export class AutoHideService {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
-      console.log('⏹️ 自动下架检查服务已停止');
+      log.log('⏹️ 自动下架检查服务已停止');
     }
   }
 
@@ -55,7 +56,7 @@ export class AutoHideService {
    */
   private async checkAndHideExpiredPosts(): Promise<void> {
     try {
-      console.log('🔍 开始检查过期的交易帖子...');
+      log.log('🔍 开始检查过期的交易帖子...');
 
       // 计算3天前的时间点
       const threeDaysAgo = new Date(Date.now() - TIME.POST_AUTO_HIDE);
@@ -68,26 +69,26 @@ export class AutoHideService {
         .lt('created_at', threeDaysAgo.toISOString());
 
       if (error) {
-        console.error('❌ 查询过期帖子失败:', error);
+        log.error('❌ 查询过期帖子失败:', error);
         return;
       }
 
       if (!expiredPosts || expiredPosts.length === 0) {
-        console.log('✅ 没有过期的帖子需要处理');
+        log.log('✅ 没有过期的帖子需要处理');
         return;
       }
 
-      console.log(`📦 发现 ${expiredPosts.length} 个过期帖子，开始自动下架...`);
+      log.log(`📦 发现 ${expiredPosts.length} 个过期帖子，开始自动下架...`);
 
       // 批量下架过期帖子
       for (const post of expiredPosts) {
         await this.hideExpiredPost(post.id, post.user_id);
       }
 
-      console.log(`✅ 成功下架 ${expiredPosts.length} 个过期帖子`);
+      log.log(`✅ 成功下架 ${expiredPosts.length} 个过期帖子`);
 
     } catch (error) {
-      console.error('❌ 自动下架检查失败:', error);
+      log.error('❌ 自动下架检查失败:', error);
     }
   }
 
@@ -110,17 +111,17 @@ export class AutoHideService {
         .eq('id', postId);
 
       if (error) {
-        console.error(`❌ 下架帖子 ${postId} 失败:`, error);
+        log.error(`❌ 下架帖子 ${postId} 失败:`, error);
         return;
       }
 
-      console.log(`🗑️ 帖子 ${postId} 已自动下架（3天到期）`);
+      log.log(`🗑️ 帖子 ${postId} 已自动下架（3天到期）`);
 
       // 记录下架日志
       await this.logHideAction(postId, userId, HIDE_REASON.AUTO_EXPIRED);
 
     } catch (error) {
-      console.error(`❌ 下架帖子 ${postId} 时发生错误:`, error);
+      log.error(`❌ 下架帖子 ${postId} 时发生错误:`, error);
     }
   }
 
@@ -140,7 +141,7 @@ export class AutoHideService {
         .single();
 
       if (fetchError || !postData) {
-        console.error(`❌ 获取帖子信息失败:`, fetchError);
+        log.error(`❌ 获取帖子信息失败:`, fetchError);
         return false;
       }
 
@@ -162,7 +163,7 @@ export class AutoHideService {
         .eq('user_id', userId);
 
       if (error) {
-        console.error(`❌ 手动下架帖子 ${postId} 失败:`, error);
+        log.error(`❌ 手动下架帖子 ${postId} 失败:`, error);
         return false;
       }
 
@@ -175,21 +176,21 @@ export class AutoHideService {
         });
 
         if (refundError) {
-          console.error(`❌ 返还积分失败:`, refundError);
+          log.error(`❌ 返还积分失败:`, refundError);
           // 不影响下架操作，只是记录错误
         } else {
-          console.log(`💰 为用户 ${userId} 返还了 ${pointsToRefund} 积分`);
+          log.log(`💰 为用户 ${userId} 返还了 ${pointsToRefund} 积分`);
         }
       }
 
-      console.log(`👋 用户 ${userId} 手动下架了帖子 ${postId}，返还 ${pointsToRefund} 积分`);
+      log.log(`👋 用户 ${userId} 手动下架了帖子 ${postId}，返还 ${pointsToRefund} 积分`);
 
       // 记录下架日志
       await this.logHideAction(postId, userId, HIDE_REASON.MANUAL);
 
       return true;
     } catch (error) {
-      console.error(`❌ 手动下架帖子 ${postId} 时发生错误:`, error);
+      log.error(`❌ 手动下架帖子 ${postId} 时发生错误:`, error);
       return false;
     }
   }
@@ -213,18 +214,18 @@ export class AutoHideService {
         .eq('id', postId);
 
       if (error) {
-        console.error(`❌ 管理员下架帖子 ${postId} 失败:`, error);
+        log.error(`❌ 管理员下架帖子 ${postId} 失败:`, error);
         return false;
       }
 
-      console.log(`🛡️ 管理员 ${adminId} 强制下架了帖子 ${postId}`);
+      log.log(`🛡️ 管理员 ${adminId} 强制下架了帖子 ${postId}`);
 
       // 记录管理员操作日志
       await this.logHideAction(postId, adminId, HIDE_REASON.ADMIN_HIDDEN, reason);
 
       return true;
     } catch (error) {
-      console.error(`❌ 管理员下架帖子 ${postId} 时发生错误:`, error);
+      log.error(`❌ 管理员下架帖子 ${postId} 时发生错误:`, error);
       return false;
     }
   }
@@ -250,10 +251,10 @@ export class AutoHideService {
         });
 
       if (error) {
-        console.error(`❌ 记录下架日志失败:`, error);
+        log.error(`❌ 记录下架日志失败:`, error);
       }
     } catch (error) {
-      console.error(`❌ 记录下架日志时发生错误:`, error);
+      log.error(`❌ 记录下架日志时发生错误:`, error);
     }
   }
 
@@ -293,13 +294,13 @@ export class AutoHideService {
         .order('updated_at', { ascending: false });
 
       if (error) {
-        console.error('❌ 获取用户过期帖子失败:', error);
+        log.error('❌ 获取用户过期帖子失败:', error);
         return [];
       }
 
       return data || [];
     } catch (error) {
-      console.error('❌ 获取用户过期帖子时发生错误:', error);
+      log.error('❌ 获取用户过期帖子时发生错误:', error);
       return [];
     }
   }

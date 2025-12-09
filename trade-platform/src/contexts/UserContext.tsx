@@ -7,6 +7,7 @@ import { persist, subscribeWithSelector } from 'zustand/middleware';
 import { User } from '@/types';
 import { STORAGE_KEYS } from '@/constants';
 import { toast } from '@/services/toastService';
+import { log } from '@/utils/logger';
 
 /**
  * 用户状态接口
@@ -99,7 +100,7 @@ export const useUserStore = create<UserState>()(
             // TODO: 调用刷新token的API
             // await authService.refreshToken();
           } catch (error) {
-            console.error('刷新token失败:', error);
+            log.error('刷新token失败:', error);
             toast.error('登录已过期，请重新登录');
             get().logout();
           } finally {
@@ -150,7 +151,7 @@ export const useUserStore = create<UserState>()(
         onRehydrateStorage: () => (state) => {
           // 恢复状态时的回调
           if (state) {
-            console.log('用户状态已从本地存储恢复');
+            log.log('用户状态已从本地存储恢复');
           }
         },
       }

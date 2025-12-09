@@ -8,6 +8,7 @@ import { PAGINATION } from '@/constants';
 import { apiService } from '@/services/apiService';
 import { useUser } from '@/contexts/UserContext';
 import { toast } from '@/services/toastService';
+import { log } from '@/utils/logger';
 
 /**
  * 帖子列表Hook
@@ -55,7 +56,7 @@ export const usePosts = (initialParams?: Partial<PaginationParams>) => {
       setParams(finalParams);
     } catch (error) {
       setError('获取帖子列表失败');
-      console.error('获取帖子列表失败:', error);
+      log.error('获取帖子列表失败:', error);
     } finally {
       setLoading(false);
     }
@@ -139,7 +140,7 @@ export const usePost = (postId: string) => {
       setPost(postData);
     } catch (error) {
       setError('获取帖子详情失败');
-      console.error('获取帖子详情失败:', error);
+      log.error('获取帖子详情失败:', error);
     } finally {
       setLoading(false);
     }
@@ -154,7 +155,7 @@ export const usePost = (postId: string) => {
       toast.success('联系方式查看成功');
       return contactInfo;
     } catch (error) {
-      console.error('查看联系方式失败:', error);
+      log.error('查看联系方式失败:', error);
       throw error;
     }
   }, [post, postId]);
@@ -168,7 +169,7 @@ export const usePost = (postId: string) => {
       // 重新获取帖子信息
       await fetchPost();
     } catch (error) {
-      console.error('确认交易失败:', error);
+      log.error('确认交易失败:', error);
       throw error;
     }
   }, [postId, fetchPost]);
@@ -182,7 +183,7 @@ export const usePost = (postId: string) => {
       // 重新获取帖子信息
       await fetchPost();
     } catch (error) {
-      console.error('下架帖子失败:', error);
+      log.error('下架帖子失败:', error);
       throw error;
     }
   }, [postId, fetchPost]);
@@ -240,7 +241,7 @@ export const useCreatePost = () => {
       return newPost;
     } catch (error) {
       setError('发布帖子失败');
-      console.error('发布帖子失败:', error);
+      log.error('发布帖子失败:', error);
       throw error;
     } finally {
       setLoading(false);
@@ -282,7 +283,7 @@ export const useUserPosts = () => {
       setPosts(userPosts);
     } catch (error) {
       setError('获取用户帖子失败');
-      console.error('获取用户帖子失败:', error);
+      log.error('获取用户帖子失败:', error);
     } finally {
       setLoading(false);
     }
@@ -296,7 +297,7 @@ export const useUserPosts = () => {
       setPosts(prev => prev.filter(post => post.id !== postId));
       toast.success('帖子已下架');
     } catch (error) {
-      console.error('下架帖子失败:', error);
+      log.error('下架帖子失败:', error);
       throw error;
     }
   }, []);

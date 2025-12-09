@@ -3,6 +3,7 @@
  */
 
 import { useState, useCallback, useRef } from 'react';
+import { log } from '@/utils/logger';
 
 /**
  * 加载状态接口
@@ -83,7 +84,7 @@ export const useLoading = (initialMessage?: string): LoadingState & LoadingActio
       const result = await fn();
       return result;
     } catch (error) {
-      console.error('异步操作执行失败:', error);
+      log.error('异步操作执行失败:', error);
       throw error;
     } finally {
       setLoading(false);
@@ -102,7 +103,7 @@ export const useLoading = (initialMessage?: string): LoadingState & LoadingActio
       const result = await fn(setProgress);
       return result;
     } catch (error) {
-      console.error('异步操作执行失败:', error);
+      log.error('异步操作执行失败:', error);
       throw error;
     } finally {
       setLoading(false);
@@ -261,7 +262,7 @@ export const useRetry = <T, Args extends any[]>(
           throw lastError;
         }
 
-        console.warn(`第 ${attempt + 1} 次尝试失败:`, lastError.message);
+        log.warn(`第 ${attempt + 1} 次尝试失败:`, lastError.message);
       }
     }
 

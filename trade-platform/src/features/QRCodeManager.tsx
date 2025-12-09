@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { supabase } from '../services/supabase'
 import { Upload, Image as ImageIcon, Trash2 } from 'lucide-react'
+import { log } from '../utils/logger'
 
 interface QRCodeManagerProps {
   onUpdate?: () => void
 }
 
-export default function QRCodeManager({ onUpdate }: QRCodeManagerProps) {
+function QRCodeManager({ onUpdate }: QRCodeManagerProps) {
   const [wechatQR, setWechatQR] = useState<string>('')
   const [alipayQR, setAlipayQR] = useState<string>('')
   const [wechatUploading, setWechatUploading] = useState(false)
@@ -28,7 +29,7 @@ export default function QRCodeManager({ onUpdate }: QRCodeManagerProps) {
         if (alipay) setAlipayQR(alipay.qr_code_url)
       }
     } catch (error) {
-      console.error('加载二维码失败:', error)
+      log.error('加载二维码失败:', error)
     }
   }
 
@@ -205,3 +206,5 @@ export default function QRCodeManager({ onUpdate }: QRCodeManagerProps) {
     </div>
   )
 }
+
+export default React.memo(QRCodeManager)

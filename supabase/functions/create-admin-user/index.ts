@@ -133,7 +133,7 @@ Deno.serve(async (req) => {
       });
   
     } catch (error) {
-      logger.error('Function error:', error);
+      console.error('Function error:', error);
       return new Response(JSON.stringify({
         error: { code: 'FUNCTION_ERROR', message: error.message }
       }), {

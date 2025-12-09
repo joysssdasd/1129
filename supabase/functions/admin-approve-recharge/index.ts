@@ -1,3 +1,18 @@
+const PRESET_PACKAGES: Record<number, { points: number; name: string }> = {
+    50: { points: 55, name: '充值套餐A' },
+    100: { points: 115, name: '充值套餐B' },
+    300: { points: 370, name: '充值套餐C' },
+    500: { points: 650, name: '充值套餐D' }
+};
+
+function getPackageName(amount: number, points: number) {
+    const preset = PRESET_PACKAGES[amount];
+    if (preset && preset.points === points) {
+        return preset.name;
+    }
+    return '自定义充值';
+}
+
 Deno.serve(async (req) => {
     const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
@@ -25,7 +40,6 @@ Deno.serve(async (req) => {
             throw new Error('系统配置错误');
         }
 
-        // 验证管理员权限
         const adminResponse = await fetch(
             `${supabaseUrl}/rest/v1/users?id=eq.${admin_id}&is_admin=eq.true`,
             {
@@ -42,9 +56,8 @@ Deno.serve(async (req) => {
             throw new Error('无管理员权限');
         }
 
-        // 查询充值申请
         const requestResponse = await fetch(
-            `${supabaseUrl}/rest/v1/recharge_requests?id=eq.${request_id}&select=*,users!recharge_requests_user_id_fkey(*)`,
+            `${supabaseUrl}/rest/v1/recharge_requests?id=eq.${request_id}`,
             {
                 headers: {
                     'Authorization': `Bearer ${serviceRoleKey}`,
@@ -61,13 +74,11 @@ Deno.serve(async (req) => {
 
         const rechargeRequest = requests[0];
 
-        // 检查是否已处理
         if (rechargeRequest.status !== 0) {
             throw new Error('该申请已处理');
         }
 
         if (approved) {
-            // 审核通过，增加用户积分
             const userResponse = await fetch(
                 `${supabaseUrl}/rest/v1/users?id=eq.${rechargeRequest.user_id}`,
                 {
@@ -87,7 +98,6 @@ Deno.serve(async (req) => {
             const user = users[0];
             const newPoints = user.points + rechargeRequest.points;
 
-            // 更新用户积分
             await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${rechargeRequest.user_id}`, {
                 method: 'PATCH',
                 headers: {
@@ -98,7 +108,11 @@ Deno.serve(async (req) => {
                 body: JSON.stringify({ points: newPoints })
             });
 
-            // 记录积分变动
+            const packageName = getPackageName(
+                Number(rechargeRequest.amount),
+                Number(rechargeRequest.points)
+            );
+
             await fetch(`${supabaseUrl}/rest/v1/point_transactions`, {
                 method: 'POST',
                 headers: {
@@ -108,15 +122,14 @@ Deno.serve(async (req) => {
                 },
                 body: JSON.stringify({
                     user_id: rechargeRequest.user_id,
-                    change_type: 1, // 充值
+                    change_type: 1,
                     change_amount: rechargeRequest.points,
                     balance_after: newPoints,
                     related_id: request_id,
-                    description: `充值${rechargeRequest.amount}元 (${rechargeRequest.package_name || '未知套餐'})`
+                    description: `充值${rechargeRequest.amount}元 (${packageName})`
                 })
             });
 
-            // 更新充值申请状态为已通过
             await fetch(`${supabaseUrl}/rest/v1/recharge_requests?id=eq.${request_id}`, {
                 method: 'PATCH',
                 headers: {
@@ -125,7 +138,7 @@ Deno.serve(async (req) => {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    status: 1, // 已通过
+                    status: 1,
                     admin_id,
                     admin_note: admin_note || '',
                     processed_at: new Date().toISOString()
@@ -141,7 +154,6 @@ Deno.serve(async (req) => {
             });
 
         } else {
-            // 审核拒绝
             await fetch(`${supabaseUrl}/rest/v1/recharge_requests?id=eq.${request_id}`, {
                 method: 'PATCH',
                 headers: {
@@ -150,7 +162,7 @@ Deno.serve(async (req) => {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    status: 2, // 已拒绝
+                    status: 2,
                     admin_id,
                     admin_note: admin_note || '',
                     processed_at: new Date().toISOString()

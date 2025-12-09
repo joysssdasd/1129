@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown, Search, DollarSign, AlertCircle, BarChart3, RefreshCw } from 'lucide-react'
 import { supabase } from '../../services/supabase'
+import { log } from '../../utils/logger'
 
 interface KeywordData {
   keyword: string
@@ -25,7 +26,7 @@ interface PriceAlert {
   severity: 'high' | 'medium' | 'low'
 }
 
-export default function PriceAnalysis() {
+function PriceAnalysis() {
   const [keywords, setKeywords] = useState<KeywordData[]>([])
   const [selectedKeyword, setSelectedKeyword] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
@@ -58,7 +59,7 @@ export default function PriceAnalysis() {
         await calculatePriceAnalysisFrontend()
       }
     } catch (error) {
-      console.error('加载价格分析数据失败:', error)
+      log.error('加载价格分析数据失败:', error)
       await calculatePriceAnalysisFrontend()
     } finally {
       setLoading(false)
@@ -186,7 +187,7 @@ export default function PriceAnalysis() {
       setKeywords(keywordData)
       setPriceAlerts(alerts.slice(0, 5)) // 只显示前5个警报
     } catch (error) {
-      console.error('前端价格分析计算失败:', error)
+      log.error('前端价格分析计算失败:', error)
       setKeywords([])
       setPriceAlerts([])
     }
@@ -442,3 +443,5 @@ export default function PriceAnalysis() {
     </div>
   )
 }
+
+export default React.memo(PriceAnalysis)

@@ -3,6 +3,7 @@
  */
 
 import { ERROR_CODES, ERROR_MESSAGES } from '@/constants';
+import { log } from '@/utils/logger';
 
 /**
  * 自定义错误类
@@ -105,7 +106,7 @@ export class ErrorHandler {
       try {
         callback(error);
       } catch (callbackError) {
-        console.error('Error in error callback:', callbackError);
+        log.error('Error in error callback:', callbackError);
       }
     });
   }
@@ -155,15 +156,15 @@ export class ErrorHandler {
   private logError(error: AppError): void {
     if (import.meta.env.DEV) {
       console.group('🚨 App Error');
-      console.error('Error:', error);
-      console.error('Message:', error.message);
-      console.error('Code:', error.code);
-      console.error('Context:', error.context);
+      log.error('Error:', error);
+      log.error('Message:', error.message);
+      log.error('Code:', error.code);
+      log.error('Context:', error.context);
       console.groupEnd();
     } else {
       // 生产环境可以发送到错误监控服务
       // 例如: Sentry.captureException(error)
-      console.error('App Error:', {
+      log.error('App Error:', {
         name: error.name,
         message: error.message,
         code: error.code,
