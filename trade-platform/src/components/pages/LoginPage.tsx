@@ -16,7 +16,7 @@ export default function LoginPage() {
   const [phone, setPhone] = useState('')
 
   // 管理员手机号列表
-  const ADMIN_PHONES = ['13011319329', '13800138000']
+  const ADMIN_PHONES = ['13011319329', '13001220766']
   
   // 检查是否为管理员手机号
   const isAdminPhone = (phoneNumber: string) => ADMIN_PHONES.includes(phoneNumber)

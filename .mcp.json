@@ -1,31 +1,10 @@
 {
   "mcpServers": {
-    "custom-jb-rule": {
-      "type": "stdio",
-      "command": "node \"E:/claude15/trade-platform/custom-jb-mcp-server.js\"",
-      "args": [],
-      "env": {
-        "RULES_CONFIG": "E:\\claude15\\trade-platform\\jb-rules.json"
-      }
-    },
-    "supabase-official": {
-      "type": "stdio",
+    "supabase": {
       "command": "npx",
-      "args": ["-y", "@supabase/mcp-supabase"],
+      "args": ["-y", "@supabase/mcp-server-supabase@latest", "--read-only=false", "--project-ref=mgyelmyjeidlvmmmjkqi"],
       "env": {
-        "SUPABASE_URL": "https://qxqbqllpdbjpheynezh.supabase.co",
-        "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4cWJxbGxwZGJqcGhleW5lemgiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTczODA1MzI3MSwiZXhwIjoyMDUzNjI5MjcxfQ.wvsRpL7ZRCkM0kTFP8YoNm9QkG1yfNKLdSwEkqjMwnx9MII2",
-        "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4cWJxbGxwZGJqcGhleW5lemgiLCJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNzM4MDUzMjcxLCJleHAiOjIwNTM2MjkyNzF9.8vsRpL7ZRCkM0kTFP8YoNm9QkG1yfNKLdSwEkqjMwnx9MII2"
-      }
-    },
-    "supabase-local": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["E:/claude15/trade-platform/supabase-mcp-server.js"],
-      "env": {
-        "SUPABASE_URL": "https://qxqbqllpdbjpheynezh.supabase.co",
-        "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4cWJxbGxwZGJqcGhleW5lemgiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTczODA1MzI3MSwiZXhwIjoyMDUzNjI5MjcxfQ.wvsRpL7ZRCkM0kTFP8YoNm9QkG1yfNKLdSwEkqjMwnx9MII2",
-        "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4cWJxbGxwZGJqcGhleW5lemgiLCJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNzM4MDUzMjcxLCJleHAiOjIwNTM2MjkyNzF9.8vsRpL7ZRCkM0kTFP8YoNm9QkG1yfNKLdSwEkqjMwnx9MII2"
+        "SUPABASE_ACCESS_TOKEN": "sbp_8b4e6c7f5cde27bf299de4a4bb0110292004da3b"
       }
     }
   }
