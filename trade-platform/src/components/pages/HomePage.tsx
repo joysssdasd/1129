@@ -387,28 +387,6 @@ export default function HomePage() {
             </button>
           </div>
 
-          {/* 热门关键词 */}
-          {hotKeywords.length > 0 && (
-            <div className="mt-3">
-              <div className="flex items-center gap-1.5 mb-2">
-                <TrendingUp className="w-3.5 h-3.5 text-orange-500" />
-                <span className="text-xs text-gray-500 font-medium">热门搜索</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {hotKeywords.map((item, index) => (
-                  <button
-                    key={index}
-                    onClick={() => handleHotKeywordClick(item.keyword)}
-                    className="px-2.5 py-1 bg-gradient-to-r from-orange-50 to-yellow-50 text-orange-600 text-xs rounded-full border border-orange-100 hover:from-orange-100 hover:to-yellow-100 hover:border-orange-200 transition-all flex items-center gap-1"
-                  >
-                    <span className="truncate max-w-[80px]">{item.keyword}</span>
-                    <span className="text-orange-400 text-[10px]">({item.count})</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* 分类筛选 */}
           <div className="flex gap-2 mt-3 overflow-x-auto">
             <button
@@ -435,6 +413,28 @@ export default function HomePage() {
               </button>
             ))}
           </div>
+
+          {/* 热门关键词 - 显示交易信息数量最多的10个关键词 */}
+          {hotKeywords.length > 0 && (
+            <div className="mt-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <TrendingUp className="w-3.5 h-3.5 text-orange-500" />
+                <span className="text-xs text-gray-500 font-medium">热门关键词</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {hotKeywords.map((item, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleHotKeywordClick(item.keyword)}
+                    className="px-2.5 py-1 bg-gradient-to-r from-orange-50 to-yellow-50 text-orange-600 text-xs rounded-full border border-orange-100 hover:from-orange-100 hover:to-yellow-100 hover:border-orange-200 transition-all flex items-center gap-1"
+                  >
+                    <span className="truncate max-w-[80px]">{item.keyword}</span>
+                    <span className="text-orange-400 text-[10px]">({item.count})</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

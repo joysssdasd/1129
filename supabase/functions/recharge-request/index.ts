@@ -105,6 +105,7 @@ Deno.serve(async (req) => {
                 amount: amountNum,
                 points: meta.points,
                 screenshot_url: screenshotUrl,
+                payment_method: 'alipay',
                 status: 0
             })
         });

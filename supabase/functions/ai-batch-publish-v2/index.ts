@@ -160,7 +160,7 @@ ${text_input}
                                 view_limit: 100,
                                 view_count: 0,
                                 status: 1,
-                                expire_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+                                expire_at: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString() // 3天后过期
                             })
                         }
                     );

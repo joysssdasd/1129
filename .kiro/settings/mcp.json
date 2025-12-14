@@ -13,7 +13,14 @@
       "autoApprove": [
         "list_tables",
         "execute_sql",
-        "get_publishable_keys"
+        "get_publishable_keys",
+        "deploy_edge_function",
+        "get_logs",
+        "get_project_url",
+        "apply_migration",
+        "list_edge_functions",
+        "get_advisors",
+        "get_edge_function"
       ]
     }
   }
