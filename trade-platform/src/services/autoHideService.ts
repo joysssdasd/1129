@@ -52,21 +52,40 @@ export class AutoHideService {
   }
 
   /**
+   * 从数据库获取帖子有效期天数
+   */
+  private async getExpireDays(): Promise<number> {
+    try {
+      const { data } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'post_expire_days')
+        .single();
+      
+      return data ? parseInt(data.value) || 3 : 3;
+    } catch {
+      return 3; // 默认3天
+    }
+  }
+
+  /**
    * 检查并下架过期帖子
    */
   private async checkAndHideExpiredPosts(): Promise<void> {
     try {
       log.log('🔍 开始检查过期的交易帖子...');
 
-      // 计算3天前的时间点
-      const threeDaysAgo = new Date(Date.now() - TIME.POST_AUTO_HIDE);
+      // 从数据库获取有效期设置
+      const expireDays = await this.getExpireDays();
+      const expireTime = expireDays * 24 * 60 * 60 * 1000;
+      const expireDate = new Date(Date.now() - expireTime);
 
       // 查询所有需要下架的活跃帖子（包括管理员发布的）
       const { data: expiredPosts, error } = await supabase
         .from('posts')
         .select('id, user_id, title, created_at, status')
         .eq('status', POST_STATUS.ACTIVE)
-        .lt('created_at', threeDaysAgo.toISOString());
+        .lt('created_at', expireDate.toISOString());
 
       if (error) {
         log.error('❌ 查询过期帖子失败:', error);
@@ -260,12 +279,14 @@ export class AutoHideService {
 
   /**
    * 获取帖子剩余上架时间（小时）
+   * 注意：这是同步方法，使用默认3天，实际下架使用数据库配置
    */
-  getRemainingHours(postCreatedAt: string): number {
+  getRemainingHours(postCreatedAt: string, expireDays: number = 3): number {
     const created = new Date(postCreatedAt).getTime();
     const now = Date.now();
     const elapsed = now - created;
-    const remaining = TIME.POST_AUTO_HIDE - elapsed;
+    const expireTime = expireDays * 24 * 60 * 60 * 1000;
+    const remaining = expireTime - elapsed;
 
     return Math.max(0, Math.ceil(remaining / (1000 * 60 * 60)));
   }

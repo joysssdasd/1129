@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../../contexts/UserContext'
 import { supabase } from '../../services/supabase'
-import { ArrowLeft, Copy, Upload, MessageCircle, Receipt, TrendingUp, FileText, Edit, Trash2, Clock, CheckCircle, XCircle, Key, Users, Sparkles, Archive, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Copy, Upload, MessageCircle, Receipt, TrendingUp, FileText, Edit, Trash2, Clock, CheckCircle, XCircle, Key, Users, Sparkles, Archive, AlertTriangle, Megaphone } from 'lucide-react'
 import InvitationStatistics from '../../features/InvitationStatistics'
 import UserAIBatchPublish from '../../features/forms/UserAIBatchPublish'
 import { autoHideService } from '../../services/autoHideService'
@@ -28,6 +28,9 @@ export default function ProfilePage() {
   const [oldPassword, setOldPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  // 公告和客服设置
+  const [announcements, setAnnouncements] = useState<{ id: string; title: string; content: string }[]>([])
+  const [serviceSettings, setServiceSettings] = useState<{ [key: string]: string }>({})
 
   const { user, setUser } = useUser()
   const navigate = useNavigate()
@@ -39,7 +42,34 @@ export default function ProfilePage() {
     if (activeTab === 'points') loadPointTransactions()
     if (activeTab === 'rechargeHistory') loadRechargeRecords()
     if (activeTab === 'recharge') loadPaymentQRCodes()
+    if (activeTab === 'service') loadServiceSettings()
   }, [activeTab])
+
+  // 初始加载公告
+  useEffect(() => {
+    loadAnnouncements()
+  }, [])
+
+  const loadAnnouncements = async () => {
+    const { data } = await supabase
+      .from('announcements')
+      .select('id, title, content')
+      .eq('is_active', true)
+      .order('priority', { ascending: false })
+      .limit(3)
+    setAnnouncements(data || [])
+  }
+
+  const loadServiceSettings = async () => {
+    const { data } = await supabase
+      .from('system_settings')
+      .select('key, value')
+      .eq('category', 'service')
+    
+    const settings: { [key: string]: string } = {}
+    data?.forEach(s => { settings[s.key] = s.value })
+    setServiceSettings(settings)
+  }
 
   const loadPaymentQRCodes = async () => {
     try {
@@ -386,6 +416,25 @@ export default function ProfilePage() {
           <h1 className="text-xl font-bold">个人中心</h1>
         </div>
       </div>
+
+      {/* 公告展示 */}
+      {announcements.length > 0 && (
+        <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border-b border-orange-100">
+          <div className="max-w-2xl mx-auto px-4 py-2">
+            <div className="flex items-start gap-2">
+              <Megaphone className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 overflow-hidden">
+                {announcements.map((ann, index) => (
+                  <div key={ann.id} className={`${index > 0 ? 'mt-1 pt-1 border-t border-orange-100' : ''}`}>
+                    <span className="text-sm font-medium text-orange-700">{ann.title}：</span>
+                    <span className="text-sm text-orange-600">{ann.content}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="max-w-2xl mx-auto px-4 py-6">
         {activeTab === 'overview' && (
@@ -780,10 +829,10 @@ export default function ProfilePage() {
                 <div className="border-b pb-4">
                   <div className="text-sm text-gray-600 mb-2">微信客服</div>
                   <div className="flex items-center justify-between">
-                    <div className="font-mono text-lg">kefu_wechat</div>
+                    <div className="font-mono text-lg">{serviceSettings.service_wechat || '加载中...'}</div>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText('kefu_wechat')
+                        navigator.clipboard.writeText(serviceSettings.service_wechat || '')
                         alert('微信号已复制')
                       }}
                       className="px-3 py-1 bg-green-500 text-white rounded text-sm"
@@ -796,10 +845,10 @@ export default function ProfilePage() {
                 <div className="border-b pb-4">
                   <div className="text-sm text-gray-600 mb-2">QQ客服</div>
                   <div className="flex items-center justify-between">
-                    <div className="font-mono text-lg">123456789</div>
+                    <div className="font-mono text-lg">{serviceSettings.service_qq || '加载中...'}</div>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText('123456789')
+                        navigator.clipboard.writeText(serviceSettings.service_qq || '')
                         alert('QQ号已复制')
                       }}
                       className="px-3 py-1 bg-blue-500 text-white rounded text-sm"
@@ -812,9 +861,9 @@ export default function ProfilePage() {
                 <div className="border-b pb-4">
                   <div className="text-sm text-gray-600 mb-2">客服电话</div>
                   <div className="flex items-center justify-between">
-                    <div className="font-mono text-lg">400-123-4567</div>
+                    <div className="font-mono text-lg">{serviceSettings.service_phone || '加载中...'}</div>
                     <a
-                      href="tel:400-123-4567"
+                      href={`tel:${serviceSettings.service_phone || ''}`}
                       className="px-3 py-1 bg-orange-500 text-white rounded text-sm"
                     >
                       拨打电话
@@ -825,7 +874,7 @@ export default function ProfilePage() {
                 <div className="bg-blue-50 rounded-lg p-4">
                   <h3 className="font-medium text-sm mb-2">服务时间</h3>
                   <p className="text-sm text-gray-600">
-                    周一至周日 9:00-22:00
+                    {serviceSettings.service_hours || '周一至周日 9:00-22:00'}
                   </p>
                   <p className="text-xs text-gray-500 mt-2">
                     如遇节假日，服务时间可能会有调整

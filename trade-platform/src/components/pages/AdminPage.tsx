@@ -2,10 +2,9 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../../contexts/UserContext'
 import { supabase } from '../../services/supabase'
-import { ArrowLeft, Users, FileText, DollarSign, Sparkles, TrendingUp, BarChart3 } from 'lucide-react'
+import { ArrowLeft, Users, FileText, DollarSign, Sparkles, BarChart3, Megaphone, Edit, Trash2, Plus, Settings, Ban, Coins } from 'lucide-react'
 import QRCodeManager from '../../features/QRCodeManager'
 import AIBatchPublish from '../../features/forms/AIBatchPublish'
-import KLineChart from '../../features/KLineChart'
 import AnalyticsDashboard from '../../features/analytics/AnalyticsDashboard'
 
 const RECHARGE_PACKAGES = [
@@ -14,6 +13,30 @@ const RECHARGE_PACKAGES = [
   { amount: 300, points: 370, name: '充值套餐C' },
   { amount: 500, points: 650, name: '充值套餐D' }
 ]
+
+interface Announcement {
+  id: string
+  title: string
+  content: string
+  priority: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+interface SystemSetting {
+  id: string
+  key: string
+  value: string
+  description: string
+  category: string
+}
+
+interface BannedKeyword {
+  id: string
+  keyword: string
+  created_at: string
+}
 
 const deriveRechargeMeta = (amount?: number, points?: number) => {
   if (!amount || !points) {
@@ -48,6 +71,19 @@ export default function AdminPage() {
   const [postFilter, setPostFilter] = useState<'all' | 'active' | 'inactive'>('all') // 信息筛选状态
   const [userSearch, setUserSearch] = useState('') // 用户搜索关键词
   const [userSortBy, setUserSortBy] = useState<'time' | 'posts' | 'points'>('time') // 用户排序方式
+  // 公告管理相关状态
+  const [announcements, setAnnouncements] = useState<Announcement[]>([])
+  const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null)
+  const [announcementForm, setAnnouncementForm] = useState({ title: '', content: '', priority: 0, is_active: true })
+  const [showAnnouncementForm, setShowAnnouncementForm] = useState(false)
+  // 系统设置相关状态
+  const [systemSettings, setSystemSettings] = useState<SystemSetting[]>([])
+  const [bannedKeywords, setBannedKeywords] = useState<BannedKeyword[]>([])
+  const [newBannedKeyword, setNewBannedKeyword] = useState('')
+  // 积分调整相关状态
+  const [adjustUserId, setAdjustUserId] = useState('')
+  const [adjustAmount, setAdjustAmount] = useState('')
+  const [adjustReason, setAdjustReason] = useState('')
   const { user } = useUser()
   const navigate = useNavigate()
 
@@ -73,6 +109,8 @@ export default function AdminPage() {
       if (activeTab === 'users') loadUsers()
       if (activeTab === 'posts') loadPosts()
       if (activeTab === 'recharge') loadRechargeRequests()
+      if (activeTab === 'announcements') loadAnnouncements()
+      if (activeTab === 'settings') { loadSystemSettings(); loadBannedKeywords() }
     }
   }, [activeTab, user])
 
@@ -115,6 +153,208 @@ export default function AdminPage() {
     
     const { data } = await query
     setPosts(data || [])
+  }
+
+  const loadAnnouncements = async () => {
+    const { data } = await supabase
+      .from('announcements')
+      .select('*')
+      .order('priority', { ascending: false })
+      .order('created_at', { ascending: false })
+    setAnnouncements(data || [])
+  }
+
+  const loadSystemSettings = async () => {
+    const { data } = await supabase
+      .from('system_settings')
+      .select('*')
+      .order('category')
+    setSystemSettings(data || [])
+  }
+
+  const loadBannedKeywords = async () => {
+    const { data } = await supabase
+      .from('banned_keywords')
+      .select('*')
+      .order('created_at', { ascending: false })
+    setBannedKeywords(data || [])
+  }
+
+  // 公告管理操作
+  const handleSaveAnnouncement = async () => {
+    if (!announcementForm.title.trim() || !announcementForm.content.trim()) {
+      alert('请填写标题和内容')
+      return
+    }
+
+    if (editingAnnouncement) {
+      const { error } = await supabase
+        .from('announcements')
+        .update({
+          title: announcementForm.title,
+          content: announcementForm.content,
+          priority: announcementForm.priority,
+          is_active: announcementForm.is_active,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingAnnouncement.id)
+      
+      if (error) {
+        alert('更新失败：' + error.message)
+        return
+      }
+    } else {
+      const { error } = await supabase
+        .from('announcements')
+        .insert({
+          title: announcementForm.title,
+          content: announcementForm.content,
+          priority: announcementForm.priority,
+          is_active: announcementForm.is_active,
+          created_by: user?.id
+        })
+      
+      if (error) {
+        alert('创建失败：' + error.message)
+        return
+      }
+    }
+
+    setShowAnnouncementForm(false)
+    setEditingAnnouncement(null)
+    setAnnouncementForm({ title: '', content: '', priority: 0, is_active: true })
+    loadAnnouncements()
+    alert(editingAnnouncement ? '公告已更新' : '公告已创建')
+  }
+
+  const handleDeleteAnnouncement = async (id: string) => {
+    if (!window.confirm('确定要删除这条公告吗？')) return
+    
+    const { error } = await supabase.from('announcements').delete().eq('id', id)
+    if (error) {
+      alert('删除失败：' + error.message)
+      return
+    }
+    loadAnnouncements()
+    alert('公告已删除')
+  }
+
+  const handleEditAnnouncement = (announcement: Announcement) => {
+    setEditingAnnouncement(announcement)
+    setAnnouncementForm({
+      title: announcement.title,
+      content: announcement.content,
+      priority: announcement.priority,
+      is_active: announcement.is_active
+    })
+    setShowAnnouncementForm(true)
+  }
+
+  // 系统设置操作
+  const handleUpdateSetting = async (key: string, value: string) => {
+    const { error } = await supabase
+      .from('system_settings')
+      .update({ value, updated_at: new Date().toISOString() })
+      .eq('key', key)
+    
+    if (error) {
+      alert('更新失败：' + error.message)
+      return
+    }
+    loadSystemSettings()
+  }
+
+  // 禁用关键词操作
+  const handleAddBannedKeyword = async () => {
+    if (!newBannedKeyword.trim()) {
+      alert('请输入关键词')
+      return
+    }
+    
+    const { error } = await supabase
+      .from('banned_keywords')
+      .insert({ keyword: newBannedKeyword.trim(), created_by: user?.id })
+    
+    if (error) {
+      if (error.code === '23505') {
+        alert('该关键词已存在')
+      } else {
+        alert('添加失败：' + error.message)
+      }
+      return
+    }
+    
+    setNewBannedKeyword('')
+    loadBannedKeywords()
+  }
+
+  const handleDeleteBannedKeyword = async (id: string) => {
+    const { error } = await supabase.from('banned_keywords').delete().eq('id', id)
+    if (error) {
+      alert('删除失败：' + error.message)
+      return
+    }
+    loadBannedKeywords()
+  }
+
+  // 积分调整操作
+  const handleAdjustPoints = async () => {
+    if (!adjustUserId || !adjustAmount || !adjustReason.trim()) {
+      alert('请填写完整信息')
+      return
+    }
+
+    const amount = parseInt(adjustAmount)
+    if (isNaN(amount) || amount === 0) {
+      alert('请输入有效的积分数量')
+      return
+    }
+
+    // 查找用户
+    const targetUser = users.find(u => u.id === adjustUserId || u.phone === adjustUserId)
+    if (!targetUser) {
+      alert('未找到该用户')
+      return
+    }
+
+    // 检查积分是否足够（如果是扣除）
+    if (amount < 0 && targetUser.points + amount < 0) {
+      alert('用户积分不足')
+      return
+    }
+
+    // 更新用户积分
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ points: targetUser.points + amount })
+      .eq('id', targetUser.id)
+
+    if (updateError) {
+      alert('调整失败：' + updateError.message)
+      return
+    }
+
+    // 记录积分变动
+    await supabase.from('point_transactions').insert({
+      user_id: targetUser.id,
+      change_amount: amount,
+      description: `管理员调整：${adjustReason}`,
+      transaction_type: amount > 0 ? 'admin_add' : 'admin_deduct'
+    })
+
+    // 记录管理员操作
+    await supabase.from('admin_point_adjustments').insert({
+      user_id: targetUser.id,
+      admin_id: user?.id,
+      amount,
+      reason: adjustReason
+    })
+
+    setAdjustUserId('')
+    setAdjustAmount('')
+    setAdjustReason('')
+    loadUsers()
+    alert(`已${amount > 0 ? '增加' : '扣除'}${Math.abs(amount)}积分`)
   }
 
   const loadRechargeRequests = async () => {
@@ -327,6 +567,24 @@ export default function AdminPage() {
             >
               <BarChart3 className="w-4 h-4" />
               数据分析
+            </button>
+            <button
+              onClick={() => setActiveTab('announcements')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap ${
+                activeTab === 'announcements' ? 'bg-purple-100 text-purple-700' : 'text-gray-600'
+              }`}
+            >
+              <Megaphone className="w-4 h-4" />
+              公告管理
+            </button>
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap ${
+                activeTab === 'settings' ? 'bg-purple-100 text-purple-700' : 'text-gray-600'
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+              系统设置
             </button>
           </div>
         </div>
@@ -708,6 +966,315 @@ export default function AdminPage() {
         )}
 
         {activeTab === 'analytics' && <AnalyticsDashboard />}
+
+        {/* 公告管理 */}
+        {activeTab === 'announcements' && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-semibold">公告管理</h2>
+              <button
+                onClick={() => {
+                  setEditingAnnouncement(null)
+                  setAnnouncementForm({ title: '', content: '', priority: 0, is_active: true })
+                  setShowAnnouncementForm(true)
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+              >
+                <Plus className="w-4 h-4" />
+                新增公告
+              </button>
+            </div>
+
+            {/* 公告表单 */}
+            {showAnnouncementForm && (
+              <div className="bg-white rounded-lg p-6 border-2 border-purple-200">
+                <h3 className="font-semibold mb-4">{editingAnnouncement ? '编辑公告' : '新增公告'}</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">标题</label>
+                    <input
+                      type="text"
+                      value={announcementForm.title}
+                      onChange={(e) => setAnnouncementForm({ ...announcementForm, title: e.target.value })}
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                      placeholder="输入公告标题"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">内容</label>
+                    <textarea
+                      value={announcementForm.content}
+                      onChange={(e) => setAnnouncementForm({ ...announcementForm, content: e.target.value })}
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 h-32"
+                      placeholder="输入公告内容"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">优先级（数字越大越靠前）</label>
+                      <input
+                        type="number"
+                        value={announcementForm.priority}
+                        onChange={(e) => setAnnouncementForm({ ...announcementForm, priority: parseInt(e.target.value) || 0 })}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">状态</label>
+                      <select
+                        value={announcementForm.is_active ? 'active' : 'inactive'}
+                        onChange={(e) => setAnnouncementForm({ ...announcementForm, is_active: e.target.value === 'active' })}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                      >
+                        <option value="active">启用</option>
+                        <option value="inactive">禁用</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleSaveAnnouncement}
+                      className="flex-1 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                    >
+                      保存
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowAnnouncementForm(false)
+                        setEditingAnnouncement(null)
+                      }}
+                      className="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                    >
+                      取消
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 公告列表 */}
+            {announcements.length === 0 ? (
+              <div className="bg-white rounded-lg p-8 text-center text-gray-500">
+                暂无公告
+              </div>
+            ) : (
+              announcements.map((ann) => (
+                <div key={ann.id} className={`bg-white rounded-lg p-4 border-l-4 ${ann.is_active ? 'border-green-500' : 'border-gray-300'}`}>
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold">{ann.title}</h3>
+                        <span className={`text-xs px-2 py-0.5 rounded ${ann.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                          {ann.is_active ? '启用' : '禁用'}
+                        </span>
+                        <span className="text-xs text-gray-500">优先级: {ann.priority}</span>
+                      </div>
+                      <p className="text-gray-600 mt-1 whitespace-pre-wrap">{ann.content}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEditAnnouncement(ann)}
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteAnnouncement(ann.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    创建时间：{new Date(ann.created_at).toLocaleString()}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* 系统设置 */}
+        {activeTab === 'settings' && (
+          <div className="space-y-6">
+            {/* 交易设置 */}
+            <div className="bg-white rounded-lg p-6">
+              <h3 className="font-semibold mb-4 flex items-center gap-2">
+                <Settings className="w-5 h-5 text-purple-600" />
+                交易设置
+              </h3>
+              <div className="space-y-4">
+                {systemSettings.filter(s => s.category === 'trade').map((setting) => (
+                  <div key={setting.key} className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">{setting.description}</div>
+                      <div className="text-xs text-gray-500">key: {setting.key}</div>
+                    </div>
+                    {setting.key === 'post_expire_days' ? (
+                      <select
+                        value={setting.value}
+                        onChange={(e) => handleUpdateSetting(setting.key, e.target.value)}
+                        className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                      >
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(d => (
+                          <option key={d} value={d}>{d}天</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="number"
+                        value={setting.value}
+                        onChange={(e) => handleUpdateSetting(setting.key, e.target.value)}
+                        className="w-24 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 text-center"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 邀请奖励设置 */}
+            <div className="bg-white rounded-lg p-6">
+              <h3 className="font-semibold mb-4 flex items-center gap-2">
+                <Coins className="w-5 h-5 text-yellow-600" />
+                邀请奖励设置
+              </h3>
+              <div className="space-y-4">
+                {systemSettings.filter(s => s.category === 'invite').map((setting) => (
+                  <div key={setting.key} className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">{setting.description}</div>
+                    </div>
+                    <input
+                      type="number"
+                      value={setting.value}
+                      onChange={(e) => handleUpdateSetting(setting.key, e.target.value)}
+                      className="w-24 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 text-center"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 客服联系方式 */}
+            <div className="bg-white rounded-lg p-6">
+              <h3 className="font-semibold mb-4 flex items-center gap-2">
+                <Users className="w-5 h-5 text-blue-600" />
+                客服联系方式
+              </h3>
+              <div className="space-y-4">
+                {systemSettings.filter(s => s.category === 'service').map((setting) => (
+                  <div key={setting.key} className="flex items-center justify-between gap-4">
+                    <div className="flex-shrink-0">
+                      <div className="font-medium">{setting.description}</div>
+                    </div>
+                    <input
+                      type="text"
+                      value={setting.value}
+                      onChange={(e) => handleUpdateSetting(setting.key, e.target.value)}
+                      className="flex-1 max-w-xs px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 禁用关键词管理 */}
+            <div className="bg-white rounded-lg p-6">
+              <h3 className="font-semibold mb-4 flex items-center gap-2">
+                <Ban className="w-5 h-5 text-red-600" />
+                禁用关键词（敏感词过滤）
+              </h3>
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  value={newBannedKeyword}
+                  onChange={(e) => setNewBannedKeyword(e.target.value)}
+                  placeholder="输入要禁用的关键词"
+                  className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                  onKeyPress={(e) => e.key === 'Enter' && handleAddBannedKeyword()}
+                />
+                <button
+                  onClick={handleAddBannedKeyword}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                >
+                  添加
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {bannedKeywords.map((kw) => (
+                  <span
+                    key={kw.id}
+                    className="inline-flex items-center gap-1 px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm"
+                  >
+                    {kw.keyword}
+                    <button
+                      onClick={() => handleDeleteBannedKeyword(kw.id)}
+                      className="hover:text-red-900"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                {bannedKeywords.length === 0 && (
+                  <span className="text-gray-500 text-sm">暂无禁用关键词</span>
+                )}
+              </div>
+            </div>
+
+            {/* 积分调整 */}
+            <div className="bg-white rounded-lg p-6">
+              <h3 className="font-semibold mb-4 flex items-center gap-2">
+                <Coins className="w-5 h-5 text-green-600" />
+                手动调整用户积分
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">选择用户</label>
+                  <select
+                    value={adjustUserId}
+                    onChange={(e) => setAdjustUserId(e.target.value)}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="">请选择用户</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.phone} - 当前积分: {u.points}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">调整积分（正数增加，负数扣除）</label>
+                  <input
+                    type="number"
+                    value={adjustAmount}
+                    onChange={(e) => setAdjustAmount(e.target.value)}
+                    placeholder="如：100 或 -50"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">调整原因</label>
+                  <input
+                    type="text"
+                    value={adjustReason}
+                    onChange={(e) => setAdjustReason(e.target.value)}
+                    placeholder="如：活动奖励、违规扣除等"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <button
+                  onClick={handleAdjustPoints}
+                  className="w-full py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                >
+                  确认调整
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

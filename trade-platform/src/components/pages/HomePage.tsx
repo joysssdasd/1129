@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../../contexts/UserContext'
 import { supabase } from '../../services/supabase'
-import { Home, PlusCircle, User, Search, LogOut, RefreshCw, TrendingUp, X } from 'lucide-react'
+import { Home, PlusCircle, User, Search, LogOut, RefreshCw, TrendingUp, X, Megaphone } from 'lucide-react'
 import { log } from '../../utils/logger'
 import { searchAndSort, extractKeywordStats, getSearchSuggestions } from '../../utils/searchUtils'
 
@@ -35,6 +35,7 @@ export default function HomePage() {
   const [pullDistance, setPullDistance] = useState(0)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [hotKeywords, setHotKeywords] = useState<{ keyword: string; count: number }[]>([])
+  const [announcements, setAnnouncements] = useState<{ id: string; title: string; content: string }[]>([])
   const { user, setUser, logout } = useUser()
   const navigate = useNavigate()
   const touchStartY = useRef(0)
@@ -49,7 +50,19 @@ export default function HomePage() {
   // 初次加载时获取所有帖子用于搜索和热门关键词
   useEffect(() => {
     loadAllPosts()
+    loadAnnouncements()
   }, [])
+
+  // 加载公告
+  const loadAnnouncements = async () => {
+    const { data } = await supabase
+      .from('announcements')
+      .select('id, title, content')
+      .eq('is_active', true)
+      .order('priority', { ascending: false })
+      .limit(3)
+    setAnnouncements(data || [])
+  }
 
   // 从所有帖子中提取所有关键词用于搜索建议
   const allKeywords = useMemo(() => {
@@ -331,6 +344,25 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* 公告展示 */}
+      {announcements.length > 0 && (
+        <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border-b border-orange-100">
+          <div className="max-w-7xl mx-auto px-4 py-2">
+            <div className="flex items-start gap-2">
+              <Megaphone className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 overflow-hidden">
+                {announcements.map((ann, index) => (
+                  <div key={ann.id} className={`${index > 0 ? 'mt-1 pt-1 border-t border-orange-100' : ''}`}>
+                    <span className="text-sm font-medium text-orange-700">{ann.title}：</span>
+                    <span className="text-sm text-orange-600">{ann.content}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 搜索栏 */}
       <div className="bg-white border-b">
