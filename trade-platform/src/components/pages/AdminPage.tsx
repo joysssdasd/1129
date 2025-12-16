@@ -733,6 +733,70 @@ export default function AdminPage() {
                   <div className="text-xs text-gray-400 mt-2">
                     注册时间：{new Date(u.created_at).toLocaleString()}
                   </div>
+                  
+                  {/* 积分调整 */}
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        placeholder="积分数量"
+                        className="w-24 px-2 py-1 text-sm border rounded focus:ring-1 focus:ring-purple-500"
+                        id={`adjust-amount-${u.id}`}
+                      />
+                      <input
+                        type="text"
+                        placeholder="调整原因"
+                        className="flex-1 px-2 py-1 text-sm border rounded focus:ring-1 focus:ring-purple-500"
+                        id={`adjust-reason-${u.id}`}
+                      />
+                      <button
+                        onClick={async () => {
+                          const amountInput = document.getElementById(`adjust-amount-${u.id}`) as HTMLInputElement
+                          const reasonInput = document.getElementById(`adjust-reason-${u.id}`) as HTMLInputElement
+                          const amount = parseInt(amountInput?.value || '0')
+                          const reason = reasonInput?.value || ''
+                          
+                          if (!amount || amount === 0) {
+                            alert('请输入有效的积分数量')
+                            return
+                          }
+                          if (!reason.trim()) {
+                            alert('请输入调整原因')
+                            return
+                          }
+                          if (amount < 0 && u.points + amount < 0) {
+                            alert('用户积分不足')
+                            return
+                          }
+                          
+                          const { error } = await supabase
+                            .from('users')
+                            .update({ points: u.points + amount })
+                            .eq('id', u.id)
+                          
+                          if (error) {
+                            alert('调整失败：' + error.message)
+                            return
+                          }
+                          
+                          await supabase.from('point_transactions').insert({
+                            user_id: u.id,
+                            change_amount: amount,
+                            description: `管理员调整：${reason}`,
+                            transaction_type: amount > 0 ? 'admin_add' : 'admin_deduct'
+                          })
+                          
+                          amountInput.value = ''
+                          reasonInput.value = ''
+                          loadUsers()
+                          alert(`已${amount > 0 ? '增加' : '扣除'}${Math.abs(amount)}积分`)
+                        }}
+                        className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                      >
+                        <Coins className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ))
             })()}
@@ -1223,56 +1287,7 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* 积分调整 */}
-            <div className="bg-white rounded-lg p-6">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <Coins className="w-5 h-5 text-green-600" />
-                手动调整用户积分
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">选择用户</label>
-                  <select
-                    value={adjustUserId}
-                    onChange={(e) => setAdjustUserId(e.target.value)}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="">请选择用户</option>
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.phone} - 当前积分: {u.points}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">调整积分（正数增加，负数扣除）</label>
-                  <input
-                    type="number"
-                    value={adjustAmount}
-                    onChange={(e) => setAdjustAmount(e.target.value)}
-                    placeholder="如：100 或 -50"
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">调整原因</label>
-                  <input
-                    type="text"
-                    value={adjustReason}
-                    onChange={(e) => setAdjustReason(e.target.value)}
-                    placeholder="如：活动奖励、违规扣除等"
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-                <button
-                  onClick={handleAdjustPoints}
-                  className="w-full py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                >
-                  确认调整
-                </button>
-              </div>
-            </div>
+
           </div>
         )}
       </div>
