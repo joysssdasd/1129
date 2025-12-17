@@ -38,9 +38,10 @@ export default function LoginPage() {
 
   // Capture invitation code from URL on component mount
   useEffect(() => {
-    const inviteParam = searchParams.get('invite')
+    // 支持两种参数格式：invite 和 ref
+    const inviteParam = searchParams.get('invite') || searchParams.get('ref')
     if (inviteParam) {
-      setInviteCode(inviteParam)
+      setInviteCode(inviteParam.toUpperCase())
       setMode('register')
     }
   }, [searchParams])

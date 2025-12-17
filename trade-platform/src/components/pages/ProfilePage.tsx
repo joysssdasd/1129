@@ -518,7 +518,28 @@ export default function ProfilePage() {
                   <Copy className="w-5 h-5" />
                 </button>
               </div>
-              <p className="text-sm text-gray-500 mt-2">
+              
+              {/* 推荐链接 */}
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <div className="text-sm font-medium text-gray-700 mb-2">我的推荐链接</div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 px-3 py-2 bg-purple-50 rounded-lg text-sm text-purple-700 truncate">
+                    {`${window.location.origin}/register?ref=${user?.invite_code}`}
+                  </div>
+                  <button
+                    onClick={() => {
+                      const link = `${window.location.origin}/register?ref=${user?.invite_code}`
+                      navigator.clipboard.writeText(link)
+                      alert('推荐链接已复制，分享给好友即可自动填充邀请码')
+                    }}
+                    className="px-3 py-2 bg-purple-600 text-white rounded-lg text-sm whitespace-nowrap"
+                  >
+                    复制链接
+                  </button>
+                </div>
+              </div>
+              
+              <p className="text-sm text-gray-500 mt-3">
                 邀请好友注册并完成首次发布，你可获得10积分，好友获得30积分
               </p>
             </div>
