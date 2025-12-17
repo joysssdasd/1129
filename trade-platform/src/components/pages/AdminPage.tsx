@@ -338,8 +338,9 @@ export default function AdminPage() {
     await supabase.from('point_transactions').insert({
       user_id: targetUser.id,
       change_amount: amount,
-      description: `管理员调整：${adjustReason}`,
-      transaction_type: amount > 0 ? 'admin_add' : 'admin_deduct'
+      balance_after: targetUser.points + amount,
+      change_type: amount > 0 ? 6 : 7,
+      description: `管理员调整：${adjustReason}`
     })
 
     // 记录管理员操作
@@ -782,8 +783,9 @@ export default function AdminPage() {
                           await supabase.from('point_transactions').insert({
                             user_id: u.id,
                             change_amount: amount,
-                            description: `管理员调整：${reason}`,
-                            transaction_type: amount > 0 ? 'admin_add' : 'admin_deduct'
+                            balance_after: u.points + amount,
+                            change_type: amount > 0 ? 6 : 7,
+                            description: `管理员调整：${reason}`
                           })
                           
                           amountInput.value = ''
