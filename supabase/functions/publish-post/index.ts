@@ -12,15 +12,20 @@ Deno.serve(async (req) => {
     }
 
     try {
-        const { user_id, title, keywords, price, trade_type, delivery_date, extra_info } = await req.json();
+        const { user_id, title, keywords, price, trade_type, delivery_days, extra_info } = await req.json();
 
         if (!user_id || !title || !keywords || price === undefined || !trade_type) {
             throw new Error('请填写完整信息');
         }
 
-        // 验证交易类型（3=做多，4=做空 需要交割时间和补充信息）
-        if ((trade_type === 3 || trade_type === 4) && (!delivery_date || !extra_info)) {
-            throw new Error('做多/做空需要填写交割时间和补充信息');
+        // 验证交易类型（3=做多，4=做空 需要交割天数）
+        if ((trade_type === 3 || trade_type === 4) && !delivery_days) {
+            throw new Error('做多/做空需要填写交割期限');
+        }
+
+        // 验证交割天数范围
+        if (delivery_days && (delivery_days < 1 || delivery_days > 365)) {
+            throw new Error('交割期限必须在1-365天之间');
         }
 
         const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -72,7 +77,7 @@ Deno.serve(async (req) => {
                 keywords,
                 price,
                 trade_type,
-                delivery_date: delivery_date || null,
+                delivery_days: (trade_type === 3 || trade_type === 4) ? delivery_days : null,
                 extra_info: extra_info || null,
                 view_limit: 10,
                 view_count: 0,

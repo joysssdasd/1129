@@ -16,6 +16,7 @@ interface Post {
   created_at: string
   user_id: string
   keywords: string
+  delivery_days?: number
 }
 
 const tradeTypeMap: { [key: number]: { label: string; color: string } } = {
@@ -515,13 +516,21 @@ export default function HomePage() {
                   <h3 className="text-base font-semibold text-gray-900 flex-1 pr-2 line-clamp-1">
                     {post.title}
                   </h3>
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
-                      tradeTypeMap[post.trade_type].color
-                    }`}
-                  >
-                    {tradeTypeMap[post.trade_type].label}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {/* 交割天数标识 - 仅做多/做空显示 */}
+                    {(post.trade_type === 3 || post.trade_type === 4) && post.delivery_days && (
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap bg-yellow-100 text-yellow-700 border border-yellow-200">
+                        {post.delivery_days}天交割
+                      </span>
+                    )}
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
+                        tradeTypeMap[post.trade_type].color
+                      }`}
+                    >
+                      {tradeTypeMap[post.trade_type].label}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between mb-1.5">

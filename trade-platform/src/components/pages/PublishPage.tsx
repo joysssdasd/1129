@@ -9,7 +9,7 @@ export default function PublishPage() {
   const [keywords, setKeywords] = useState('')
   const [price, setPrice] = useState('')
   const [tradeType, setTradeType] = useState<number>(2)
-  const [deliveryDate, setDeliveryDate] = useState('')
+  const [deliveryDays, setDeliveryDays] = useState<string>('7')
   const [extraInfo, setExtraInfo] = useState('')
   const [loading, setLoading] = useState(false)
   const [titleSuggestions, setTitleSuggestions] = useState<string[]>([])
@@ -81,7 +81,7 @@ export default function PublishPage() {
           keywords,
           price: parseFloat(price),
           trade_type: tradeType,
-          delivery_date: deliveryDate || null,
+          delivery_days: (tradeType === 3 || tradeType === 4) ? parseInt(deliveryDays) : null,
           extra_info: extraInfo || null
         }
       })
@@ -214,19 +214,27 @@ export default function PublishPage() {
               </div>
             </div>
 
-            {tradeType === 3 && (
+            {(tradeType === 3 || tradeType === 4) && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  交割时间 *
+                  交割期限 *
                 </label>
-                <input
-                  type="date"
-                  value={deliveryDate}
-                  onChange={(e) => setDeliveryDate(e.target.value)}
-                  min={new Date().toISOString().split('T')[0]}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={deliveryDays}
+                    onChange={(e) => setDeliveryDays(e.target.value)}
+                    min="1"
+                    max="365"
+                    className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="请输入天数"
+                    required
+                  />
+                  <span className="text-gray-600 font-medium">天</span>
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  请输入1-365之间的天数
+                </div>
               </div>
             )}
 
