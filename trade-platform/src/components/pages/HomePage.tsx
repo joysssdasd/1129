@@ -36,6 +36,7 @@ export default function HomePage() {
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [hotKeywords, setHotKeywords] = useState<{ keyword: string; count: number }[]>([])
   const [announcements, setAnnouncements] = useState<{ id: string; title: string; content: string }[]>([])
+  const [closedAnnouncements, setClosedAnnouncements] = useState<string[]>([])
   const { user, setUser, logout } = useUser()
   const navigate = useNavigate()
   const touchStartY = useRef(0)
@@ -51,6 +52,11 @@ export default function HomePage() {
   useEffect(() => {
     loadAllPosts()
     loadAnnouncements()
+    // 加载已关闭的公告列表
+    const closed = localStorage.getItem('closedAnnouncements')
+    if (closed) {
+      setClosedAnnouncements(JSON.parse(closed))
+    }
   }, [])
 
   // 加载公告
@@ -63,6 +69,16 @@ export default function HomePage() {
       .limit(3)
     setAnnouncements(data || [])
   }
+
+  // 关闭公告
+  const handleCloseAnnouncement = (announcementId: string) => {
+    const newClosed = [...closedAnnouncements, announcementId]
+    setClosedAnnouncements(newClosed)
+    localStorage.setItem('closedAnnouncements', JSON.stringify(newClosed))
+  }
+
+  // 过滤已关闭的公告
+  const visibleAnnouncements = announcements.filter(ann => !closedAnnouncements.includes(ann.id))
 
   // 从所有帖子中提取所有关键词用于搜索建议
   const allKeywords = useMemo(() => {
@@ -346,16 +362,25 @@ export default function HomePage() {
       </div>
 
       {/* 公告展示 */}
-      {announcements.length > 0 && (
+      {visibleAnnouncements.length > 0 && (
         <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border-b border-orange-100">
           <div className="max-w-7xl mx-auto px-4 py-2">
             <div className="flex items-start gap-2">
               <Megaphone className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
               <div className="flex-1 overflow-hidden">
-                {announcements.map((ann, index) => (
-                  <div key={ann.id} className={`${index > 0 ? 'mt-1 pt-1 border-t border-orange-100' : ''}`}>
-                    <span className="text-sm font-medium text-orange-700">{ann.title}：</span>
-                    <span className="text-sm text-orange-600">{ann.content}</span>
+                {visibleAnnouncements.map((ann, index) => (
+                  <div key={ann.id} className={`flex items-start justify-between gap-2 ${index > 0 ? 'mt-1 pt-1 border-t border-orange-100' : ''}`}>
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-orange-700">{ann.title}：</span>
+                      <span className="text-sm text-orange-600">{ann.content}</span>
+                    </div>
+                    <button
+                      onClick={() => handleCloseAnnouncement(ann.id)}
+                      className="text-orange-400 hover:text-orange-600 flex-shrink-0"
+                      title="关闭此公告"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
                 ))}
               </div>

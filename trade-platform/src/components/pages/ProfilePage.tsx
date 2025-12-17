@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../../contexts/UserContext'
 import { supabase } from '../../services/supabase'
-import { ArrowLeft, Copy, Upload, MessageCircle, Receipt, TrendingUp, FileText, Edit, Trash2, Clock, CheckCircle, XCircle, Key, Users, Sparkles, Archive, AlertTriangle, Megaphone } from 'lucide-react'
+import { ArrowLeft, Copy, Upload, MessageCircle, Receipt, TrendingUp, FileText, Edit, Trash2, Clock, CheckCircle, XCircle, Key, Users, Sparkles, Archive, AlertTriangle, Megaphone, X } from 'lucide-react'
 import InvitationStatistics from '../../features/InvitationStatistics'
 import UserAIBatchPublish from '../../features/forms/UserAIBatchPublish'
 import { autoHideService } from '../../services/autoHideService'
@@ -30,6 +30,7 @@ export default function ProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   // 公告和客服设置
   const [announcements, setAnnouncements] = useState<{ id: string; title: string; content: string }[]>([])
+  const [closedAnnouncements, setClosedAnnouncements] = useState<string[]>([])
   const [serviceSettings, setServiceSettings] = useState<{ [key: string]: string }>({})
 
   const { user, setUser } = useUser()
@@ -45,10 +46,34 @@ export default function ProfilePage() {
     if (activeTab === 'service') loadServiceSettings()
   }, [activeTab])
 
-  // 初始加载公告
+  // 初始加载公告和刷新用户数据
   useEffect(() => {
     loadAnnouncements()
+    refreshUserData()
+    // 加载已关闭的公告列表
+    const closed = localStorage.getItem('closedAnnouncements')
+    if (closed) {
+      setClosedAnnouncements(JSON.parse(closed))
+    }
   }, [])
+
+  // 刷新用户数据，确保积分等信息是最新的
+  const refreshUserData = async () => {
+    if (!user?.id) return
+    try {
+      const { data: updatedUser } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+      
+      if (updatedUser) {
+        setUser(updatedUser)
+      }
+    } catch (error) {
+      log.error('刷新用户数据失败:', error)
+    }
+  }
 
   const loadAnnouncements = async () => {
     const { data } = await supabase
@@ -59,6 +84,16 @@ export default function ProfilePage() {
       .limit(3)
     setAnnouncements(data || [])
   }
+
+  // 关闭公告
+  const handleCloseAnnouncement = (announcementId: string) => {
+    const newClosed = [...closedAnnouncements, announcementId]
+    setClosedAnnouncements(newClosed)
+    localStorage.setItem('closedAnnouncements', JSON.stringify(newClosed))
+  }
+
+  // 过滤已关闭的公告
+  const visibleAnnouncements = announcements.filter(ann => !closedAnnouncements.includes(ann.id))
 
   const loadServiceSettings = async () => {
     const { data } = await supabase
@@ -418,16 +453,25 @@ export default function ProfilePage() {
       </div>
 
       {/* 公告展示 */}
-      {announcements.length > 0 && (
+      {visibleAnnouncements.length > 0 && (
         <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border-b border-orange-100">
           <div className="max-w-2xl mx-auto px-4 py-2">
             <div className="flex items-start gap-2">
               <Megaphone className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
               <div className="flex-1 overflow-hidden">
-                {announcements.map((ann, index) => (
-                  <div key={ann.id} className={`${index > 0 ? 'mt-1 pt-1 border-t border-orange-100' : ''}`}>
-                    <span className="text-sm font-medium text-orange-700">{ann.title}：</span>
-                    <span className="text-sm text-orange-600">{ann.content}</span>
+                {visibleAnnouncements.map((ann, index) => (
+                  <div key={ann.id} className={`flex items-start justify-between gap-2 ${index > 0 ? 'mt-1 pt-1 border-t border-orange-100' : ''}`}>
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-orange-700">{ann.title}：</span>
+                      <span className="text-sm text-orange-600">{ann.content}</span>
+                    </div>
+                    <button
+                      onClick={() => handleCloseAnnouncement(ann.id)}
+                      className="text-orange-400 hover:text-orange-600 flex-shrink-0"
+                      title="关闭此公告"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
                 ))}
               </div>
