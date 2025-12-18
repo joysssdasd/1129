@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../../contexts/UserContext'
 import { supabase } from '../../services/supabase'
 import { Home, PlusCircle, User, Search, LogOut, RefreshCw, TrendingUp, X, Megaphone } from 'lucide-react'
 import { log } from '../../utils/logger'
 import { searchAndSort, extractKeywordStats, getSearchSuggestions } from '../../utils/searchUtils'
+import { cache, CACHE_KEYS, CACHE_TTL } from '../../services/cacheService'
 
 interface Post {
   id: string
@@ -49,10 +50,13 @@ export default function HomePage() {
     loadPosts()
   }, [selectedType])
 
-  // 初次加载时获取所有帖子用于搜索和热门关键词
+  // 初次加载时并行获取数据（提升加载速度）
   useEffect(() => {
-    loadAllPosts()
-    loadAnnouncements()
+    // 并行加载所有数据
+    Promise.all([
+      loadAllPosts(),
+      loadAnnouncements()
+    ])
     // 加载已关闭的公告列表
     const closed = localStorage.getItem('closedAnnouncements')
     if (closed) {
@@ -60,15 +64,22 @@ export default function HomePage() {
     }
   }, [])
 
-  // 加载公告
+  // 加载公告（带缓存）
   const loadAnnouncements = async () => {
-    const { data } = await supabase
-      .from('announcements')
-      .select('id, title, content')
-      .eq('is_active', true)
-      .order('priority', { ascending: false })
-      .limit(3)
-    setAnnouncements(data || [])
+    const data = await cache.getOrFetch(
+      CACHE_KEYS.ANNOUNCEMENTS,
+      async () => {
+        const { data } = await supabase
+          .from('announcements')
+          .select('id, title, content')
+          .eq('is_active', true)
+          .order('priority', { ascending: false })
+          .limit(3)
+        return data || []
+      },
+      CACHE_TTL.LONG // 1分钟缓存
+    )
+    setAnnouncements(data)
   }
 
   // 关闭公告
@@ -103,21 +114,30 @@ export default function HomePage() {
     return getSearchSuggestions(searchKeyword, allKeywords, 8)
   }, [searchKeyword, allKeywords])
 
-  // 加载所有帖子
+  // 加载所有帖子（带缓存）
   const loadAllPosts = async () => {
     try {
-      const { data, error } = await supabase
-        .from('posts')
-        .select('*')
-        .eq('status', 1)
-        .order('created_at', { ascending: false })
-        .limit(200)
-
-      if (error) throw error
-      setAllPosts(data || [])
+      const data = await cache.getOrFetch(
+        CACHE_KEYS.POSTS,
+        async () => {
+          const { data, error } = await supabase
+            .from('posts')
+            .select('*')
+            .eq('status', 1)
+            .order('created_at', { ascending: false })
+            .limit(200)
+          if (error) throw error
+          return data || []
+        },
+        CACHE_TTL.SHORT // 10秒缓存
+      )
       
-      // 提取热门关键词（前10个）
-      const stats = extractKeywordStats(data || [])
+      setAllPosts(data)
+      
+      // 提取热门关键词（带缓存）
+      const stats = cache.get<{ keyword: string; count: number }[]>(CACHE_KEYS.HOT_KEYWORDS) 
+        || extractKeywordStats(data)
+      cache.set(CACHE_KEYS.HOT_KEYWORDS, stats, CACHE_TTL.MEDIUM)
       setHotKeywords(stats.slice(0, 10))
     } catch (error) {
       log.error('加载全部帖子失败:', error)

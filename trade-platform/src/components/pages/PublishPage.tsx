@@ -73,6 +73,11 @@ export default function PublishPage() {
     }
 
     setLoading(true)
+    
+    // 乐观更新：先更新本地状态，提升用户体验
+    const updatedPoints = user.points - 10
+    setUser({ ...user, points: updatedPoints, total_posts: user.total_posts + 1 })
+    
     try {
       const { data, error } = await supabase.functions.invoke('publish-post', {
         body: {
@@ -88,13 +93,11 @@ export default function PublishPage() {
 
       if (error) throw error
 
-      // 更新用户积分
-      const updatedPoints = user.points - 10
-      setUser({ ...user, points: updatedPoints, total_posts: user.total_posts + 1 })
-
       alert('发布成功！')
       navigate('/')
     } catch (error: any) {
+      // 发布失败，回滚本地状态
+      setUser({ ...user, points: user.points, total_posts: user.total_posts })
       alert(error.message || '发布失败')
     } finally {
       setLoading(false)
