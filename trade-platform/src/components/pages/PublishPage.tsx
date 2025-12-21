@@ -14,8 +14,34 @@ export default function PublishPage() {
   const [loading, setLoading] = useState(false)
   const [titleSuggestions, setTitleSuggestions] = useState<string[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [bannedKeywords, setBannedKeywords] = useState<string[]>([])
   const { user, setUser } = useUser()
   const navigate = useNavigate()
+
+  // 加载敏感词库
+  useEffect(() => {
+    loadBannedKeywords()
+  }, [])
+
+  const loadBannedKeywords = async () => {
+    const { data } = await supabase
+      .from('banned_keywords')
+      .select('keyword')
+    if (data) {
+      setBannedKeywords(data.map(item => item.keyword))
+    }
+  }
+
+  // 检查敏感词
+  const checkSensitiveWords = (text: string): string | null => {
+    const lowerText = text.toLowerCase()
+    for (const keyword of bannedKeywords) {
+      if (lowerText.includes(keyword.toLowerCase())) {
+        return keyword
+      }
+    }
+    return null
+  }
 
   // 标题建议数据（可以根据实际情况扩展）
   const commonTitlePatterns = [
@@ -69,6 +95,14 @@ export default function PublishPage() {
 
     if (user.points < 10) {
       alert('积分不足，请先充值')
+      return
+    }
+
+    // 敏感词检查
+    const allText = `${title} ${extraInfo} ${keywords}`
+    const foundKeyword = checkSensitiveWords(allText)
+    if (foundKeyword) {
+      alert(`发布内容包含违规词汇"${foundKeyword}"，请删除后重新提交`)
       return
     }
 
@@ -238,6 +272,18 @@ export default function PublishPage() {
                 <div className="text-xs text-gray-500 mt-1">
                   请输入1-365之间的天数
                 </div>
+              </div>
+            )}
+
+            {/* 做多/做空风险提示 */}
+            {(tradeType === 3 || tradeType === 4) && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p className="text-sm text-red-700 font-medium mb-2">⚠️ 风险提示</p>
+                <ul className="text-xs text-red-600 space-y-1">
+                  <li>• 市场有风险，投资决策需谨慎</li>
+                  <li>• 本信息仅代表个人看法，仅供参考</li>
+                  <li>• 请勿使用"保本""稳赚"等承诺性词汇</li>
+                </ul>
               </div>
             )}
 

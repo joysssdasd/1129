@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useUser } from '../../contexts/UserContext'
 import { supabase } from '../../services/supabase'
-import { ArrowLeft, Eye, Calendar, Tag } from 'lucide-react'
+import { ArrowLeft, Eye, Calendar, Tag, AlertTriangle, Flag } from 'lucide-react'
 import { log } from '../../utils/logger'
 
 export default function PostDetailPage() {
@@ -12,6 +12,11 @@ export default function PostDetailPage() {
   const [loading, setLoading] = useState(true)
   const [viewing, setViewing] = useState(false)
   const [wechatId, setWechatId] = useState('')
+  const [showRiskWarning, setShowRiskWarning] = useState(false)
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [reportType, setReportType] = useState('')
+  const [reportDesc, setReportDesc] = useState('')
+  const [reporting, setReporting] = useState(false)
   const { user, setUser } = useUser()
   const navigate = useNavigate()
 
@@ -78,32 +83,68 @@ export default function PostDetailPage() {
       return
     }
 
-    if (window.confirm('查看联系方式需要1积分，确认查看吗？')) {
-      setViewing(true)
-      try {
-        const { data, error } = await supabase.functions.invoke('view-contact', {
-          body: {
-            user_id: user.id,
-            post_id: post.id
-          }
+    // 显示风险提示弹窗
+    setShowRiskWarning(true)
+  }
+
+  // 确认查看联系方式
+  const confirmViewContact = async () => {
+    setShowRiskWarning(false)
+    setViewing(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('view-contact', {
+        body: {
+          user_id: user!.id,
+          post_id: post.id
+        }
+      })
+
+      if (error) throw error
+
+      if (data?.data?.wechat_id) {
+        setWechatId(data.data.wechat_id)
+        navigator.clipboard.writeText(data.data.wechat_id)
+        alert('联系方式已复制到剪贴板：' + data.data.wechat_id)
+        
+        if (!data.data.already_viewed) {
+          setUser({ ...user!, points: user!.points - 1 })
+        }
+      }
+    } catch (error: any) {
+      alert(error.message || '查看失败')
+    } finally {
+      setViewing(false)
+    }
+  }
+
+  // 提交举报
+  const handleReport = async () => {
+    if (!reportType) {
+      alert('请选择举报类型')
+      return
+    }
+    
+    setReporting(true)
+    try {
+      const { error } = await supabase
+        .from('reports')
+        .insert({
+          post_id: post.id,
+          reporter_id: user!.id,
+          report_type: reportType,
+          description: reportDesc
         })
 
-        if (error) throw error
+      if (error) throw error
 
-        if (data?.data?.wechat_id) {
-          setWechatId(data.data.wechat_id)
-          navigator.clipboard.writeText(data.data.wechat_id)
-          alert('联系方式已复制到剪贴板：' + data.data.wechat_id)
-          
-          if (!data.data.already_viewed) {
-            setUser({ ...user, points: user.points - 1 })
-          }
-        }
-      } catch (error: any) {
-        alert(error.message || '查看失败')
-      } finally {
-        setViewing(false)
-      }
+      alert('举报已提交，我们会尽快处理')
+      setShowReportModal(false)
+      setReportType('')
+      setReportDesc('')
+    } catch (error: any) {
+      alert(error.message || '举报失败')
+    } finally {
+      setReporting(false)
     }
   }
 
@@ -205,6 +246,26 @@ export default function PostDetailPage() {
             </div>
           </div>
         )}
+
+        {/* 免责声明 + 举报按钮 */}
+        <div className="bg-gray-100 rounded-lg p-4">
+          <div className="flex items-start justify-between gap-4">
+            <p className="text-xs text-gray-500 flex-1">
+              <AlertTriangle className="w-3 h-3 inline mr-1" />
+              本站仅为信息交流空间，不对交易内容负责，交易风险请自行甄别。
+              {(post.trade_type === 3 || post.trade_type === 4) && (
+                <span className="text-red-500 ml-1">市场有风险，决策需谨慎。</span>
+              )}
+            </p>
+            <button
+              onClick={() => setShowReportModal(true)}
+              className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 whitespace-nowrap"
+            >
+              <Flag className="w-3 h-3" />
+              举报
+            </button>
+          </div>
+        </div>
       </div>
 
       {!wechatId && (
@@ -217,6 +278,112 @@ export default function PostDetailPage() {
             >
               {viewing ? '处理中...' : '查看联系方式（1积分）'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 风险提示弹窗 */}
+      {showRiskWarning && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-yellow-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">交易风险提示</h3>
+            </div>
+            
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+              <ul className="text-sm text-yellow-800 space-y-2">
+                <li>• 请线下当面核验货品/资金后再交易</li>
+                <li>• 建议通过共同群或活跃用户担保</li>
+                <li>• 平台不托管资金、不退款、不仲裁</li>
+                <li>• 所有交易风险由您自行承担</li>
+              </ul>
+            </div>
+            
+            <p className="text-sm text-gray-600 mb-4">
+              查看联系方式将消耗 <span className="font-bold text-blue-600">1积分</span>
+            </p>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRiskWarning(false)}
+                className="flex-1 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmViewContact}
+                className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                我已知晓风险，确认查看
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 举报弹窗 */}
+      {showReportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">举报此信息</h3>
+            
+            <div className="space-y-3 mb-4">
+              <label className="block text-sm font-medium text-gray-700">举报类型</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { value: 'illegal', label: '违法信息' },
+                  { value: 'infringement', label: '侵权内容' },
+                  { value: 'fake', label: '虚假信息' },
+                  { value: 'other', label: '其他问题' }
+                ].map(item => (
+                  <button
+                    key={item.value}
+                    onClick={() => setReportType(item.value)}
+                    className={`py-2 px-3 rounded-lg border text-sm ${
+                      reportType === item.value
+                        ? 'border-red-500 bg-red-50 text-red-700'
+                        : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">补充说明（选填）</label>
+              <textarea
+                value={reportDesc}
+                onChange={(e) => setReportDesc(e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                placeholder="请描述具体问题..."
+              />
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowReportModal(false)
+                  setReportType('')
+                  setReportDesc('')
+                }}
+                className="flex-1 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleReport}
+                disabled={reporting || !reportType}
+                className="flex-1 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {reporting ? '提交中...' : '提交举报'}
+              </button>
+            </div>
           </div>
         </div>
       )}

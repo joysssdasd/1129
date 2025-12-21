@@ -680,7 +680,11 @@ export default function LoginPage() {
                 required
               />
               <label htmlFor="agree-disclaimer" className="ml-3 text-sm text-gray-700">
-                我已阅读并同意上述安全提示，知晓并接受交易风险，自愿承担相应责任
+                我已阅读并同意
+                <a href="/agreement" target="_blank" className="text-blue-600 hover:underline mx-1">《用户协议》</a>
+                和
+                <a href="/agreement" target="_blank" className="text-blue-600 hover:underline mx-1">《隐私政策》</a>
+                ，知晓并接受交易风险，自愿承担相应责任
               </label>
             </div>
           </div>

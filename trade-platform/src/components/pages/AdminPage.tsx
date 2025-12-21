@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../../contexts/UserContext'
 import { supabase } from '../../services/supabase'
-import { ArrowLeft, Users, FileText, DollarSign, Sparkles, BarChart3, Megaphone, Edit, Trash2, Plus, Settings, Ban, Coins } from 'lucide-react'
+import { ArrowLeft, Users, FileText, DollarSign, Sparkles, BarChart3, Megaphone, Edit, Trash2, Plus, Settings, Ban, Coins, Flag, CheckCircle, XCircle, Eye } from 'lucide-react'
 import QRCodeManager from '../../features/QRCodeManager'
 import AIBatchPublish from '../../features/forms/AIBatchPublish'
 import AnalyticsDashboard from '../../features/analytics/AnalyticsDashboard'
@@ -36,6 +36,21 @@ interface BannedKeyword {
   id: string
   keyword: string
   created_at: string
+}
+
+interface Report {
+  id: string
+  post_id: string
+  reporter_id: string
+  report_type: string
+  description: string
+  status: number
+  admin_note: string
+  processed_by: string
+  processed_at: string
+  created_at: string
+  post?: any
+  reporter?: any
 }
 
 const deriveRechargeMeta = (amount?: number, points?: number) => {
@@ -80,6 +95,9 @@ export default function AdminPage() {
   const [systemSettings, setSystemSettings] = useState<SystemSetting[]>([])
   const [bannedKeywords, setBannedKeywords] = useState<BannedKeyword[]>([])
   const [newBannedKeyword, setNewBannedKeyword] = useState('')
+  // 举报管理相关状态
+  const [reports, setReports] = useState<Report[]>([])
+  const [reportFilter, setReportFilter] = useState<'all' | 'pending' | 'processed' | 'rejected'>('pending')
   // 积分调整相关状态
   const [adjustUserId, setAdjustUserId] = useState('')
   const [adjustAmount, setAdjustAmount] = useState('')
@@ -111,6 +129,7 @@ export default function AdminPage() {
       if (activeTab === 'recharge') loadRechargeRequests()
       if (activeTab === 'announcements') loadAnnouncements()
       if (activeTab === 'settings') { loadSystemSettings(); loadBannedKeywords() }
+      if (activeTab === 'reports') loadReports()
     }
   }, [activeTab, user])
 
@@ -178,6 +197,98 @@ export default function AdminPage() {
       .select('*')
       .order('created_at', { ascending: false })
     setBannedKeywords(data || [])
+  }
+
+  // 举报管理加载
+  const loadReports = async (filter: 'all' | 'pending' | 'processed' | 'rejected' = reportFilter) => {
+    let query = supabase
+      .from('reports')
+      .select('*')
+      .order('created_at', { ascending: false })
+    
+    if (filter === 'pending') {
+      query = query.eq('status', 0)
+    } else if (filter === 'processed') {
+      query = query.eq('status', 1)
+    } else if (filter === 'rejected') {
+      query = query.eq('status', 2)
+    }
+    
+    const { data } = await query
+    
+    if (data && data.length > 0) {
+      // 获取关联的帖子和举报人信息
+      const postIds = [...new Set(data.map(r => r.post_id))]
+      const reporterIds = [...new Set(data.map(r => r.reporter_id))]
+      
+      const [postsRes, usersRes] = await Promise.all([
+        supabase.from('posts').select('id, title, status').in('id', postIds),
+        supabase.from('users').select('id, phone').in('id', reporterIds)
+      ])
+      
+      const postsMap: Record<string, any> = {}
+      const usersMap: Record<string, any> = {}
+      
+      postsRes.data?.forEach(p => { postsMap[p.id] = p })
+      usersRes.data?.forEach(u => { usersMap[u.id] = u })
+      
+      const enrichedReports = data.map(r => ({
+        ...r,
+        post: postsMap[r.post_id],
+        reporter: usersMap[r.reporter_id]
+      }))
+      
+      setReports(enrichedReports)
+    } else {
+      setReports([])
+    }
+  }
+
+  // 处理举报
+  const handleProcessReport = async (reportId: string, action: 'approve' | 'reject', takeDownPost: boolean = false) => {
+    const newStatus = action === 'approve' ? 1 : 2
+    const adminNote = action === 'approve' 
+      ? (takeDownPost ? '举报属实，已下架帖子' : '举报属实，已处理')
+      : '举报不属实，已驳回'
+    
+    const { error } = await supabase
+      .from('reports')
+      .update({
+        status: newStatus,
+        admin_note: adminNote,
+        processed_by: user?.id,
+        processed_at: new Date().toISOString()
+      })
+      .eq('id', reportId)
+    
+    if (error) {
+      alert('处理失败：' + error.message)
+      return
+    }
+    
+    // 如果需要下架帖子
+    if (action === 'approve' && takeDownPost) {
+      const report = reports.find(r => r.id === reportId)
+      if (report?.post_id) {
+        await supabase
+          .from('posts')
+          .update({ status: 0 })
+          .eq('id', report.post_id)
+      }
+    }
+    
+    loadReports()
+    alert(action === 'approve' ? '举报已处理' : '举报已驳回')
+  }
+
+  const getReportTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      'illegal': '违法违规',
+      'infringement': '侵权内容',
+      'false': '虚假信息',
+      'other': '其他问题'
+    }
+    return labels[type] || type
   }
 
   // 公告管理操作
@@ -586,6 +697,15 @@ export default function AdminPage() {
             >
               <Settings className="w-4 h-4" />
               系统设置
+            </button>
+            <button
+              onClick={() => setActiveTab('reports')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap ${
+                activeTab === 'reports' ? 'bg-purple-100 text-purple-700' : 'text-gray-600'
+              }`}
+            >
+              <Flag className="w-4 h-4" />
+              举报管理
             </button>
           </div>
         </div>
@@ -1290,6 +1410,170 @@ export default function AdminPage() {
             </div>
 
 
+          </div>
+        )}
+
+        {/* 举报管理 */}
+        {activeTab === 'reports' && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Flag className="w-5 h-5 text-red-600" />
+                举报管理
+              </h2>
+            </div>
+
+            {/* 筛选按钮 */}
+            <div className="bg-white rounded-lg p-3 flex gap-2 flex-wrap">
+              <button
+                onClick={() => { setReportFilter('pending'); loadReports('pending'); }}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  reportFilter === 'pending' 
+                    ? 'bg-yellow-600 text-white' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                待处理
+              </button>
+              <button
+                onClick={() => { setReportFilter('processed'); loadReports('processed'); }}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  reportFilter === 'processed' 
+                    ? 'bg-green-600 text-white' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                已处理
+              </button>
+              <button
+                onClick={() => { setReportFilter('rejected'); loadReports('rejected'); }}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  reportFilter === 'rejected' 
+                    ? 'bg-red-600 text-white' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                已驳回
+              </button>
+              <button
+                onClick={() => { setReportFilter('all'); loadReports('all'); }}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  reportFilter === 'all' 
+                    ? 'bg-purple-600 text-white' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                全部
+              </button>
+            </div>
+
+            {/* 举报列表 */}
+            {reports.length === 0 ? (
+              <div className="bg-white rounded-lg p-8 text-center text-gray-500">
+                暂无{reportFilter === 'pending' ? '待处理的' : reportFilter === 'processed' ? '已处理的' : reportFilter === 'rejected' ? '已驳回的' : ''}举报
+              </div>
+            ) : (
+              reports.map((report) => (
+                <div key={report.id} className={`bg-white rounded-lg p-4 border-l-4 ${
+                  report.status === 0 ? 'border-yellow-500' : report.status === 1 ? 'border-green-500' : 'border-red-500'
+                }`}>
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          report.report_type === 'illegal' ? 'bg-red-100 text-red-700' :
+                          report.report_type === 'infringement' ? 'bg-orange-100 text-orange-700' :
+                          report.report_type === 'false' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {getReportTypeLabel(report.report_type)}
+                        </span>
+                        <span className={`px-2 py-1 rounded text-xs ${
+                          report.status === 0 ? 'bg-yellow-100 text-yellow-700' :
+                          report.status === 1 ? 'bg-green-100 text-green-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {report.status === 0 ? '待处理' : report.status === 1 ? '已处理' : '已驳回'}
+                        </span>
+                      </div>
+                      
+                      {/* 被举报帖子信息 */}
+                      <div className="bg-gray-50 rounded p-3 mb-2">
+                        <div className="text-sm font-medium text-gray-700 mb-1">被举报帖子</div>
+                        <div className="text-sm">
+                          {report.post ? (
+                            <div className="flex items-center justify-between">
+                              <span>{report.post.title}</span>
+                              <span className={`text-xs px-2 py-0.5 rounded ${
+                                report.post.status === 1 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                              }`}>
+                                {report.post.status === 1 ? '上架中' : '已下架'}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">帖子已删除</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* 举报描述 */}
+                      {report.description && (
+                        <div className="text-sm text-gray-600 mb-2">
+                          <span className="font-medium">举报说明：</span>{report.description}
+                        </div>
+                      )}
+                      
+                      {/* 举报人信息 */}
+                      <div className="text-xs text-gray-500">
+                        举报人：{report.reporter?.phone || '未知'} | 
+                        举报时间：{new Date(report.created_at).toLocaleString()}
+                      </div>
+                      
+                      {/* 处理备注 */}
+                      {report.admin_note && (
+                        <div className="mt-2 text-sm text-gray-600 bg-blue-50 rounded p-2">
+                          <span className="font-medium">处理备注：</span>{report.admin_note}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* 操作按钮 */}
+                  {report.status === 0 && (
+                    <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                      <button
+                        onClick={() => report.post_id && window.open(`/post/${report.post_id}`, '_blank')}
+                        className="flex items-center gap-1 px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm hover:bg-blue-200"
+                      >
+                        <Eye className="w-4 h-4" />
+                        查看帖子
+                      </button>
+                      <button
+                        onClick={() => handleProcessReport(report.id, 'approve', true)}
+                        className="flex items-center gap-1 px-3 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        通过并下架
+                      </button>
+                      <button
+                        onClick={() => handleProcessReport(report.id, 'approve', false)}
+                        className="flex items-center gap-1 px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        仅标记处理
+                      </button>
+                      <button
+                        onClick={() => handleProcessReport(report.id, 'reject')}
+                        className="flex items-center gap-1 px-3 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700"
+                      >
+                        <XCircle className="w-4 h-4" />
+                        驳回
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         )}
       </div>

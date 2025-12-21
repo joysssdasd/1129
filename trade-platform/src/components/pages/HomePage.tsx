@@ -365,22 +365,44 @@ export default function HomePage() {
           <div className="flex items-center justify-between">
             <h1 className="text-lg font-bold text-gray-900">交易广场</h1>
             <div className="flex items-center gap-2">
-              <div className="text-right">
-                <div className="text-xs text-gray-600">积分</div>
-                <div className="text-base font-bold text-blue-600">{user?.points}</div>
-              </div>
-              {user?.is_admin && (
+              {user ? (
+                <>
+                  <div className="text-right">
+                    <div className="text-xs text-gray-600">积分</div>
+                    <div className="text-base font-bold text-blue-600">{user?.points}</div>
+                  </div>
+                  {user?.is_admin && (
+                    <button
+                      onClick={() => navigate('/admin')}
+                      className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs"
+                    >
+                      管理
+                    </button>
+                  )}
+                </>
+              ) : (
                 <button
-                  onClick={() => navigate('/admin')}
-                  className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs"
+                  onClick={() => navigate('/login')}
+                  className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm"
                 >
-                  管理
+                  登录/注册
                 </button>
               )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* 游客提示 */}
+      {!user && (
+        <div className="bg-blue-50 border-b border-blue-100">
+          <div className="max-w-7xl mx-auto px-4 py-2">
+            <p className="text-sm text-blue-700 text-center">
+              👋 游客模式：您可以浏览信息，登录后可发布和查看联系方式
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* 公告展示 */}
       {visibleAnnouncements.length > 0 && (
@@ -610,31 +632,41 @@ export default function HomePage() {
               <span className="text-xs mt-0.5">首页</span>
             </button>
             <button
-              onClick={() => navigate('/publish')}
+              onClick={() => user ? navigate('/publish') : navigate('/login')}
               className="flex flex-col items-center text-gray-600"
             >
               <PlusCircle className="w-5 h-5" />
               <span className="text-xs mt-0.5">发布</span>
             </button>
             <button
-              onClick={() => navigate('/profile')}
+              onClick={() => user ? navigate('/profile') : navigate('/login')}
               className="flex flex-col items-center text-gray-600"
             >
               <User className="w-5 h-5" />
               <span className="text-xs mt-0.5">我的</span>
             </button>
-            <button
-              onClick={() => {
-                if (window.confirm('确定要退出登录吗？')) {
-                  logout()
-                  navigate('/login')
-                }
-              }}
-              className="flex flex-col items-center text-gray-600"
-            >
-              <LogOut className="w-5 h-5" />
-              <span className="text-xs mt-0.5">退出</span>
-            </button>
+            {user ? (
+              <button
+                onClick={() => {
+                  if (window.confirm('确定要退出登录吗？')) {
+                    logout()
+                    navigate('/login')
+                  }
+                }}
+                className="flex flex-col items-center text-gray-600"
+              >
+                <LogOut className="w-5 h-5" />
+                <span className="text-xs mt-0.5">退出</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => navigate('/login')}
+                className="flex flex-col items-center text-gray-600"
+              >
+                <User className="w-5 h-5" />
+                <span className="text-xs mt-0.5">登录</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

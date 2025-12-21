@@ -10,6 +10,7 @@ const PostDetailPage = lazy(() => import('./components/pages/PostDetailPage'))
 const PublishPage = lazy(() => import('./components/pages/PublishPage'))
 const ProfilePage = lazy(() => import('./components/pages/ProfilePage'))
 const AdminPage = lazy(() => import('./components/pages/AdminPage'))
+const AgreementPage = lazy(() => import('./components/pages/AgreementPage'))
 
 // 加载中组件
 const PageLoader = () => (
@@ -39,14 +40,10 @@ function AppRoutes() {
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <HomePage />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/register" element={<LoginPage />} />
+        <Route path="/agreement" element={<AgreementPage />} />
+        {/* 首页开放游客浏览 */}
+        <Route path="/" element={<HomePage />} />
         <Route
           path="/post/:id"
           element={
