@@ -1,0 +1,94 @@
+<view class="container">
+  <!-- 当前积分 -->
+  <view class="current-points">
+    <view class="points-label">当前积分</view>
+    <view class="points-value">{{userInfo.points || 0}}</view>
+  </view>
+
+  <!-- 充值选项 -->
+  <view class="section">
+    <view class="section-title">选择充值金额</view>
+    <view class="amount-grid">
+      <view 
+        class="amount-item {{selectedAmount === item.amount && !isCustom ? 'active' : ''}}"
+        wx:for="{{rechargeOptions}}"
+        wx:key="amount"
+        data-amount="{{item.amount}}"
+        bindtap="selectAmount"
+      >
+        <view class="amount-value">¥{{item.amount}}</view>
+        <view class="amount-points">获得 {{item.points}} 积分</view>
+        <view class="amount-bonus">赠送 {{item.bonus}} 积分</view>
+      </view>
+    </view>
+
+    <!-- 自定义金额 -->
+    <view class="custom-input-wrap">
+      <view class="custom-label">自定义金额（1元=1积分，无赠送）</view>
+      <input 
+        class="custom-input {{isCustom ? 'active' : ''}}"
+        type="number"
+        placeholder="输入自定义金额"
+        value="{{customAmount}}"
+        bindinput="onCustomInput"
+      />
+      <view class="custom-tip">最低1元，最高100000元</view>
+    </view>
+  </view>
+
+  <!-- 收款二维码 -->
+  <view class="section">
+    <view class="section-title">扫码付款</view>
+    <view class="qrcode-grid">
+      <view class="qrcode-item" bindtap="previewQRCode" data-type="wechat">
+        <image 
+          wx:if="{{paymentQRCodes.wechat}}"
+          class="qrcode-image" 
+          src="{{paymentQRCodes.wechat}}" 
+          mode="aspectFit"
+        />
+        <view wx:else class="qrcode-placeholder">暂无</view>
+        <view class="qrcode-label">微信支付</view>
+      </view>
+      <view class="qrcode-item" bindtap="previewQRCode" data-type="alipay">
+        <image 
+          wx:if="{{paymentQRCodes.alipay}}"
+          class="qrcode-image" 
+          src="{{paymentQRCodes.alipay}}" 
+          mode="aspectFit"
+        />
+        <view wx:else class="qrcode-placeholder">暂无</view>
+        <view class="qrcode-label">支付宝</view>
+      </view>
+    </view>
+    <view class="qrcode-tip">点击二维码可放大查看</view>
+  </view>
+
+  <!-- 上传截图 -->
+  <view class="section">
+    <view class="section-title">上传付款截图</view>
+    <view class="upload-area" bindtap="chooseScreenshot" wx:if="{{!screenshot}}">
+      <view class="upload-icon">📷</view>
+      <view class="upload-text">点击上传付款截图</view>
+    </view>
+    <view class="screenshot-preview" wx:else>
+      <image class="screenshot-image" src="{{screenshot}}" mode="widthFix" />
+      <view class="screenshot-remove" bindtap="chooseScreenshot">×</view>
+    </view>
+  </view>
+
+  <!-- 提交 -->
+  <view class="submit-section">
+    <view class="points-preview">
+      <text class="preview-label">本次充值将获得</text>
+      <text class="preview-value">{{isCustom ? (customAmount || 0) : (rechargeOptions[selectedAmount === 50 ? 0 : selectedAmount === 100 ? 1 : selectedAmount === 300 ? 2 : 3].points || 0)}} 积分</text>
+    </view>
+    <button 
+      class="submit-btn" 
+      bindtap="submitRecharge"
+      disabled="{{loading}}"
+    >
+      {{loading ? '提交中...' : '提交充值申请'}}
+    </button>
+  </view>
+</view>

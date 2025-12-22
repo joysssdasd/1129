@@ -1,0 +1,39 @@
+<view class="container">
+  <!-- 积分概览 -->
+  <view class="points-overview">
+    <view class="overview-label">当前积分</view>
+    <view class="overview-value">{{userInfo.points || 0}}</view>
+  </view>
+
+  <!-- 记录列表 -->
+  <view class="transaction-list">
+    <!-- 空状态 -->
+    <view class="empty" wx:if="{{!loading && transactions.length === 0}}">
+      <view class="empty-icon">💰</view>
+      <view class="empty-text">暂无积分记录</view>
+    </view>
+
+    <!-- 记录项 -->
+    <view 
+      class="transaction-item" 
+      wx:for="{{transactions}}" 
+      wx:key="id"
+    >
+      <view class="transaction-info">
+        <view class="transaction-desc">{{item.description}}</view>
+        <view class="transaction-time">{{item.createTime}}</view>
+      </view>
+      <view class="transaction-amount {{item.isPositive ? 'positive' : 'negative'}}">
+        {{item.amountText}}
+      </view>
+    </view>
+
+    <!-- 加载中 -->
+    <view class="loading" wx:if="{{loading}}">加载中...</view>
+    
+    <!-- 没有更多 -->
+    <view class="no-more" wx:if="{{!loading && !hasMore && transactions.length > 0}}">
+      没有更多了
+    </view>
+  </view>
+</view>

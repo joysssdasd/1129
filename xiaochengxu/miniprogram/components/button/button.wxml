@@ -1,0 +1,15 @@
+<button 
+  class="ios-btn {{type}} {{size}} {{loading ? 'loading' : ''}} {{disabled ? 'disabled' : ''}}"
+  disabled="{{disabled || loading}}"
+  bindtap="handleTap"
+>
+  <view class="btn-content">
+    <view class="btn-loading" wx:if="{{loading}}">
+      <view class="btn-spinner"></view>
+    </view>
+    <view class="btn-icon" wx:if="{{icon && !loading}}">
+      <text>{{icon}}</text>
+    </view>
+    <text class="btn-text"><slot></slot></text>
+  </view>
+</button>

@@ -1,0 +1,18 @@
+请手动创建以下图标文件，或者使用微信开发者工具导入项目后，
+从 iconfont.cn 下载图标替换。
+
+临时解决方案：在微信开发者工具中，可以先注释掉 app.json 中的 iconPath 配置，
+tabBar 会显示纯文字。
+
+或者从以下网站下载图标（81x81像素 PNG）：
+- https://www.iconfont.cn/
+- https://iconpark.oceanengine.com/
+
+需要的图标：
+1. home.png / home-active.png - 首页图标
+2. publish.png / publish-active.png - 发布图标  
+3. profile.png / profile-active.png - 我的图标
+
+颜色建议：
+- 未选中：#999999
+- 选中：#4f46e5

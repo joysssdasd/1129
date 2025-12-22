@@ -1,0 +1,75 @@
+<view class="icon-wrap {{iconClass}}" style="width: {{size}}rpx; height: {{size}}rpx;">
+  <!-- 首页图标 -->
+  <view wx:if="{{name === 'home'}}" class="icon home" style="--color: {{color}}">
+    <view class="house"></view>
+    <view class="roof"></view>
+  </view>
+  
+  <!-- 发布图标 -->
+  <view wx:elif="{{name === 'publish'}}" class="icon publish" style="--color: {{color}}">
+    <view class="circle"></view>
+    <view class="plus-h"></view>
+    <view class="plus-v"></view>
+  </view>
+  
+  <!-- 我的图标 -->
+  <view wx:elif="{{name === 'profile'}}" class="icon profile" style="--color: {{color}}">
+    <view class="head"></view>
+    <view class="body"></view>
+  </view>
+  
+  <!-- 搜索图标 -->
+  <view wx:elif="{{name === 'search'}}" class="icon search" style="--color: {{color}}">
+    <view class="glass"></view>
+    <view class="handle"></view>
+  </view>
+  
+  <!-- 积分图标 -->
+  <view wx:elif="{{name === 'coin'}}" class="icon coin" style="--color: {{color}}">
+    <view class="coin-body"></view>
+    <view class="coin-symbol">¥</view>
+  </view>
+  
+  <!-- 充值图标 -->
+  <view wx:elif="{{name === 'wallet'}}" class="icon wallet" style="--color: {{color}}">
+    <view class="wallet-body"></view>
+    <view class="wallet-flap"></view>
+  </view>
+  
+  <!-- 文档图标 -->
+  <view wx:elif="{{name === 'document'}}" class="icon document" style="--color: {{color}}">
+    <view class="doc-body"></view>
+    <view class="doc-lines"></view>
+  </view>
+  
+  <!-- 设置图标 -->
+  <view wx:elif="{{name === 'settings'}}" class="icon settings" style="--color: {{color}}">
+    <view class="gear"></view>
+  </view>
+  
+  <!-- 箭头图标 -->
+  <view wx:elif="{{name === 'arrow-right'}}" class="icon arrow-right" style="--color: {{color}}">
+    <view class="arrow"></view>
+  </view>
+  
+  <!-- 微信图标 -->
+  <view wx:elif="{{name === 'wechat'}}" class="icon wechat" style="--color: {{color}}">
+    <view class="wechat-body"></view>
+  </view>
+  
+  <!-- 加载图标 -->
+  <view wx:elif="{{name === 'loading'}}" class="icon loading" style="--color: {{color}}">
+    <view class="spinner"></view>
+  </view>
+  
+  <!-- 成功图标 -->
+  <view wx:elif="{{name === 'success'}}" class="icon success" style="--color: {{color}}">
+    <view class="check"></view>
+  </view>
+  
+  <!-- 复制图标 -->
+  <view wx:elif="{{name === 'copy'}}" class="icon copy" style="--color: {{color}}">
+    <view class="copy-back"></view>
+    <view class="copy-front"></view>
+  </view>
+</view>

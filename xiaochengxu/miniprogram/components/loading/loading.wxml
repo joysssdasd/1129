@@ -1,0 +1,33 @@
+<view class="loading-container {{visible ? 'show' : ''}}" wx:if="{{visible}}">
+  <view class="loading-content">
+    <!-- iOS 风格加载动画 -->
+    <view class="spinner-wrap" wx:if="{{type === 'spinner'}}">
+      <view class="spinner">
+        <view class="spinner-blade" wx:for="{{12}}" wx:key="*this" style="transform: rotate({{item * 30}}deg); animation-delay: {{-1.1 + item * 0.1}}s;"></view>
+      </view>
+    </view>
+    
+    <!-- 点状加载动画 -->
+    <view class="dots-wrap" wx:elif="{{type === 'dots'}}">
+      <view class="dot"></view>
+      <view class="dot"></view>
+      <view class="dot"></view>
+    </view>
+    
+    <!-- 波浪加载动画 -->
+    <view class="wave-wrap" wx:elif="{{type === 'wave'}}">
+      <view class="wave-bar"></view>
+      <view class="wave-bar"></view>
+      <view class="wave-bar"></view>
+      <view class="wave-bar"></view>
+      <view class="wave-bar"></view>
+    </view>
+    
+    <!-- 圆环加载动画 -->
+    <view class="ring-wrap" wx:else>
+      <view class="ring"></view>
+    </view>
+    
+    <text class="loading-text" wx:if="{{text}}">{{text}}</text>
+  </view>
+</view>

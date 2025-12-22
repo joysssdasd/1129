@@ -1,0 +1,189 @@
+.container {
+  min-height: 100vh;
+  background: #f5f5f5;
+}
+
+/* 筛选栏 */
+.filter-bar {
+  display: flex;
+  background: #fff;
+  padding: 20rpx 30rpx;
+  border-bottom: 1rpx solid #eee;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.filter-item {
+  padding: 12rpx 32rpx;
+  font-size: 28rpx;
+  color: #666;
+  border-radius: 30rpx;
+  margin-right: 20rpx;
+  background: #f5f5f5;
+}
+
+.filter-item.active {
+  background: #4f46e5;
+  color: #fff;
+}
+
+/* 帖子列表 */
+.post-list {
+  padding: 20rpx;
+}
+
+.post-item {
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 30rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
+}
+
+.post-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16rpx;
+}
+
+.post-title {
+  flex: 1;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #333;
+  line-height: 1.4;
+  margin-right: 16rpx;
+}
+
+.post-status {
+  font-size: 24rpx;
+  padding: 6rpx 16rpx;
+  border-radius: 8rpx;
+  flex-shrink: 0;
+}
+
+.post-status.active {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.post-status.inactive {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.post-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20rpx;
+  margin-bottom: 16rpx;
+}
+
+.info-item {
+  font-size: 26rpx;
+  color: #666;
+}
+
+.info-label {
+  color: #999;
+}
+
+.info-value {
+  color: #333;
+  font-weight: 500;
+}
+
+.info-value.price {
+  color: #ef4444;
+}
+
+.post-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #f0f0f0;
+  margin-bottom: 16rpx;
+}
+
+.post-type {
+  font-size: 24rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 6rpx;
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.post-time {
+  font-size: 24rpx;
+  color: #999;
+}
+
+/* 操作按钮 */
+.post-actions {
+  display: flex;
+  gap: 16rpx;
+}
+
+.action-btn {
+  flex: 1;
+  padding: 16rpx 0;
+  font-size: 26rpx;
+  border-radius: 12rpx;
+  border: none;
+  text-align: center;
+}
+
+.action-btn.view {
+  background: #f0f9ff;
+  color: #0284c7;
+}
+
+.action-btn.toggle {
+  background: #f5f5f5;
+  color: #666;
+}
+
+.action-btn.delete {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+/* 空状态 */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 100rpx 40rpx;
+}
+
+.empty-icon {
+  font-size: 80rpx;
+  margin-bottom: 20rpx;
+}
+
+.empty-text {
+  font-size: 28rpx;
+  color: #999;
+  margin-bottom: 30rpx;
+}
+
+.empty-btn {
+  background: #4f46e5;
+  color: #fff;
+  border: none;
+  border-radius: 30rpx;
+  padding: 20rpx 60rpx;
+  font-size: 28rpx;
+}
+
+/* 加载状态 */
+.loading {
+  text-align: center;
+  padding: 40rpx;
+  color: #999;
+  font-size: 26rpx;
+}

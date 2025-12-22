@@ -1,0 +1,73 @@
+<view class="container">
+  <!-- 筛选栏 -->
+  <view class="filter-bar">
+    <view 
+      class="filter-item {{currentFilter === 'all' ? 'active' : ''}}"
+      data-filter="all"
+      bindtap="onFilterChange"
+    >全部</view>
+    <view 
+      class="filter-item {{currentFilter === 'active' ? 'active' : ''}}"
+      data-filter="active"
+      bindtap="onFilterChange"
+    >上架中</view>
+    <view 
+      class="filter-item {{currentFilter === 'inactive' ? 'active' : ''}}"
+      data-filter="inactive"
+      bindtap="onFilterChange"
+    >已下架</view>
+  </view>
+
+  <!-- 帖子列表 -->
+  <view class="post-list">
+    <!-- 空状态 -->
+    <view class="empty" wx:if="{{!loading && posts.length === 0}}">
+      <view class="empty-icon">📝</view>
+      <view class="empty-text">暂无发布记录</view>
+      <button class="empty-btn" bindtap="goPublish">去发布</button>
+    </view>
+
+    <!-- 帖子卡片 -->
+    <view 
+      class="post-item" 
+      wx:for="{{posts}}" 
+      wx:key="id"
+    >
+      <view class="post-header">
+        <view class="post-title" bindtap="goDetail" data-id="{{item.id}}">{{item.title}}</view>
+        <view class="post-status {{item.statusClass}}">{{item.statusLabel}}</view>
+      </view>
+
+      <view class="post-info">
+        <view class="info-item">
+          <text class="info-label">价格：</text>
+          <text class="info-value price">¥{{item.price}}</text>
+        </view>
+        <view class="info-item">
+          <text class="info-label">查看：</text>
+          <text class="info-value">{{item.view_count}}/{{item.view_limit}}</text>
+        </view>
+        <view class="info-item">
+          <text class="info-label">剩余：</text>
+          <text class="info-value">{{item.remainingViews}}次</text>
+        </view>
+      </view>
+
+      <view class="post-meta">
+        <view class="post-type">{{item.typeLabel}}</view>
+        <view class="post-time">{{item.createTime}}</view>
+      </view>
+
+      <view class="post-actions">
+        <button class="action-btn view" bindtap="goDetail" data-id="{{item.id}}">查看</button>
+        <button class="action-btn toggle" bindtap="toggleStatus" data-post="{{item}}">
+          {{item.status === 1 ? '下架' : '上架'}}
+        </button>
+        <button class="action-btn delete" bindtap="deletePost" data-post="{{item}}">删除</button>
+      </view>
+    </view>
+
+    <!-- 加载中 -->
+    <view class="loading" wx:if="{{loading}}">加载中...</view>
+  </view>
+</view>

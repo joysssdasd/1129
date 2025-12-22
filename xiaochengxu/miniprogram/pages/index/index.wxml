@@ -1,0 +1,87 @@
+<view class="container">
+  <!-- 搜索栏 -->
+  <view class="search-bar">
+    <view class="search-wrap">
+      <ios-icon name="search" size="36" color="#8E8E93" />
+      <input class="search-input" placeholder="搜索关键词" value="{{searchKeyword}}" bindinput="onSearchInput" bindconfirm="onSearch" />
+    </view>
+  </view>
+
+  <!-- 分类筛选 -->
+  <scroll-view class="filter-scroll" scroll-x enable-flex>
+    <view class="filter-tabs">
+      <view class="filter-tab {{currentType === 0 ? 'active' : ''}}" bindtap="onFilterChange" data-type="0">全部</view>
+      <view class="filter-tab {{currentType === 1 ? 'active' : ''}}" bindtap="onFilterChange" data-type="1">求购</view>
+      <view class="filter-tab {{currentType === 2 ? 'active' : ''}}" bindtap="onFilterChange" data-type="2">出售</view>
+      <view class="filter-tab {{currentType === 3 ? 'active' : ''}}" bindtap="onFilterChange" data-type="3">做多</view>
+      <view class="filter-tab {{currentType === 4 ? 'active' : ''}}" bindtap="onFilterChange" data-type="4">做空</view>
+    </view>
+  </scroll-view>
+
+  <!-- 公告 -->
+  <view class="notice" wx:if="{{announcement}}">
+    <view class="notice-icon-wrap">
+      <view class="notice-dot"></view>
+    </view>
+    <text class="notice-text">{{announcement}}</text>
+  </view>
+
+  <!-- 帖子列表 -->
+  <scroll-view 
+    class="list" 
+    scroll-y 
+    refresher-enabled 
+    refresher-triggered="{{refreshing}}"
+    bindrefresherrefresh="onRefresh"
+    bindscrolltolower="onLoadMore"
+    enhanced
+    show-scrollbar="{{false}}"
+  >
+    <view class="card" wx:for="{{posts}}" wx:key="id" bindtap="goToDetail" data-id="{{item.id}}">
+      <view class="card-header">
+        <view class="type-tag type-{{item.trade_type}}">{{item.typeLabel}}</view>
+        <view class="price">¥{{item.price}}</view>
+      </view>
+      
+      <view class="card-title">{{item.title}}</view>
+      
+      <view class="tags" wx:if="{{item.keywordList.length > 0}}">
+        <text class="tag" wx:for="{{item.keywordList}}" wx:for-item="kw" wx:key="*this">{{kw}}</text>
+      </view>
+      
+      <view class="card-footer">
+        <view class="meta">
+          <view class="meta-item">
+            <view class="meta-icon eye"></view>
+            <text>剩余{{item.remainingViews}}次</text>
+          </view>
+          <view class="meta-item" wx:if="{{item.delivery_days}}">
+            <view class="meta-icon calendar"></view>
+            <text>{{item.delivery_days}}天交割</text>
+          </view>
+        </view>
+        <text class="time">{{item.timeAgo}}</text>
+      </view>
+    </view>
+
+    <!-- 加载状态 -->
+    <view class="loading-wrap" wx:if="{{loading}}">
+      <ios-loading visible="{{true}}" type="dots" text="加载中" />
+    </view>
+
+    <view class="no-more" wx:if="{{!hasMore && posts.length > 0}}">
+      <view class="no-more-line"></view>
+      <text>到底了</text>
+      <view class="no-more-line"></view>
+    </view>
+
+    <!-- 空状态 -->
+    <view class="empty" wx:if="{{!loading && posts.length === 0}}">
+      <view class="empty-icon">
+        <view class="empty-box"></view>
+      </view>
+      <text class="empty-text">暂无交易信息</text>
+      <text class="empty-hint">下拉刷新试试</text>
+    </view>
+  </scroll-view>
+</view>

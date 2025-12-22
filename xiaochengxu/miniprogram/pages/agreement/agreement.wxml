@@ -1,0 +1,64 @@
+<view class="container">
+  <view class="title">用户服务协议</view>
+
+  <view class="section">
+    <view class="section-title">一、服务条款</view>
+    <view class="section-content">
+      欢迎使用牛牛基地平台。在使用本平台服务前，请您仔细阅读并充分理解本协议的全部内容。您使用本平台服务即表示您已阅读并同意接受本协议的约束。
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">二、账号注册</view>
+    <view class="section-content">
+      1. 用户需使用真实手机号码注册账号。\n
+      2. 用户应妥善保管账号信息，因账号泄露造成的损失由用户自行承担。\n
+      3. 每个手机号仅能注册一个账号。\n
+      4. 禁止使用虚假信息注册或冒用他人信息。
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">三、积分规则</view>
+    <view class="section-content">
+      1. <text class="highlight">新用户注册赠送30积分</text>，使用邀请码注册额外获得积分奖励。\n
+      2. 发布信息需消耗<text class="highlight">10积分</text>，信息可被查看10次。\n
+      3. 查看他人联系方式需消耗<text class="highlight">1积分</text>。\n
+      4. 邀请好友注册并完成首次发布，邀请人可获得<text class="highlight">10积分</text>奖励。\n
+      5. 积分可通过充值获得，充值后不支持退款。
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">四、发布规范</view>
+    <view class="section-content">
+      1. <text class="warning">禁止发布违法违规信息</text>，包括但不限于涉黄、涉赌、涉毒等内容。\n
+      2. <text class="warning">禁止发布虚假信息</text>，欺骗其他用户。\n
+      3. 禁止发布侵犯他人权益的信息。\n
+      4. 平台有权对违规内容进行删除处理，严重者将封禁账号。
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">五、免责声明</view>
+    <view class="section-content">
+      1. 本平台仅提供信息发布服务，不对交易双方的行为负责。\n
+      2. 用户应自行判断信息真实性，交易风险自担。\n
+      3. 因不可抗力导致的服务中断，平台不承担责任。\n
+      4. 平台保留随时修改本协议的权利。
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">六、隐私保护</view>
+    <view class="section-content">
+      1. 我们重视用户隐私保护，不会向第三方泄露用户个人信息。\n
+      2. 用户联系方式仅在消耗积分后向查看者展示。\n
+      3. 我们会采取合理措施保护用户数据安全。
+    </view>
+  </view>
+
+  <view class="update-time">
+    最后更新时间：2024年12月
+  </view>
+</view>

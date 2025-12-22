@@ -1,0 +1,178 @@
+<view class="container">
+  <!-- 加载中 -->
+  <view class="loading-wrap" wx:if="{{loading}}">
+    <ios-loading visible="{{true}}" type="ring" text="加载中" />
+  </view>
+
+  <block wx:if="{{!loading && post}}">
+    <!-- 帖子信息 -->
+    <view class="post-card">
+      <view class="post-header">
+        <view class="trade-type-tag {{post.typeClass}}">
+          <view class="type-dot"></view>
+          <text>{{post.typeLabel}}</text>
+        </view>
+        <view class="post-price">¥{{post.price}}</view>
+      </view>
+
+      <view class="post-title">{{post.title}}</view>
+
+      <view class="post-keywords" wx:if="{{post.keywordList.length > 0}}">
+        <text class="keyword" wx:for="{{post.keywordList}}" wx:key="*this">{{item}}</text>
+      </view>
+
+      <view class="post-extra" wx:if="{{post.extra_info}}">
+        <view class="extra-label">
+          <view class="extra-icon"></view>
+          <text>补充信息</text>
+        </view>
+        <text class="extra-content">{{post.extra_info}}</text>
+      </view>
+
+      <view class="post-meta-list">
+        <view class="meta-row">
+          <view class="meta-icon views-icon"></view>
+          <text class="meta-label">剩余查看次数</text>
+          <text class="meta-value">{{post.remainingViews}}次</text>
+        </view>
+        <view class="meta-row" wx:if="{{post.delivery_days}}">
+          <view class="meta-icon calendar-icon"></view>
+          <text class="meta-label">交割天数</text>
+          <text class="meta-value highlight">{{post.delivery_days}}天</text>
+        </view>
+        <view class="meta-row">
+          <view class="meta-icon time-icon"></view>
+          <text class="meta-label">发布时间</text>
+          <text class="meta-value">{{post.createdAt}}</text>
+        </view>
+        <view class="meta-row">
+          <view class="meta-icon expire-icon"></view>
+          <text class="meta-label">有效期至</text>
+          <text class="meta-value">{{post.expireAt}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 联系方式 -->
+    <view class="contact-card">
+      <view class="contact-header">
+        <view class="contact-title">
+          <view class="contact-icon"></view>
+          <text>联系方式</text>
+        </view>
+        <view class="contact-cost">
+          <view class="cost-coin"></view>
+          <text>查看消耗1积分</text>
+        </view>
+      </view>
+
+      <view class="contact-content" wx:if="{{showContact}}">
+        <view class="contact-info">
+          <view class="phone-badge">
+            <view class="phone-icon"></view>
+            <text>联系方式</text>
+          </view>
+          <text class="contact-value">{{contactInfo}}</text>
+        </view>
+        <button class="copy-btn" bindtap="copyContact">
+          <view class="copy-icon"></view>
+          <text>复制</text>
+        </button>
+      </view>
+
+      <button class="view-contact-btn" wx:else bindtap="onViewContact" disabled="{{viewing || post.remainingViews <= 0}}">
+        <ios-loading wx:if="{{viewing}}" visible="{{true}}" type="spinner" />
+        <block wx:else>
+          <view class="btn-icon eye-icon" wx:if="{{post.remainingViews > 0}}"></view>
+          <text>{{post.remainingViews <= 0 ? '查看次数已用完' : '查看联系方式'}}</text>
+        </block>
+      </button>
+    </view>
+
+    <!-- 风险提示 -->
+    <view class="risk-notice" wx:if="{{post.trade_type === 3 || post.trade_type === 4}}">
+      <view class="risk-icon"></view>
+      <text class="risk-text">市场有风险，决策需谨慎。本信息仅代表发布者个人看法，不构成投资建议。</text>
+    </view>
+
+    <!-- 免责声明 -->
+    <view class="disclaimer">
+      <view class="disclaimer-icon"></view>
+      <text class="disclaimer-text">本站仅为信息交流空间，交易风险请自行甄别。</text>
+      <text class="report-link" bindtap="onReport">举报</text>
+    </view>
+
+    <!-- 分享按钮 -->
+    <button class="share-btn" open-type="share">
+      <view class="share-icon"></view>
+      <text>分享给好友</text>
+    </button>
+  </block>
+
+  <!-- 风险提示弹窗 -->
+  <view class="modal-mask" wx:if="{{showRiskModal}}" bindtap="cancelViewContact">
+    <view class="modal-content" catchtap>
+      <view class="modal-header">
+        <view class="modal-icon warning"></view>
+        <view class="modal-title">风险提示</view>
+      </view>
+      <view class="modal-body">
+        <view class="risk-item">
+          <view class="risk-bullet"></view>
+          <text>请线下当面核验货品/资金</text>
+        </view>
+        <view class="risk-item">
+          <view class="risk-bullet"></view>
+          <text>建议使用担保交易方式</text>
+        </view>
+        <view class="risk-item">
+          <view class="risk-bullet"></view>
+          <text>平台不托管资金、不退款、不仲裁</text>
+        </view>
+        <view class="risk-item">
+          <view class="risk-bullet"></view>
+          <text>交易风险由双方自行承担</text>
+        </view>
+      </view>
+      <view class="modal-footer">
+        <button class="modal-btn cancel" bindtap="cancelViewContact">取消</button>
+        <button class="modal-btn confirm" bindtap="confirmViewContact">我已知晓风险，确认查看</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 举报弹窗 -->
+  <view class="modal-mask" wx:if="{{showReportModal}}" bindtap="closeReportModal">
+    <view class="modal-content" catchtap>
+      <view class="modal-header">
+        <view class="modal-icon report"></view>
+        <view class="modal-title">举报此信息</view>
+      </view>
+      <view class="modal-body">
+        <view class="report-types">
+          <view class="report-type {{reportType === 'illegal' ? 'active' : ''}}" bindtap="selectReportType" data-type="illegal">
+            <view class="report-check" wx:if="{{reportType === 'illegal'}}"></view>
+            <text>违法违规</text>
+          </view>
+          <view class="report-type {{reportType === 'infringement' ? 'active' : ''}}" bindtap="selectReportType" data-type="infringement">
+            <view class="report-check" wx:if="{{reportType === 'infringement'}}"></view>
+            <text>侵权内容</text>
+          </view>
+          <view class="report-type {{reportType === 'false' ? 'active' : ''}}" bindtap="selectReportType" data-type="false">
+            <view class="report-check" wx:if="{{reportType === 'false'}}"></view>
+            <text>虚假信息</text>
+          </view>
+          <view class="report-type {{reportType === 'other' ? 'active' : ''}}" bindtap="selectReportType" data-type="other">
+            <view class="report-check" wx:if="{{reportType === 'other'}}"></view>
+            <text>其他问题</text>
+          </view>
+        </view>
+        <textarea class="report-textarea" placeholder="请描述具体问题（选填）" value="{{reportDesc}}" bindinput="onReportDescInput"></textarea>
+      </view>
+      <view class="modal-footer">
+        <button class="modal-btn cancel" bindtap="closeReportModal">取消</button>
+        <button class="modal-btn confirm" bindtap="submitReport">提交举报</button>
+      </view>
+    </view>
+  </view>
+</view>

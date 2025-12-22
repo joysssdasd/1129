@@ -1,0 +1,122 @@
+<view class="container">
+  <!-- 背景装饰 -->
+  <view class="header-bg"></view>
+
+  <!-- 未登录 -->
+  <view class="login-prompt" wx:if="{{!isLoggedIn}}">
+    <view class="prompt-avatar">
+      <view class="avatar-placeholder"></view>
+    </view>
+    <view class="prompt-text">登录后查看更多功能</view>
+    <button class="login-btn" bindtap="goLogin">
+      <text>立即登录</text>
+      <view class="btn-arrow"></view>
+    </button>
+  </view>
+
+  <!-- 已登录 -->
+  <block wx:else>
+    <!-- 用户卡片 -->
+    <view class="user-card">
+      <view class="avatar">
+        <view class="avatar-inner">
+          <text class="avatar-text">{{userInfo.phone ? userInfo.phone.slice(-4) : '用户'}}</text>
+        </view>
+        <view class="avatar-ring"></view>
+      </view>
+      <view class="user-info">
+        <view class="phone">{{userInfo.phone || '未知用户'}}</view>
+        <view class="stats">
+          <view class="stat-item">
+            <text class="stat-value">{{userInfo.total_posts || 0}}</text>
+            <text class="stat-label">发布</text>
+          </view>
+          <view class="stat-divider"></view>
+          <view class="stat-item">
+            <text class="stat-value">{{userInfo.total_invites || 0}}</text>
+            <text class="stat-label">邀请</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 积分卡片 -->
+    <view class="points-card">
+      <view class="points-bg"></view>
+      <view class="points-content">
+        <view class="points-info">
+          <text class="points-label">可用积分</text>
+          <view class="points-value-wrap">
+            <text class="points-value">{{userInfo.points || 0}}</text>
+            <view class="points-icon"></view>
+          </view>
+        </view>
+        <view class="points-actions">
+          <button class="action-btn primary" bindtap="goRecharge">
+            <view class="action-icon recharge-icon"></view>
+            <text>充值</text>
+          </button>
+          <button class="action-btn" bindtap="goPointsHistory">
+            <view class="action-icon history-icon"></view>
+            <text>明细</text>
+          </button>
+        </view>
+      </view>
+    </view>
+
+    <!-- 邀请码 -->
+    <view class="invite-card">
+      <view class="invite-header">
+        <view class="invite-title">
+          <view class="invite-icon"></view>
+          <text>我的邀请码</text>
+        </view>
+        <text class="invite-tip">邀请好友得积分</text>
+      </view>
+      <view class="invite-code-wrap">
+        <text class="invite-code">{{userInfo.invite_code || '---'}}</text>
+        <button class="copy-btn" bindtap="copyInviteCode">
+          <view class="copy-icon"></view>
+          <text>复制</text>
+        </button>
+      </view>
+    </view>
+
+    <!-- 功能列表 -->
+    <view class="menu-list">
+      <view class="menu-item">
+        <view class="menu-icon phone-menu-icon"></view>
+        <text class="menu-text">联系方式</text>
+        <text class="menu-value">{{userInfo.wechat_id || userInfo.phone || '未设置'}}</text>
+      </view>
+      <view class="menu-item" bindtap="goMyPosts">
+        <view class="menu-icon posts-icon"></view>
+        <text class="menu-text">我的发布</text>
+        <view class="menu-arrow"></view>
+      </view>
+      <view class="menu-item" bindtap="goPointsHistory">
+        <view class="menu-icon points-icon"></view>
+        <text class="menu-text">积分记录</text>
+        <view class="menu-arrow"></view>
+      </view>
+      <view class="menu-item" bindtap="goRecharge">
+        <view class="menu-icon wallet-icon"></view>
+        <text class="menu-text">充值积分</text>
+        <view class="menu-arrow"></view>
+      </view>
+      <view class="menu-item" bindtap="contactService">
+        <view class="menu-icon service-icon"></view>
+        <text class="menu-text">联系客服</text>
+        <view class="menu-arrow"></view>
+      </view>
+      <view class="menu-item" bindtap="viewAgreement">
+        <view class="menu-icon doc-icon"></view>
+        <text class="menu-text">用户协议</text>
+        <view class="menu-arrow"></view>
+      </view>
+    </view>
+
+    <!-- 退出登录 -->
+    <button class="logout-btn" bindtap="logout">退出登录</button>
+  </block>
+</view>

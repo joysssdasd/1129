@@ -1,0 +1,53 @@
+<view class="container">
+  <!-- 顶部装饰 -->
+  <view class="bg-decoration">
+    <view class="circle circle-1"></view>
+    <view class="circle circle-2"></view>
+    <view class="circle circle-3"></view>
+  </view>
+
+  <!-- 顶部 Logo -->
+  <view class="header">
+    <view class="logo-wrap">
+      <view class="logo">
+        <view class="logo-icon">🐂</view>
+      </view>
+      <view class="logo-glow"></view>
+    </view>
+    <view class="app-name">牛牛基地</view>
+    <view class="slogan">高效可信的交易信息服务</view>
+  </view>
+
+  <!-- 微信一键登录 -->
+  <view class="login-card">
+    <view class="login-title">快速登录</view>
+    <view class="login-desc">授权手机号即可一键登录，无需注册</view>
+    
+    <!-- 微信一键登录按钮 -->
+    <button class="wechat-btn" open-type="getPhoneNumber" bindgetphonenumber="handleWechatLogin">
+      <view class="wechat-icon"></view>
+      <text>微信一键登录</text>
+    </button>
+    
+    <view class="login-features">
+      <view class="feature-item">
+        <view class="feature-icon check"></view>
+        <text>自动获取手机号</text>
+      </view>
+      <view class="feature-item">
+        <view class="feature-icon check"></view>
+        <text>新用户送30积分</text>
+      </view>
+      <view class="feature-item">
+        <view class="feature-icon check"></view>
+        <text>安全快捷</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 协议 -->
+  <view class="agreement-wrap">
+    <text class="agreement-text">登录即表示同意</text>
+    <text class="agreement-link" bindtap="viewAgreement">《用户协议》</text>
+  </view>
+</view>
