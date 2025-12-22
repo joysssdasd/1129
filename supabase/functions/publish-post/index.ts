@@ -12,20 +12,18 @@ Deno.serve(async (req) => {
     }
 
     try {
-        const { user_id, title, keywords, price, trade_type, delivery_days, extra_info } = await req.json();
+        const body = await req.json();
+        const { user_id, title, keywords, price, trade_type, delivery_date, delivery_days, extra_info, view_limit } = body;
+        
+        console.log('发布请求参数:', body);
 
         if (!user_id || !title || !keywords || price === undefined || !trade_type) {
             throw new Error('请填写完整信息');
         }
 
-        // 验证交易类型（3=做多，4=做空 需要交割天数）
-        if ((trade_type === 3 || trade_type === 4) && !delivery_days) {
-            throw new Error('做多/做空需要填写交割期限');
-        }
-
-        // 验证交割天数范围
-        if (delivery_days && (delivery_days < 1 || delivery_days > 365)) {
-            throw new Error('交割期限必须在1-365天之间');
+        // 验证交易类型（3=做多，4=做空 需要交割时间）
+        if ((trade_type === 3 || trade_type === 4) && !delivery_date && !delivery_days) {
+            throw new Error('做多/做空需要填写交割时间');
         }
 
         const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -54,13 +52,23 @@ Deno.serve(async (req) => {
 
         const user = users[0];
 
+        // 计算发布消耗的积分（默认10，可自定义）
+        const pointsCost = view_limit || 10;
+
         // 检查积分是否足够
-        if (user.points < 10) {
-            throw new Error('积分不足，请先充值');
+        if (user.points < pointsCost) {
+            throw new Error(`积分不足，需要${pointsCost}积分，当前${user.points}积分`);
         }
 
         // 计算到期时间（72小时后）
         const expireAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+
+        // 处理交割日期（支持 delivery_date 或 delivery_days）
+        let finalDeliveryDate = delivery_date || null;
+        if (!finalDeliveryDate && delivery_days) {
+            // 如果传入的是天数，计算交割日期
+            finalDeliveryDate = new Date(Date.now() + delivery_days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        }
 
         // 创建交易信息
         const createPostResponse = await fetch(`${supabaseUrl}/rest/v1/posts`, {
@@ -77,9 +85,9 @@ Deno.serve(async (req) => {
                 keywords,
                 price,
                 trade_type,
-                delivery_days: (trade_type === 3 || trade_type === 4) ? delivery_days : null,
+                delivery_date: finalDeliveryDate,
                 extra_info: extra_info || null,
-                view_limit: 10,
+                view_limit: pointsCost,
                 view_count: 0,
                 deal_count: 0,
                 status: 1,
@@ -89,6 +97,7 @@ Deno.serve(async (req) => {
 
         if (!createPostResponse.ok) {
             const errorText = await createPostResponse.text();
+            console.error('创建帖子失败:', errorText);
             throw new Error(`发布失败: ${errorText}`);
         }
 
@@ -96,7 +105,7 @@ Deno.serve(async (req) => {
         const postId = newPost[0].id;
 
         // 扣除积分
-        const newPoints = user.points - 10;
+        const newPoints = user.points - pointsCost;
         await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${user_id}`, {
             method: 'PATCH',
             headers: {
@@ -106,7 +115,7 @@ Deno.serve(async (req) => {
             },
             body: JSON.stringify({ 
                 points: newPoints,
-                total_posts: user.total_posts + 1
+                total_posts: (user.total_posts || 0) + 1
             })
         });
 
@@ -121,7 +130,7 @@ Deno.serve(async (req) => {
             body: JSON.stringify({
                 user_id,
                 change_type: 2, // 发布
-                change_amount: -10,
+                change_amount: -pointsCost,
                 balance_after: newPoints,
                 related_id: postId,
                 description: '发布交易信息'
@@ -129,7 +138,7 @@ Deno.serve(async (req) => {
         });
 
         // 检查是否是首次发布，如果有邀请关系则发放奖励
-        if (user.total_posts === 0) {
+        if ((user.total_posts || 0) === 0) {
             const invitationResponse = await fetch(
                 `${supabaseUrl}/rest/v1/invitations?invitee_id=eq.${user_id}&has_posted=eq.false`,
                 {
@@ -172,7 +181,7 @@ Deno.serve(async (req) => {
                         },
                         body: JSON.stringify({ 
                             points: inviterNewPoints,
-                            total_invites: inviter.total_invites + 1
+                            total_invites: (inviter.total_invites || 0) + 1
                         })
                     });
 

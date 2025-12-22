@@ -64,18 +64,22 @@ export default function LoginPage() {
     // 如果是登录模式，需要先检查手机号是否已注册
     if (mode === 'login') {
       try {
-        // 直接查询用户是否存在，而不是通过验证码检查
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('phone, is_admin')
-          .eq('phone', phone)
-          .single()
+        // 调用 Edge Function 检查用户是否存在（绕过 RLS 问题）
+        const { data: checkResult, error: checkError } = await supabase.functions.invoke('check-user-exists', {
+          body: { phone }
+        })
 
-        log.log('查询用户结果:', { userData, userError, phone })
+        log.log('检查用户结果:', { checkResult, checkError, phone })
 
-        // 如果返回手机号未注册，提示用户
-        if (!userData || userError) {
-          alert(`该手机号未注册，请先注册\n错误: ${userError?.message || '未知错误'}\n手机号: ${phone}`)
+        if (checkError) {
+          log.error('检查用户失败:', checkError)
+          alert(`检查用户失败: ${checkError.message}`)
+          return
+        }
+
+        // 如果用户不存在，提示注册
+        if (!checkResult?.data?.exists) {
+          alert('该手机号未注册，请先注册')
           return
         }
       } catch (e) {
@@ -112,7 +116,7 @@ export default function LoginPage() {
     }
   }
 
-  // 密码登录 - 直接查询数据库验证
+  // 密码登录 - 调用 Edge Function 验证
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -126,7 +130,25 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      // 🔧 老王我修复密码登录的查询字段，包含password字段
+      // 先检查用户是否存在
+      const { data: checkResult, error: checkError } = await supabase.functions.invoke('check-user-exists', {
+        body: { phone }
+      })
+
+      if (checkError || !checkResult?.data?.exists) {
+        alert('该手机号未注册，请先注册')
+        return
+      }
+
+      // 管理员特殊处理
+      if (checkResult?.data?.isAdmin) {
+        alert('管理员账号请使用验证码登录')
+        setLoginMode('code')
+        return
+      }
+
+      // 调用密码登录 Edge Function（如果有的话）
+      // 暂时使用直接查询方式
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('id, phone, wechat_id, wechat_nickname, is_admin, points, created_at, password')
@@ -144,24 +166,17 @@ export default function LoginPage() {
         return
       }
 
-      // 管理员特殊处理
-      if (userData.is_admin) {
-        alert('管理员账号请使用验证码登录')
-        setLoginMode('code')
-        return
-      }
-
-      // 🔧 老王我修复类型问题：构建符合User接口的对象
+      // 构建符合User接口的对象
       const user: User = {
         id: userData.id,
         phone: userData.phone,
         wechat_id: userData.wechat_id,
-        invite_code: '', // 密码登录时暂时为空
+        invite_code: '',
         points: userData.points,
-        success_rate: 0, // 默认值
+        success_rate: 0,
         is_admin: userData.is_admin,
         created_at: userData.created_at,
-        updated_at: userData.created_at // 使用创建时间作为更新时间
+        updated_at: userData.created_at
       }
 
       // 登录成功
@@ -182,20 +197,12 @@ export default function LoginPage() {
     }
   }
 
-  // 验证码登录 - 直接数据库验证
+  // 验证码登录 - 调用 Edge Function
   const handleCodeLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
     try {
-      // 管理员在开发环境可以使用真实6位验证码或123456
-      const isAdmin = isAdminPhone(phone)
-      if (import.meta.env.DEV && !isAdmin && verificationCode !== '123456') {
-        alert('开发环境普通用户请使用验证码: 123456')
-        setLoading(false)
-        return
-      }
-
       // 验证码格式检查
       if (!/^\d{6}$/.test(verificationCode)) {
         alert('请输入6位数字验证码')
@@ -203,29 +210,38 @@ export default function LoginPage() {
         return
       }
 
-      // 查询用户验证
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('id, phone, wechat_id, wechat_nickname, is_admin, points, created_at')
-        .eq('phone', phone)
-        .single()
+      // 调用 auth-login Edge Function 进行验证码登录
+      const { data: loginResult, error: loginError } = await supabase.functions.invoke('auth-login', {
+        body: { phone, verification_code: verificationCode }
+      })
 
-      if (userError || !userData) {
-        alert('该手机号未注册，请先注册')
-        return
+      log.log('登录结果:', { loginResult, loginError })
+
+      if (loginError) {
+        throw new Error(loginError.message || '登录失败')
       }
 
-      // 🔧 老王我修复验证码登录的类型问题：构建符合User接口的对象
+      if (loginResult?.error) {
+        throw new Error(loginResult.error.message || '登录失败')
+      }
+
+      if (!loginResult?.data?.user) {
+        throw new Error('登录失败，未获取到用户信息')
+      }
+
+      const userData = loginResult.data.user
+
+      // 构建符合User接口的对象
       const user: User = {
         id: userData.id,
         phone: userData.phone,
         wechat_id: userData.wechat_id,
-        invite_code: '', // 验证码登录时暂时为空
+        invite_code: userData.invite_code || '',
         points: userData.points,
-        success_rate: 0, // 默认值
+        success_rate: userData.success_rate || 0,
         is_admin: userData.is_admin,
         created_at: userData.created_at,
-        updated_at: userData.created_at // 使用创建时间作为更新时间
+        updated_at: userData.updated_at || userData.created_at
       }
 
       // 登录成功

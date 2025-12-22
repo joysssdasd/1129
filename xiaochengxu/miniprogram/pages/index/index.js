@@ -49,21 +49,19 @@ Page({
     this.setData({ loading: true })
 
     try {
-      let url = `/rest/v1/posts?status=eq.1&order=created_at.desc&limit=${this.data.pageSize}&offset=${page * this.data.pageSize}`
+      // 使用 Edge Function 获取帖子列表
+      const res = await app.callFunction('get-posts', {
+        trade_type: this.data.currentType,
+        keyword: this.data.searchKeyword || null,
+        page: page,
+        page_size: this.data.pageSize
+      })
       
-      // 类型筛选
-      if (this.data.currentType > 0) {
-        url += `&trade_type=eq.${this.data.currentType}`
-      }
+      console.log('获取帖子结果:', res)
       
-      // 关键词搜索
-      if (this.data.searchKeyword) {
-        url += `&or=(title.ilike.*${this.data.searchKeyword}*,keywords.ilike.*${this.data.searchKeyword}*)`
-      }
-
-      const res = await app.request({ url })
+      const postsData = res.data?.posts || []
       
-      const posts = (res.data || []).map(post => ({
+      const posts = postsData.map(post => ({
         ...post,
         typeLabel: util.getTradeTypeLabel(post.trade_type),
         typeClass: util.getTradeTypeClass(post.trade_type),
@@ -75,7 +73,7 @@ Page({
       this.setData({
         posts: refresh ? posts : [...this.data.posts, ...posts],
         page: page + 1,
-        hasMore: posts.length === this.data.pageSize,
+        hasMore: res.data?.has_more || false,
         loading: false,
         refreshing: false
       })

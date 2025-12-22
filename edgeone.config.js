@@ -66,8 +66,8 @@ module.exports = {
   env: {
     // 生产环境变量
     NODE_ENV: 'production',
-    VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || 'https://nahg8sgdmi35.space.minimaxi.com',
-    VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5haGc4c2dkbWkzNS5zcGFjZS5taW5pbWF4aS5jb20iLCJpYXQiOjE3NjI3MDE1MTIsImV4cCI6MjA5ODI3NzUxMn0.aR_bY7fQKxL8oN5rJ3kP2sT8mW7vX6qY9zR1wK2lM3nO4p',
+    VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || 'https://hntiihuxqlklpiyqmlob.supabase.co',
+    VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhudGlpaHV4cWxrbHBpeXFtbG9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5OTE1ODksImV4cCI6MjA3OTU2NzU4OX0.yh4FiKZPUPR-G1LormpZuKGZIaF7eSRkDbZslvBJzhc',
     VITE_APP_TITLE: '交易信息撮合平台',
     VITE_APP_VERSION: '1.0.0',
     VITE_DEV_SHOW_CODE: 'false'
