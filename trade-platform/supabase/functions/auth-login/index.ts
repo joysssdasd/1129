@@ -58,7 +58,7 @@ serve(async (req) => {
     // 查询用户信息
     const { data: userData, error: userError } = await supabase
       .from('users')
-      .select('id, phone, wechat_id, wechat_nickname, is_admin, points, created_at')
+      .select('id, phone, wechat_id, is_admin, points, created_at')
       .eq('phone', phone)
       .single()
 
@@ -89,7 +89,6 @@ serve(async (req) => {
         id: userData.id,
         phone: userData.phone,
         wechat_id: userData.wechat_id,
-        wechat_nickname: userData.wechat_nickname,
         is_admin: userData.is_admin,
         points: userData.points,
         role: userData.is_admin ? 'admin' : 'user',

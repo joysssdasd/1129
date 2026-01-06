@@ -151,7 +151,7 @@ export default function LoginPage() {
       // 暂时使用直接查询方式
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('id, phone, wechat_id, wechat_nickname, is_admin, points, created_at, password')
+        .select('id, phone, wechat_id, is_admin, points, created_at, password')
         .eq('phone', phone)
         .single()
 
