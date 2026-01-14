@@ -53,7 +53,8 @@
       ],
       "autoApprove": [
         "browser_press_key",
-        "browser_navigate"
+        "browser_navigate",
+        "browser_wait_for"
       ]
     },
     "twitter": {
