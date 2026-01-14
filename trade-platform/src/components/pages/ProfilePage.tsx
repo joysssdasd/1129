@@ -894,10 +894,10 @@ export default function ProfilePage() {
                 <div className="border-b pb-4">
                   <div className="text-sm text-gray-600 mb-2">微信客服</div>
                   <div className="flex items-center justify-between">
-                    <div className="font-mono text-lg">{serviceSettings.service_wechat || '加载中...'}</div>
+                    <div className="font-mono text-lg">{serviceSettings.customer_wechat || '加载中...'}</div>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(serviceSettings.service_wechat || '')
+                        navigator.clipboard.writeText(serviceSettings.customer_wechat || '')
                         alert('微信号已复制')
                       }}
                       className="px-3 py-1 bg-green-500 text-white rounded text-sm"
@@ -910,10 +910,10 @@ export default function ProfilePage() {
                 <div className="border-b pb-4">
                   <div className="text-sm text-gray-600 mb-2">QQ客服</div>
                   <div className="flex items-center justify-between">
-                    <div className="font-mono text-lg">{serviceSettings.service_qq || '加载中...'}</div>
+                    <div className="font-mono text-lg">{serviceSettings.customer_qq || '加载中...'}</div>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(serviceSettings.service_qq || '')
+                        navigator.clipboard.writeText(serviceSettings.customer_qq || '')
                         alert('QQ号已复制')
                       }}
                       className="px-3 py-1 bg-blue-500 text-white rounded text-sm"
@@ -926,9 +926,9 @@ export default function ProfilePage() {
                 <div className="border-b pb-4">
                   <div className="text-sm text-gray-600 mb-2">客服电话</div>
                   <div className="flex items-center justify-between">
-                    <div className="font-mono text-lg">{serviceSettings.service_phone || '加载中...'}</div>
+                    <div className="font-mono text-lg">{serviceSettings.customer_phone || '加载中...'}</div>
                     <a
-                      href={`tel:${serviceSettings.service_phone || ''}`}
+                      href={`tel:${serviceSettings.customer_phone || ''}`}
                       className="px-3 py-1 bg-orange-500 text-white rounded text-sm"
                     >
                       拨打电话
@@ -939,7 +939,7 @@ export default function ProfilePage() {
                 <div className="bg-blue-50 rounded-lg p-4">
                   <h3 className="font-medium text-sm mb-2">服务时间</h3>
                   <p className="text-sm text-gray-600">
-                    {serviceSettings.service_hours || '周一至周日 9:00-22:00'}
+                    {serviceSettings.customer_hours || '周一至周日 9:00-22:00'}
                   </p>
                   <p className="text-xs text-gray-500 mt-2">
                     如遇节假日，服务时间可能会有调整

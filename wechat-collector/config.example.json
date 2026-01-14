@@ -1,0 +1,32 @@
+{
+  "wechat": {
+    "data_path": "C:\\Users\\你的用户名\\Documents\\WeChat Files",
+    "wxid": "",
+    "db_key": ""
+  },
+  "monitor_groups": [
+    "黄牛交流群1",
+    "票务信息群",
+    "白银交易群"
+  ],
+  "platform": {
+    "supabase_url": "https://hntiihuxqlklpiyqmlob.supabase.co",
+    "supabase_anon_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhudGlpaHV4cWxrbHBpeXFtbG9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5OTE1ODksImV4cCI6MjA3OTU2NzU4OX0.yh4FiKZPUPR-G1LormpZuKGZIaF7eSRkDbZslvBJzhc",
+    "user_id": "你的管理员用户ID",
+    "default_wechat_id": "niuniubase"
+  },
+  "schedule": {
+    "interval_minutes": 60,
+    "start_hour": 8,
+    "end_hour": 23
+  },
+  "ai": {
+    "deepseek_api_key": "sk-4dac2f720dfc43a18dc3f46053a68f16",
+    "model": "deepseek-chat"
+  },
+  "filter": {
+    "keywords": ["出", "收", "转", "求", "票", "克", "银", "演唱会", "门票", "内场", "看台", "包厢"],
+    "min_message_length": 10,
+    "max_message_length": 2000
+  }
+}

@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>马3 - 聊天记录</title>
+  <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+        background: linear-gradient(to bottom, #f7f8fa 0%, #e8eaf0 100%);
+        color: #1a1a1a;
+        line-height: 1.6;
+        min-height: 100vh;
+      }
+      
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+        background: transparent;
+        min-height: 100vh;
+        padding: 20px;
+      }
+      
+      .header {
+        background: linear-gradient(135deg, #09c269 0%, #07b961 50%, #06ae56 100%);
+        color: white;
+        padding: 32px 28px;
+        border-radius: 16px;
+        text-align: center;
+        box-shadow: 0 8px 24px rgba(7, 193, 96, 0.25), 0 4px 8px rgba(0, 0, 0, 0.08);
+        margin-bottom: 24px;
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -20%;
+        width: 200px;
+        height: 200px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        filter: blur(40px);
+      }
+      
+      .header::after {
+        content: '';
+        position: absolute;
+        bottom: -30%;
+        left: -10%;
+        width: 150px;
+        height: 150px;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 50%;
+        filter: blur(30px);
+      }
+      
+      .header-main {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        position: relative;
+        z-index: 1;
+        margin-bottom: 12px;
+      }
+
+      .header h1 {
+        font-size: 26px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        margin: 0;
+      }
+
+      .info-menu-btn {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        color: white;
+        backdrop-filter: blur(10px);
+      }
+
+      .info-menu-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: scale(1.05);
+      }
+
+      .info-menu-btn:active {
+        transform: scale(0.95);
+      }
+
+      .info-menu {
+        position: absolute;
+        top: 100%;
+        right: 20px;
+        margin-top: 8px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-10px);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 1000;
+        min-width: 280px;
+      }
+
+      .info-menu.show {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+      }
+
+      .info-menu-content {
+        padding: 16px;
+      }
+
+      .info-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px;
+        border-radius: 8px;
+        transition: background 0.2s ease;
+      }
+
+      .info-item:hover {
+        background: rgba(7, 193, 96, 0.05);
+      }
+
+      .info-item:not(:last-child) {
+        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+      }
+
+      .info-label {
+        font-size: 13px;
+        font-weight: 600;
+        color: #666;
+        margin-right: 16px;
+      }
+
+      .info-value {
+        font-size: 14px;
+        color: #333;
+        font-weight: 500;
+        text-align: right;
+        word-break: break-all;
+      }
+      
+      .header .info {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 20px;
+        font-size: 14px;
+        opacity: 0.95;
+        flex-wrap: wrap;
+        position: relative;
+        z-index: 1;
+      }
+      
+      .header .info span {
+        display: inline-flex;
+        align-items: center;
+        background: rgba(255, 255, 255, 0.15);
+        padding: 6px 14px;
+        border-radius: 20px;
+        backdrop-filter: blur(10px);
+        gap: 6px;
+        transition: all 0.3s ease;
+      }
+      
+      .header .info span:hover {
+        background: rgba(255, 255, 255, 0.22);
+        transform: translateY(-1px);
+      }
+      
+      .header .info span::before {
+        content: '';
+        width: 4px;
+        height: 4px;
+        background: currentColor;
+        border-radius: 50%;
+        opacity: 0.8;
+      }
+
+      .messages {
+        background: white;
+        padding: 28px 24px;
+        border-radius: 16px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+        min-height: 400px;
+        max-height: calc(100vh - 200px);
+        overflow-y: auto;
+        position: relative;
+      }
+      
+      .loading {
+        text-align: center;
+        padding: 40px;
+        color: #999;
+        font-size: 14px;
+      }
+      
+      .scroll-to-bottom {
+        position: fixed;
+        bottom: 40px;
+        right: 40px;
+        width: 48px;
+        height: 48px;
+        background: linear-gradient(135deg, #09c269 0%, #07b961 100%);
+        color: white;
+        border-radius: 50%;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        cursor: pointer;
+        box-shadow: 0 4px 16px rgba(7, 193, 96, 0.35);
+        transition: all 0.3s ease;
+        z-index: 1000;
+        user-select: none;
+      }
+      
+      .scroll-to-bottom:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 24px rgba(7, 193, 96, 0.45);
+      }
+      
+      .scroll-to-bottom:active {
+        transform: translateY(-1px);
+      }
+      
+      .date-separator {
+        text-align: center;
+        color: #8c8c8c;
+        font-size: 13px;
+        margin: 28px 0;
+        padding: 8px 16px;
+        display: inline-block;
+        background: linear-gradient(135deg, rgba(0, 0, 0, 0.04) 0%, rgba(0, 0, 0, 0.06) 100%);
+        border-radius: 20px;
+        position: relative;
+        left: 50%;
+        transform: translateX(-50%);
+        font-weight: 500;
+        letter-spacing: 0.3px;
+        backdrop-filter: blur(10px);
+      }
+
+      .date-divider {
+        text-align: center;
+        color: #8b8b8b;
+        font-size: 12px;
+        margin: 22px auto;
+        padding: 6px 14px;
+        display: inline-block;
+        background: #f1f1f1;
+        border-radius: 999px;
+        font-weight: 500;
+        letter-spacing: 0.2px;
+        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
+        position: relative;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+      
+      .message-item {
+        margin-bottom: 20px;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        width: 100%;
+        padding: 4px 0;
+        animation: slideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      .message-item::after {
+        content: attr(data-time);
+        position: absolute;
+        top: -22px;
+        max-width: 70%;
+        padding: 4px 10px;
+        border-radius: 12px;
+        background: rgba(0, 0, 0, 0.65);
+        color: #fff;
+        font-size: 11px;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(4px);
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        white-space: nowrap;
+      }
+
+      .message-item.sent::after {
+        right: 46px;
+      }
+
+      .message-item.received::after {
+        left: 46px;
+      }
+
+      .message-item:hover::after {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        overflow: hidden;
+        flex-shrink: 0;
+        background: rgba(255, 255, 255, 0.6);
+      }
+
+      .avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      .avatar.placeholder {
+        background: rgba(255, 255, 255, 0.45);
+      }
+      
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateY(15px) scale(0.95);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+      
+      .message-item.sent {
+        align-items: flex-end;
+      }
+      
+      .message-item.received {
+        align-items: flex-start;
+      }
+
+      .message-bubble.media {
+        background: transparent;
+        box-shadow: none;
+        border: none;
+        padding: 0;
+        min-width: auto;
+      }
+
+      .message-bubble.media::after {
+        display: none;
+      }
+
+      .message-bubble.media:hover {
+        transform: none;
+        box-shadow: none;
+      }
+
+      .message-row {
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
+        width: 100%;
+      }
+
+      .message-item.sent .message-row {
+        flex-direction: row-reverse;
+      }
+
+      .message-item.sent .sender-name {
+        text-align: right;
+      }
+      
+      .sender-name {
+        font-size: 13px;
+        color: #666;
+        margin-bottom: 8px;
+        padding: 0 14px;
+        font-weight: 500;
+      }
+      
+      .message-bubble {
+        max-width: 68%;
+        min-width: 80px;
+        padding: 12px 16px;
+        position: relative;
+        word-break: break-word;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+      
+      .message-bubble:hover {
+        transform: translateY(-2px);
+      }
+      
+      .sent .message-bubble {
+        background: linear-gradient(135deg, #a0f47c 0%, #95ec69 100%);
+        color: #1a1a1a;
+        border-radius: 18px 18px 4px 18px;
+        box-shadow: 0 3px 12px rgba(149, 236, 105, 0.3), 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+      
+      .sent .message-bubble:hover {
+        box-shadow: 0 6px 20px rgba(149, 236, 105, 0.4), 0 2px 6px rgba(0, 0, 0, 0.12);
+      }
+      
+      .sent .message-bubble::after {
+        content: '';
+        position: absolute;
+        right: -7px;
+        bottom: 8px;
+        width: 0;
+        height: 0;
+        border-left: 8px solid #95ec69;
+        border-top: 6px solid transparent;
+        border-bottom: 6px solid transparent;
+        filter: drop-shadow(2px 2px 2px rgba(0, 0, 0, 0.08));
+      }
+      
+      .received .message-bubble {
+        background: linear-gradient(135deg, #ffffff 0%, #fafafa 100%);
+        color: #1a1a1a;
+        border-radius: 18px 18px 18px 4px;
+        box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
+        border: 1px solid rgba(0, 0, 0, 0.04);
+      }
+      
+      .received .message-bubble:hover {
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08);
+      }
+      
+      .received .message-bubble::after {
+        content: '';
+        position: absolute;
+        left: -7px;
+        bottom: 8px;
+        width: 0;
+        height: 0;
+        border-right: 8px solid #ffffff;
+        border-top: 6px solid transparent;
+        border-bottom: 6px solid transparent;
+        filter: drop-shadow(-2px 2px 2px rgba(0, 0, 0, 0.06));
+      }
+
+      .sent .message-bubble.media,
+      .received .message-bubble.media {
+        background: transparent;
+        box-shadow: none;
+        border: none;
+      }
+
+      .sent .message-bubble.media::after,
+      .received .message-bubble.media::after {
+        display: none;
+      }
+      
+      .content {
+        font-size: 15px;
+        line-height: 1.6;
+        word-wrap: break-word;
+        white-space: pre-wrap;
+        letter-spacing: 0.2px;
+      }
+
+      .message-media {
+        max-width: 240px;
+        border-radius: 12px;
+        display: block;
+      }
+
+      .message-media.image {
+        max-height: 240px;
+        object-fit: cover;
+      }
+
+      .message-media.emoji {
+        width: 120px;
+        height: 120px;
+        object-fit: contain;
+      }
+
+      .message-media.voice {
+        width: 220px;
+        height: 32px;
+      }
+      
+      .time {
+        font-size: 11px;
+        margin-top: 8px;
+        font-weight: 500;
+        text-align: right;
+        letter-spacing: 0.3px;
+      }
+      
+      .sent .time {
+        color: rgba(0, 0, 0, 0.45);
+      }
+      
+      .received .time {
+        color: rgba(0, 0, 0, 0.4);
+      }
+      
+      @media print {
+        body {
+          background: white;
+        }
+        
+        .container {
+          padding: 0;
+        }
+        
+        .header {
+          box-shadow: none;
+          border-radius: 0;
+        }
+        
+        .messages {
+          box-shadow: none;
+          border-radius: 0;
+          max-height: none;
+          overflow: visible;
+        }
+        
+        .message-item {
+          page-break-inside: avoid;
+          animation: none;
+        }
+        
+        .message-bubble {
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+        }
+        
+        .scroll-to-bottom {
+          display: none !important;
+        }
+      }
+      
+      @media (max-width: 768px) {
+        .container {
+          padding: 12px;
+          max-width: 100%;
+        }
+        
+        .header {
+          padding: 24px 20px;
+          border-radius: 12px;
+          margin-bottom: 16px;
+        }
+        
+        .header h1 {
+          font-size: 22px;
+        }
+        
+        .messages {
+          padding: 20px 16px;
+          border-radius: 12px;
+          max-height: calc(100vh - 160px);
+        }
+        
+        .message-bubble {
+          max-width: 80%;
+        }
+        
+        .date-separator {
+          font-size: 12px;
+          padding: 6px 12px;
+        }
+        
+        .scroll-to-bottom {
+          bottom: 20px;
+          right: 20px;
+          width: 44px;
+          height: 44px;
+          font-size: 20px;
+        }
+      }
+      
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: linear-gradient(to bottom, #1a1a1a 0%, #0f0f0f 100%);
+        }
+        
+        .messages {
+          background: #2a2a2a;
+          box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+        }
+        
+        .loading {
+          color: #666;
+        }
+        
+        .received .message-bubble {
+          background: linear-gradient(135deg, #3a3a3a 0%, #333333 100%);
+          color: #e8e8e8;
+          border-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        .received .message-bubble::after {
+          border-right-color: #3a3a3a;
+        }
+        
+        .sender-name {
+          color: #999;
+        }
+        
+        .date-separator {
+          color: #999;
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.12) 100%);
+        }
+        
+        .sent .time,
+        .received .time {
+          color: rgba(255, 255, 255, 0.5);
+        }
+      }
+    
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-main">
+        <h1>马3</h1>
+        <button class="info-menu-btn" id="info-menu-btn" type="button" title="查看详细信息">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="1"></circle>
+            <circle cx="12" cy="5" r="1"></circle>
+            <circle cx="12" cy="19" r="1"></circle>
+          </svg>
+        </button>
+      </div>
+      <div class="info-menu" id="info-menu">
+        <div class="info-menu-content">
+          <div class="info-item">
+            <span class="info-label">微信ID</span>
+            <span class="info-value">49791603075@chatroom</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">昵称</span>
+            <span class="info-value">马钞高质量贸易群</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">备注</span>
+            <span class="info-value">马3</span>
+          </div>
+        </div>
+      </div>
+      <div class="info">
+        <span>群聊</span>
+        <span>共 382 条消息</span>
+        <span>导出时间: 2026-01-13 23:56:59</span>
+      </div>
+    </div>
+    <div class="messages" id="messages-container">
+      <div class="loading">正在加载消息...</div>
+    </div>
+    <div class="scroll-to-bottom" id="scroll-to-bottom" title="回到底部">↓</div>
+  </div>
+  <script>
+    const messagesData = [{"date":"2026-01-13","time":"17:40:44","timeTooltip":"2026-01-13 17:40:44","isSend":false,"isMedia":false,"content":"你通过扫描二维码加入群聊，群聊参与人还有：校草差一点（工作号）🔥、校草差一点ᵛⁱᵖ、小博🎫、理想🦁(代拍|录信息|邀请函)、Iceland、不善言辞🇨🇳、晓七七、蜻蜓队长、庸俗.🎡接摩天轮进货、虞瑞、小辉【演唱会】【收黄金百补】、没回复+gth199857、Weir、听得到吗-（全球演出）、星河、佳儒、Tsaihw、吴宇（转款zfb）、Vista、丢丢、大熊猫、阿宇🎫、人间值得、小妮要发财💕没回复打我语音、very-Q、J.G.J🥥🌴（收鲸探）、大雨（不回信息语音）、effort搬砖板、A杰骏、Gary、裤衩儿（好友已满主页加小号、hhr、秦延彪、Rose、曹单纯（借钱拉黑）、杰仔🎫（开始赚钱版）、吃口泡菜。、🌨🌨🌨（没回或感叹号打语音、星米、及时行樂จุ๊บ、南山南。、亿年🎫（接单中，有单 dd)、胡 古月🎫（古月星河文化、榴莲｜、吹完 阿心、许怀若谷、清风微寒🍃、李FK、jimi、我好像在哪见过你&amp;、金色传说🥇好运来、王伟。祝大家身体健康摩天轮进货）、林一、花.、PZ.WHY🎫票务、和记 👺不回复请语音、Bubble、小豪、LLLLLL、Sean*票来票务、👀、左右先生、摩托车闯红灯、张映南、科大胖虎、Kong、玖贰贰、NJFC、鹿屿`、小羽文娱～（接全球大型演唱会）、＊小潘🎫、A，林镀、你听得到(好运版)、蓝海霸王蟹、Jay永亮票务、元气少女！！！、三金、赚钱养赵雷、老老老YAN、小北²星玥北途文化、现场、Hendrix🎫阿豪好友满+HaoA66688、😉、黄尛伟¹⁸²¹¹⁷⁶²⁵⁵⁵、A小沐、go ahead（备战马钞）、梦飞、A原舟票务🎫、林（专注月卡线报）、阿明、墨兮、庄玉、昊禹、阿伦🎫、归程（接代拍、梓言、饭饭（接各类演出）","senderName":"马3","timestamp":1768297244,"avatarKey":null},{"date":"2026-01-13","time":"17:42:40","timeTooltip":"2026-01-13 17:42:40","isSend":false,"isMedia":false,"content":"马年纪念钞全方位解答 中国人民银行将发行2026马年普通纪念币和纪念钞！马年纪念钞和马年纪念币预约“百问百答” 预约兑换 安排预约时间:2026年1月13日至1月14日 预约核实:2026年1月17日至1月19日 兑换时间:2026年1月20日至1月26日 发行数量:马钞1亿，马币1亿！ 预约限额:每个身份证号马钞马币各可预约20 张/枚 面值:马钞20元，马币10元 预约方式：等面值预约 一.","senderName":"校草差一点ᵛⁱᵖ","timestamp":1768297360,"avatarKey":null},{"date":"2026-01-13","time":"17:45:23","timeTooltip":"2026-01-13 17:45:23","isSend":false,"isMedia":false,"content":"&quot;倒鱼&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768297523,"avatarKey":null},{"date":"2026-01-13","time":"17:48:50","timeTooltip":"2026-01-13 17:48:50","isSend":false,"isMedia":false,"content":"&quot;蓝海霸王蟹&quot;邀请&quot;A人生&quot;加入了群聊","senderName":"马3","timestamp":1768297730,"avatarKey":null},{"date":"2026-01-13","time":"17:53:28","timeTooltip":"2026-01-13 17:53:28","isSend":false,"isMedia":false,"content":"&quot;万学海文王劲&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298008,"avatarKey":null},{"date":"2026-01-13","time":"17:54:21","timeTooltip":"2026-01-13 17:54:21","isSend":false,"isMedia":false,"content":"马钞马币预约保姆级教程 1⃣纪念钞/币预约时间 2⃣预约承办银行及银行数量 3⃣马年纪念币🪙纪念钞预约入口 4⃣下滑扫描下面各个银行二维码进入预约页面\n[图片]\n⚠证件要求：有效身份证件必须为第二代居民身份证原件 ⚠注意一个身份证只能预约一个银行，预约之后会给你发短信。 ⚠如果之前有预约过没有取，预约之后会给你发短信，在短信规定时间内去银行办理之前的取消手续，到领马钞的时候才可以领。 ⚠本次代领","senderName":"校草差一点（工作号）🔥","timestamp":1768298061,"avatarKey":null},{"date":"2026-01-13","time":"17:56:01","timeTooltip":"2026-01-13 17:56:01","isSend":false,"isMedia":false,"content":"&quot;XRkai&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298161,"avatarKey":null},{"date":"2026-01-13","time":"17:56:05","timeTooltip":"2026-01-13 17:56:05","isSend":false,"isMedia":false,"content":"&quot;紫渝演出（代订机票🎤演出体验）&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298165,"avatarKey":null},{"date":"2026-01-13","time":"17:56:13","timeTooltip":"2026-01-13 17:56:13","isSend":false,"isMedia":false,"content":"&quot;留白.&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298173,"avatarKey":null},{"date":"2026-01-13","time":"17:56:16","timeTooltip":"2026-01-13 17:56:16","isSend":false,"isMedia":false,"content":"&quot;A.简单🎫&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298176,"avatarKey":null},{"date":"2026-01-13","time":"17:56:17","timeTooltip":"2026-01-13 17:56:17","isSend":false,"isMedia":false,"content":"&quot;牛油果票务 🎫&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298177,"avatarKey":null},{"date":"2026-01-13","time":"17:56:28","timeTooltip":"2026-01-13 17:56:28","isSend":false,"isMedia":false,"content":"&quot;星宇票务（消息不回就是被禁言）&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298188,"avatarKey":null},{"date":"2026-01-13","time":"17:56:28","timeTooltip":"2026-01-13 17:56:28","isSend":false,"isMedia":false,"content":"&quot;K《微信不收款》&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298188,"avatarKey":null},{"date":"2026-01-13","time":"17:56:33","timeTooltip":"2026-01-13 17:56:33","isSend":false,"isMedia":false,"content":"&quot;星梦笺羽🎫&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298193,"avatarKey":null},{"date":"2026-01-13","time":"17:56:40","timeTooltip":"2026-01-13 17:56:40","isSend":false,"isMedia":false,"content":"&quot;Alex（备考版）&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298200,"avatarKey":null},{"date":"2026-01-13","time":"17:56:41","timeTooltip":"2026-01-13 17:56:41","isSend":false,"isMedia":false,"content":"&quot;萌萌🎫票务&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298201,"avatarKey":null},{"date":"2026-01-13","time":"17:56:44","timeTooltip":"2026-01-13 17:56:44","isSend":false,"isMedia":false,"content":"&quot;小环🐳&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298204,"avatarKey":null},{"date":"2026-01-13","time":"17:56:50","timeTooltip":"2026-01-13 17:56:50","isSend":false,"isMedia":false,"content":"&quot;ﺭA. 轩仔&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298210,"avatarKey":null},{"date":"2026-01-13","time":"17:56:51","timeTooltip":"2026-01-13 17:56:51","isSend":false,"isMedia":false,"content":"&quot;。&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298211,"avatarKey":null},{"date":"2026-01-13","time":"17:56:52","timeTooltip":"2026-01-13 17:56:52","isSend":false,"isMedia":false,"content":"&quot;知乐&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298212,"avatarKey":null},{"date":"2026-01-13","time":"17:56:54","timeTooltip":"2026-01-13 17:56:54","isSend":false,"isMedia":false,"content":"&quot;快乐小博&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298214,"avatarKey":null},{"date":"2026-01-13","time":"17:56:55","timeTooltip":"2026-01-13 17:56:55","isSend":false,"isMedia":false,"content":"&quot;* A叮fare&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298215,"avatarKey":null},{"date":"2026-01-13","time":"17:56:55","timeTooltip":"2026-01-13 17:56:55","isSend":false,"isMedia":false,"content":"&quot;李&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298215,"avatarKey":null},{"date":"2026-01-13","time":"17:57:06","timeTooltip":"2026-01-13 17:57:06","isSend":false,"isMedia":false,"content":"&quot;普林斯&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298226,"avatarKey":null},{"date":"2026-01-13","time":"17:57:10","timeTooltip":"2026-01-13 17:57:10","isSend":false,"isMedia":false,"content":"&quot;花花（跨年🎫接单）&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298230,"avatarKey":null},{"date":"2026-01-13","time":"17:57:10","timeTooltip":"2026-01-13 17:57:10","isSend":false,"isMedia":false,"content":"&quot;一个臭票务（睡会 急电13328769361&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298230,"avatarKey":null},{"date":"2026-01-13","time":"17:57:14","timeTooltip":"2026-01-13 17:57:14","isSend":false,"isMedia":false,"content":"&quot;高手2号（备战K2）&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298234,"avatarKey":null},{"date":"2026-01-13","time":"17:57:16","timeTooltip":"2026-01-13 17:57:16","isSend":false,"isMedia":false,"content":"&quot;聚隆（求数藏马）&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298236,"avatarKey":null},{"date":"2026-01-13","time":"17:57:18","timeTooltip":"2026-01-13 17:57:18","isSend":false,"isMedia":false,"content":"&quot;Miraitowa&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298238,"avatarKey":null},{"date":"2026-01-13","time":"17:57:18","timeTooltip":"2026-01-13 17:57:18","isSend":false,"isMedia":false,"content":"&quot;🍟仔&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298238,"avatarKey":null},{"date":"2026-01-13","time":"17:57:20","timeTooltip":"2026-01-13 17:57:20","isSend":false,"isMedia":false,"content":"&quot;逐星（香港BP&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298240,"avatarKey":null},{"date":"2026-01-13","time":"17:57:24","timeTooltip":"2026-01-13 17:57:24","isSend":false,"isMedia":false,"content":"&quot;小蹦&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298244,"avatarKey":null},{"date":"2026-01-13","time":"17:57:34","timeTooltip":"2026-01-13 17:57:34","isSend":false,"isMedia":false,"content":"&quot;天文&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298254,"avatarKey":null},{"date":"2026-01-13","time":"17:57:34","timeTooltip":"2026-01-13 17:57:34","isSend":false,"isMedia":false,"content":"&quot;陈词接香港BLACKPINK代付代卖&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298254,"avatarKey":null},{"date":"2026-01-13","time":"17:57:36","timeTooltip":"2026-01-13 17:57:36","isSend":false,"isMedia":false,"content":"&quot;吉姆&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298256,"avatarKey":null},{"date":"2026-01-13","time":"17:57:39","timeTooltip":"2026-01-13 17:57:39","isSend":false,"isMedia":false,"content":"[动画表情]","senderName":"吉姆（大额进货995）","timestamp":1768298259,"avatarKey":null},{"date":"2026-01-13","time":"17:57:37","timeTooltip":"2026-01-13 17:57:37","isSend":false,"isMedia":false,"content":"&quot;pxl&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298257,"avatarKey":null},{"date":"2026-01-13","time":"17:57:40","timeTooltip":"2026-01-13 17:57:40","isSend":false,"isMedia":false,"content":"&quot;🦉二豪&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298260,"avatarKey":null},{"date":"2026-01-13","time":"17:57:42","timeTooltip":"2026-01-13 17:57:42","isSend":false,"isMedia":false,"content":"&quot;song🎫&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298262,"avatarKey":null},{"date":"2026-01-13","time":"17:57:46","timeTooltip":"2026-01-13 17:57:46","isSend":false,"isMedia":false,"content":"&quot;唐老鸭Tickets&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298266,"avatarKey":null},{"date":"2026-01-13","time":"17:57:48","timeTooltip":"2026-01-13 17:57:48","isSend":false,"isMedia":false,"content":"&quot;Liu&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298268,"avatarKey":null},{"date":"2026-01-13","time":"17:57:53","timeTooltip":"2026-01-13 17:57:53","isSend":false,"isMedia":false,"content":"&quot;发疯的兔子&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298273,"avatarKey":null},{"date":"2026-01-13","time":"17:58:03","timeTooltip":"2026-01-13 17:58:03","isSend":false,"isMedia":false,"content":"&quot;小鬼&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298283,"avatarKey":null},{"date":"2026-01-13","time":"17:58:22","timeTooltip":"2026-01-13 17:58:22","isSend":false,"isMedia":false,"content":"&quot;🌙小陶🎫（接所有演出代拍）&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298302,"avatarKey":null},{"date":"2026-01-13","time":"17:58:24","timeTooltip":"2026-01-13 17:58:24","isSend":false,"isMedia":false,"content":"&quot;安迪&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298304,"avatarKey":null},{"date":"2026-01-13","time":"17:58:28","timeTooltip":"2026-01-13 17:58:28","isSend":false,"isMedia":false,"content":"&quot;小匡威2号 （接代拍）&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298308,"avatarKey":null},{"date":"2026-01-13","time":"17:58:32","timeTooltip":"2026-01-13 17:58:32","isSend":false,"isMedia":false,"content":"&quot;发疯的兔子&quot;邀请&quot;刘飞（演出经纪 演出商投&quot;加入了群聊","senderName":"马3","timestamp":1768298312,"avatarKey":null},{"date":"2026-01-13","time":"17:58:35","timeTooltip":"2026-01-13 17:58:35","isSend":false,"isMedia":false,"content":"&quot;Wave🌊&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298315,"avatarKey":null},{"date":"2026-01-13","time":"17:58:36","timeTooltip":"2026-01-13 17:58:36","isSend":false,"isMedia":false,"content":"&quot;GD&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298316,"avatarKey":null},{"date":"2026-01-13","time":"17:58:51","timeTooltip":"2026-01-13 17:58:51","isSend":false,"isMedia":false,"content":"&quot;阿明&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298331,"avatarKey":null},{"date":"2026-01-13","time":"17:58:59","timeTooltip":"2026-01-13 17:58:59","isSend":false,"isMedia":false,"content":"&quot;发疯的兔子&quot;邀请&quot;吱吱（联系不到请找朋友圈置顶客服&quot;加入了群聊","senderName":"马3","timestamp":1768298339,"avatarKey":null},{"date":"2026-01-13","time":"17:59:01","timeTooltip":"2026-01-13 17:59:01","isSend":false,"isMedia":false,"content":"&quot;。。。&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298341,"avatarKey":null},{"date":"2026-01-13","time":"17:59:03","timeTooltip":"2026-01-13 17:59:03","isSend":false,"isMedia":false,"content":"&quot;董安然🎫定价收马钞&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298343,"avatarKey":null},{"date":"2026-01-13","time":"17:59:17","timeTooltip":"2026-01-13 17:59:17","isSend":false,"isMedia":false,"content":"&quot;前程似锦&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298357,"avatarKey":null},{"date":"2026-01-13","time":"17:59:24","timeTooltip":"2026-01-13 17:59:24","isSend":false,"isMedia":false,"content":"&quot;因为爱你&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298364,"avatarKey":null},{"date":"2026-01-13","time":"17:59:25","timeTooltip":"2026-01-13 17:59:25","isSend":false,"isMedia":false,"content":"&quot;不归（工商交通龙 马钞版）&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298365,"avatarKey":null},{"date":"2026-01-13","time":"17:59:33","timeTooltip":"2026-01-13 17:59:33","isSend":false,"isMedia":false,"content":"&quot;薛闯闯📅&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298373,"avatarKey":null},{"date":"2026-01-13","time":"17:59:59","timeTooltip":"2026-01-13 17:59:59","isSend":false,"isMedia":false,"content":"&quot;薛闯闯📅&quot;邀请&quot;AAAA 陈闯 醒狮文化🎫&quot;加入了群聊","senderName":"马3","timestamp":1768298399,"avatarKey":null},{"date":"2026-01-13","time":"17:59:59","timeTooltip":"2026-01-13 17:59:59","isSend":false,"isMedia":false,"content":"&quot;AAAA 陈闯 醒狮文化🎫&quot;与群里其他人都不是朋友关系，请注意隐私安全","senderName":"马3","timestamp":1768298399,"avatarKey":null},{"date":"2026-01-13","time":"18:00:11","timeTooltip":"2026-01-13 18:00:11","isSend":false,"isMedia":false,"content":"&quot;小石&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298411,"avatarKey":null},{"date":"2026-01-13","time":"18:00:21","timeTooltip":"2026-01-13 18:00:21","isSend":false,"isMedia":false,"content":"&quot;与湖&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298421,"avatarKey":null},{"date":"2026-01-13","time":"18:00:25","timeTooltip":"2026-01-13 18:00:25","isSend":false,"isMedia":false,"content":"&quot;KKTung.&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298425,"avatarKey":null},{"date":"2026-01-13","time":"18:01:00","timeTooltip":"2026-01-13 18:01:00","isSend":false,"isMedia":false,"content":"&quot;百合·不回就是忙&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298460,"avatarKey":null},{"date":"2026-01-13","time":"18:01:00","timeTooltip":"2026-01-13 18:01:00","isSend":false,"isMedia":false,"content":"&quot;淡定&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298460,"avatarKey":null},{"date":"2026-01-13","time":"18:01:00","timeTooltip":"2026-01-13 18:01:00","isSend":false,"isMedia":false,"content":"&quot;长留&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298460,"avatarKey":null},{"date":"2026-01-13","time":"18:01:02","timeTooltip":"2026-01-13 18:01:02","isSend":false,"isMedia":false,"content":"&quot;菠萝派🌊&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298462,"avatarKey":null},{"date":"2026-01-13","time":"18:01:16","timeTooltip":"2026-01-13 18:01:16","isSend":false,"isMedia":false,"content":"&quot;碳酸（代拍录信息邀请函）&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298476,"avatarKey":null},{"date":"2026-01-13","time":"18:01:17","timeTooltip":"2026-01-13 18:01:17","isSend":false,"isMedia":false,"content":"&quot;LiFMovie12&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298477,"avatarKey":null},{"date":"2026-01-13","time":"18:01:27","timeTooltip":"2026-01-13 18:01:27","isSend":false,"isMedia":false,"content":"ok[社会社会]","senderName":"碳酸（代拍录信息邀请函）","timestamp":1768298487,"avatarKey":null},{"date":"2026-01-13","time":"18:02:01","timeTooltip":"2026-01-13 18:02:01","isSend":false,"isMedia":false,"content":"&quot;👌。👌Max&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298521,"avatarKey":null},{"date":"2026-01-13","time":"18:02:19","timeTooltip":"2026-01-13 18:02:19","isSend":false,"isMedia":false,"content":"&quot;AA李绍宝：全国演唱会门票代理&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298539,"avatarKey":null},{"date":"2026-01-13","time":"18:02:34","timeTooltip":"2026-01-13 18:02:34","isSend":false,"isMedia":false,"content":"&quot;空白&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298554,"avatarKey":null},{"date":"2026-01-13","time":"18:02:42","timeTooltip":"2026-01-13 18:02:42","isSend":false,"isMedia":false,"content":"&quot;陈伟铭收彩银马-梅花马-150克银马&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298562,"avatarKey":null},{"date":"2026-01-13","time":"18:02:43","timeTooltip":"2026-01-13 18:02:43","isSend":false,"isMedia":false,"content":"&quot;安之.18765023757&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298563,"avatarKey":null},{"date":"2026-01-13","time":"18:03:11","timeTooltip":"2026-01-13 18:03:11","isSend":false,"isMedia":false,"content":"&quot;。&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298591,"avatarKey":null},{"date":"2026-01-13","time":"18:03:24","timeTooltip":"2026-01-13 18:03:24","isSend":false,"isMedia":false,"content":"&quot;白日梦想家（猫眼上号大麦破盾）&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298604,"avatarKey":null},{"date":"2026-01-13","time":"18:03:38","timeTooltip":"2026-01-13 18:03:38","isSend":false,"isMedia":false,"content":"&quot;Bin&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298618,"avatarKey":null},{"date":"2026-01-13","time":"18:04:09","timeTooltip":"2026-01-13 18:04:09","isSend":false,"isMedia":false,"content":"&quot;派大星🎫阿派票务&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298649,"avatarKey":null},{"date":"2026-01-13","time":"18:04:18","timeTooltip":"2026-01-13 18:04:18","isSend":false,"isMedia":false,"content":"&quot;佘文安&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298658,"avatarKey":null},{"date":"2026-01-13","time":"18:04:22","timeTooltip":"2026-01-13 18:04:22","isSend":false,"isMedia":false,"content":"&quot;🐑羊羊羊&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298662,"avatarKey":null},{"date":"2026-01-13","time":"18:04:42","timeTooltip":"2026-01-13 18:04:42","isSend":false,"isMedia":false,"content":"&quot;Yummy&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298682,"avatarKey":null},{"date":"2026-01-13","time":"18:04:42","timeTooltip":"2026-01-13 18:04:42","isSend":false,"isMedia":false,"content":"&quot;愚人的国度（演唱会接代拍）&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298682,"avatarKey":null},{"date":"2026-01-13","time":"18:04:53","timeTooltip":"2026-01-13 18:04:53","isSend":false,"isMedia":false,"content":"&quot;Vivi(接厦门梓渝)&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298693,"avatarKey":null},{"date":"2026-01-13","time":"18:04:55","timeTooltip":"2026-01-13 18:04:55","isSend":false,"isMedia":false,"content":"&quot;A🐌蜗牛茅台回收（电影票）🙃&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298695,"avatarKey":null},{"date":"2026-01-13","time":"18:04:58","timeTooltip":"2026-01-13 18:04:58","isSend":false,"isMedia":false,"content":"&quot;bobo&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298698,"avatarKey":null},{"date":"2026-01-13","time":"18:05:32","timeTooltip":"2026-01-13 18:05:32","isSend":false,"isMedia":false,"content":"&quot;彭于晏&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298732,"avatarKey":null},{"date":"2026-01-13","time":"18:05:46","timeTooltip":"2026-01-13 18:05:46","isSend":false,"isMedia":false,"content":"&quot;敏奇📱ᯤ⁶ᴳ⁺&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298746,"avatarKey":null},{"date":"2026-01-13","time":"18:06:26","timeTooltip":"2026-01-13 18:06:26","isSend":false,"isMedia":false,"content":"&quot;葫芦娃&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298786,"avatarKey":null},{"date":"2026-01-13","time":"18:06:56","timeTooltip":"2026-01-13 18:06:56","isSend":false,"isMedia":false,"content":"&quot;Double_G&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298816,"avatarKey":null},{"date":"2026-01-13","time":"18:07:17","timeTooltip":"2026-01-13 18:07:17","isSend":false,"isMedia":false,"content":"&quot;kuso&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298837,"avatarKey":null},{"date":"2026-01-13","time":"18:07:18","timeTooltip":"2026-01-13 18:07:18","isSend":false,"isMedia":false,"content":"&quot;阿尊&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298838,"avatarKey":null},{"date":"2026-01-13","time":"18:07:45","timeTooltip":"2026-01-13 18:07:45","isSend":false,"isMedia":false,"content":"&quot;龙龙（不回Call语音）&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298865,"avatarKey":null},{"date":"2026-01-13","time":"18:07:47","timeTooltip":"2026-01-13 18:07:47","isSend":false,"isMedia":false,"content":"&quot;A阿权（感叹号加朋友圈小号）&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298867,"avatarKey":null},{"date":"2026-01-13","time":"18:07:58","timeTooltip":"2026-01-13 18:07:58","isSend":false,"isMedia":false,"content":"&quot;简简单单就好&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298878,"avatarKey":null},{"date":"2026-01-13","time":"18:08:17","timeTooltip":"2026-01-13 18:08:17","isSend":false,"isMedia":false,"content":"&quot;大春&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298897,"avatarKey":null},{"date":"2026-01-13","time":"18:08:45","timeTooltip":"2026-01-13 18:08:45","isSend":false,"isMedia":false,"content":"&quot;Day¹（校园服务中心&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768298925,"avatarKey":null},{"date":"2026-01-13","time":"18:10:58","timeTooltip":"2026-01-13 18:10:58","isSend":false,"isMedia":false,"content":"&quot;manager（马钞）&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768299058,"avatarKey":null},{"date":"2026-01-13","time":"18:11:26","timeTooltip":"2026-01-13 18:11:26","isSend":false,"isMedia":false,"content":"&quot;ʚ🙊ྀིɞ&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768299086,"avatarKey":null},{"date":"2026-01-13","time":"18:11:42","timeTooltip":"2026-01-13 18:11:42","isSend":false,"isMedia":false,"content":"4000出10刀马钞标百 七天","senderName":"manager（马钞）","timestamp":1768299102,"avatarKey":null},{"date":"2026-01-13","time":"18:11:57","timeTooltip":"2026-01-13 18:11:57","isSend":false,"isMedia":false,"content":"&quot;林北.&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768299117,"avatarKey":null},{"date":"2026-01-13","time":"18:12:31","timeTooltip":"2026-01-13 18:12:31","isSend":false,"isMedia":false,"content":"&quot;因为爱你&quot;邀请&quot;遇见你&quot;加入了群聊","senderName":"马3","timestamp":1768299151,"avatarKey":null},{"date":"2026-01-13","time":"18:13:16","timeTooltip":"2026-01-13 18:13:16","isSend":false,"isMedia":false,"content":"&quot;AtgMaing kimg (张学友)&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768299196,"avatarKey":null},{"date":"2026-01-13","time":"18:13:21","timeTooltip":"2026-01-13 18:13:21","isSend":false,"isMedia":false,"content":"&quot;Jerome酒肉郭（厦门张韶涵&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768299201,"avatarKey":null},{"date":"2026-01-13","time":"18:13:35","timeTooltip":"2026-01-13 18:13:35","isSend":false,"isMedia":false,"content":"&quot;白志昊🎫&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768299215,"avatarKey":null},{"date":"2026-01-13","time":"18:14:39","timeTooltip":"2026-01-13 18:14:39","isSend":false,"isMedia":false,"content":"&quot;科小猴🐵(接大麦猫眼上号)&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768299279,"avatarKey":null},{"date":"2026-01-13","time":"18:15:04","timeTooltip":"2026-01-13 18:15:04","isSend":false,"isMedia":false,"content":"&quot;韩·饭&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768299304,"avatarKey":null},{"date":"2026-01-13","time":"18:16:00","timeTooltip":"2026-01-13 18:16:00","isSend":false,"isMedia":false,"content":"&quot;pesce&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768299360,"avatarKey":null},{"date":"2026-01-13","time":"18:17:10","timeTooltip":"2026-01-13 18:17:10","isSend":false,"isMedia":false,"content":"&quot;〆奋斗吧小青年°&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768299430,"avatarKey":null},{"date":"2026-01-13","time":"18:17:26","timeTooltip":"2026-01-13 18:17:26","isSend":false,"isMedia":false,"content":"&quot;弋止戈～&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768299446,"avatarKey":null},{"date":"2026-01-13","time":"18:17:39","timeTooltip":"2026-01-13 18:17:39","isSend":false,"isMedia":false,"content":"&quot;小知（有事电话）&quot;通过扫描&quot;校草差一点（工作号）🔥&quot;分享的二维码加入群聊","senderName":"马3","timestamp":1768299459,"avatarKey":null},{"date":"2026-01-13","time":"18:17:57","timeTooltip":"2026-01-13 18:17:57","isSend":false,"isMedia":false,"content":"[红包]","senderName":"校草差一点（工作号）🔥","timestamp":1768299477,"avatarKey":null},{"date":"2026-01-13","time":"18:18:00","timeTooltip":"2026-01-13 18:18:00","isSend":false,"isMedia":false,"content":"大家多拉拉同行入群，贸易起来，马年红红火火的，祝大家发财。。。 没好友的走一波后面好贸易，谢谢","senderName":"校草差一点（工作号）🔥","timestamp":1768299480,"avatarKey":null},{"date":"2026-01-13","time":"18:18:05","timeTooltip":"2026-01-13 18:18:05","isSend":false,"isMedia":false,"content":"@所有人 ","senderName":"校草差一点（工作号）🔥","timestamp":1768299485,"avatarKey":null},{"date":"2026-01-13","time":"18:18:15","timeTooltip":"2026-01-13 18:18:15","isSend":false,"isMedia":false,"content":"大大大","senderName":"Wave🌊","timestamp":1768299495,"avatarKey":null},{"date":"2026-01-13","time":"18:18:41","timeTooltip":"2026-01-13 18:18:41","isSend":false,"isMedia":false,"content":"冲","senderName":"👌。👌Max","timestamp":1768299521,"avatarKey":null},{"date":"2026-01-13","time":"18:18:50","timeTooltip":"2026-01-13 18:18:50","isSend":false,"isMedia":false,"content":"...","senderName":"manager（马钞）","timestamp":1768299530,"avatarKey":null},{"date":"2026-01-13","time":"18:19:15","timeTooltip":"2026-01-13 18:19:15","isSend":false,"isMedia":false,"content":"多拉点人 贸易起来 流动起来 ","senderName":"校草差一点（工作号）🔥","timestamp":1768299555,"avatarKey":null},{"date":"2026-01-13","time":"18:19:44","timeTooltip":"2026-01-13 18:19:44","isSend":false,"isMedia":false,"content":"是有一亿张对吧","senderName":"校草差一点（工作号）🔥","timestamp":1768299584,"avatarKey":null},{"date":"2026-01-13","time":"18:20:57","timeTooltip":"2026-01-13 18:20:57","isSend":false,"isMedia":false,"content":"今晚是马钞还是马币","senderName":"星梦笺羽🎫","timestamp":1768299657,"avatarKey":null},{"date":"2026-01-13","time":"18:21:04","timeTooltip":"2026-01-13 18:21:04","isSend":false,"isMedia":false,"content":"都有","senderName":"三金","timestamp":1768299664,"avatarKey":null},{"date":"2026-01-13","time":"18:21:08","timeTooltip":"2026-01-13 18:21:08","isSend":false,"isMedia":false,"content":"都要搞前前后间隔半个小时","senderName":"校草差一点（工作号）🔥","timestamp":1768299668,"avatarKey":null},{"date":"2026-01-13","time":"18:21:17","timeTooltip":"2026-01-13 18:21:17","isSend":false,"isMedia":false,"content":"马年纪念钞全方位解答 中国人民银行将发行2026马年普通纪念币和纪念钞！马年纪念钞和马年纪念币预约“百问百答” 预约兑换 安排预约时间:2026年1月13日至1月14日 预约核实:2026年1月17日至1月19日 兑换时间:2026年1月20日至1月26日 发行数量:马钞1亿，马币1亿！ 预约限额:每个身份证号马钞马币各可预约20 张/枚 面值:马钞20元，马币10元 预约方式：等面值预约 一.","senderName":"校草差一点（工作号）🔥","timestamp":1768299677,"avatarKey":null},{"date":"2026-01-13","time":"18:23:53","timeTooltip":"2026-01-13 18:23:53","isSend":false,"isMedia":false,"content":"2026上海·F1赛车喜力中国大奖赛\n星期日A上×4  A下×4\n录信息 赔付20% 可比价","senderName":"PZ.WHY🎫票务","timestamp":1768299833,"avatarKey":null},{"date":"2026-01-13","time":"18:30:31","timeTooltip":"2026-01-13 18:30:31","isSend":false,"isMedia":false,"content":"@PZ.WHY🎫票务 ","senderName":"校草差一点（工作号）🔥","timestamp":1768300231,"avatarKey":null},{"date":"2026-01-13","time":"18:30:38","timeTooltip":"2026-01-13 18:30:38","isSend":false,"isMedia":false,"content":"大哥 这钞群","senderName":"校草差一点（工作号）🔥","timestamp":1768300238,"avatarKey":null},{"date":"2026-01-13","time":"18:30:37","timeTooltip":"2026-01-13 18:30:37","isSend":false,"isMedia":false,"content":"&quot;Kong&quot;邀请&quot;小匡威票务&quot;加入了群聊","senderName":"马3","timestamp":1768300237,"avatarKey":null},{"date":"2026-01-13","time":"18:32:31","timeTooltip":"2026-01-13 18:32:31","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;Baron（急事语音&quot;加入了群聊","senderName":"马3","timestamp":1768300351,"avatarKey":null},{"date":"2026-01-13","time":"18:37:02","timeTooltip":"2026-01-13 18:37:02","isSend":false,"isMedia":false,"content":"&quot;校草差一点ᵛⁱᵖ&quot;邀请&quot;面包&quot;加入了群聊","senderName":"马3","timestamp":1768300622,"avatarKey":null},{"date":"2026-01-13","time":"18:48:00","timeTooltip":"2026-01-13 18:48:00","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;高小猪&quot;加入了群聊","senderName":"马3","timestamp":1768301280,"avatarKey":null},{"date":"2026-01-13","time":"18:48:52","timeTooltip":"2026-01-13 18:48:52","isSend":false,"isMedia":false,"content":"&quot;😉&quot;邀请&quot;小猴 （收马钞靓号 刀货）&quot;加入了群聊","senderName":"马3","timestamp":1768301332,"avatarKey":null},{"date":"2026-01-13","time":"18:50:26","timeTooltip":"2026-01-13 18:50:26","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;受伤的山羊&quot;加入了群聊","senderName":"马3","timestamp":1768301426,"avatarKey":null},{"date":"2026-01-13","time":"18:51:01","timeTooltip":"2026-01-13 18:51:01","isSend":false,"isMedia":false,"content":"&quot;校草差一点ᵛⁱᵖ&quot;邀请&quot;@伟、&quot;加入了群聊","senderName":"马3","timestamp":1768301461,"avatarKey":null},{"date":"2026-01-13","time":"18:53:21","timeTooltip":"2026-01-13 18:53:21","isSend":false,"isMedia":false,"content":"&quot;三金&quot;邀请&quot;self&quot;加入了群聊","senderName":"马3","timestamp":1768301601,"avatarKey":null},{"date":"2026-01-13","time":"19:02:45","timeTooltip":"2026-01-13 19:02:45","isSend":false,"isMedia":false,"content":"&quot;@伟、&quot;邀请&quot;一路上有你&quot;加入了群聊","senderName":"马3","timestamp":1768302165,"avatarKey":null},{"date":"2026-01-13","time":"19:06:05","timeTooltip":"2026-01-13 19:06:05","isSend":false,"isMedia":false,"content":"&quot;校草差一点ᵛⁱᵖ&quot;邀请&quot;黄河票务&quot;加入了群聊","senderName":"马3","timestamp":1768302365,"avatarKey":null},{"date":"2026-01-13","time":"19:06:25","timeTooltip":"2026-01-13 19:06:25","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;二号票务（实单没回弹语音&quot;加入了群聊","senderName":"马3","timestamp":1768302385,"avatarKey":null},{"date":"2026-01-13","time":"19:10:16","timeTooltip":"2026-01-13 19:10:16","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;RUI&quot;加入了群聊","senderName":"马3","timestamp":1768302616,"avatarKey":null},{"date":"2026-01-13","time":"19:11:40","timeTooltip":"2026-01-13 19:11:40","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;Ake&quot;加入了群聊","senderName":"马3","timestamp":1768302700,"avatarKey":null},{"date":"2026-01-13","time":"19:24:01","timeTooltip":"2026-01-13 19:24:01","isSend":false,"isMedia":false,"content":"&quot;长留&quot;邀请&quot;李俊&quot;加入了群聊","senderName":"马3","timestamp":1768303441,"avatarKey":null},{"date":"2026-01-13","time":"19:38:11","timeTooltip":"2026-01-13 19:38:11","isSend":false,"isMedia":false,"content":"&quot;长留&quot;邀请&quot;lijun（李俊）&quot;加入了群聊","senderName":"马3","timestamp":1768304291,"avatarKey":null},{"date":"2026-01-13","time":"19:48:40","timeTooltip":"2026-01-13 19:48:40","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;阿辉（深圳蔡依林厦门张韶涵&quot;加入了群聊","senderName":"马3","timestamp":1768304920,"avatarKey":null},{"date":"2026-01-13","time":"19:49:57","timeTooltip":"2026-01-13 19:49:57","isSend":false,"isMedia":false,"content":"&quot;校草差一点ᵛⁱᵖ&quot;邀请&quot;孙先生&quot;加入了群聊","senderName":"马3","timestamp":1768304997,"avatarKey":null},{"date":"2026-01-13","time":"19:58:29","timeTooltip":"2026-01-13 19:58:29","isSend":false,"isMedia":false,"content":"&quot;Jay永亮票务&quot;邀请&quot;Mr.酱子票务（郑州郭德纲接单中）&quot;加入了群聊","senderName":"马3","timestamp":1768305509,"avatarKey":null},{"date":"2026-01-13","time":"19:59:56","timeTooltip":"2026-01-13 19:59:56","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;L_xxz(回收马钞)&quot;加入了群聊","senderName":"马3","timestamp":1768305596,"avatarKey":null},{"date":"2026-01-13","time":"20:16:20","timeTooltip":"2026-01-13 20:16:20","isSend":false,"isMedia":false,"content":"&quot;校草差一点ᵛⁱᵖ&quot;邀请&quot;车车文娱～&quot;加入了群聊","senderName":"马3","timestamp":1768306580,"avatarKey":null},{"date":"2026-01-13","time":"20:16:36","timeTooltip":"2026-01-13 20:16:36","isSend":false,"isMedia":false,"content":"[图片]","senderName":"聚隆（售苹果ID 演唱会）","timestamp":1768306596,"avatarKey":null},{"date":"2026-01-13","time":"20:17:51","timeTooltip":"2026-01-13 20:17:51","isSend":false,"isMedia":false,"content":"这还打码","senderName":"Wave🌊","timestamp":1768306671,"avatarKey":null},{"date":"2026-01-13","time":"20:19:22","timeTooltip":"2026-01-13 20:19:22","isSend":false,"isMedia":false,"content":"@聚隆（求数藏马） 邮政有吗","senderName":"刘飞","timestamp":1768306762,"avatarKey":null},{"date":"2026-01-13","time":"20:20:06","timeTooltip":"2026-01-13 20:20:06","isSend":false,"isMedia":false,"content":"连接发发老板","senderName":"校草差一点（工作号）🔥","timestamp":1768306806,"avatarKey":null},{"date":"2026-01-13","time":"20:20:16","timeTooltip":"2026-01-13 20:20:16","isSend":false,"isMedia":false,"content":"@聚隆（求数藏马） 来个bp链接","senderName":"manager（马钞）","timestamp":1768306816,"avatarKey":null},{"date":"2026-01-13","time":"20:21:29","timeTooltip":"2026-01-13 20:21:29","isSend":false,"isMedia":false,"content":"有需要加我把我推名片给三个好友即可","senderName":"聚隆（售苹果ID 演唱会）","timestamp":1768306889,"avatarKey":null},{"date":"2026-01-13","time":"20:21:34","timeTooltip":"2026-01-13 20:21:34","isSend":false,"isMedia":false,"content":"目前只有四个银行","senderName":"聚隆（售苹果ID 演唱会）","timestamp":1768306894,"avatarKey":null},{"date":"2026-01-13","time":"20:21:38","timeTooltip":"2026-01-13 20:21:38","isSend":false,"isMedia":false,"content":"有其他会同步更新","senderName":"聚隆（售苹果ID 演唱会）","timestamp":1768306898,"avatarKey":null},{"date":"2026-01-13","time":"20:21:48","timeTooltip":"2026-01-13 20:21:48","isSend":false,"isMedia":false,"content":"哎呀[捂脸]","senderName":"校草差一点（工作号）🔥","timestamp":1768306908,"avatarKey":null},{"date":"2026-01-13","time":"20:21:55","timeTooltip":"2026-01-13 20:21:55","isSend":false,"isMedia":false,"content":"农业bp\nhttps://coin.abchina.com/static/mobile/index.html#/appoint/I168\n华夏bp:\nhttps://mcm.hxb.com.cn/m/coin/#/commemorateOrder?publish_channel_id=003\n浦发:\nhttps://wap.spdb.com.cn/mspmk-cli-coinrsv/CoinSub?dateTime=20241112220000&amp;coinNo=201929\n建行\nhttps://jinianbi.ccb.com/tran/WCCMainPlatV5?CCB_IBSVersion=V5&amp;SERVLET_NAME=WCCMainPlatV5&amp;TXCODE=NYB501&amp;PRODUCT_GROP=1&amp;PRODUCT_ID=201929&amp;LOGIN_TYPE=SNS","senderName":"Wave🌊","timestamp":1768306915,"avatarKey":null},{"date":"2026-01-13","time":"20:22:02","timeTooltip":"2026-01-13 20:22:02","isSend":false,"isMedia":false,"content":"直接分享多好 晚点都会有","senderName":"校草差一点（工作号）🔥","timestamp":1768306922,"avatarKey":null},{"date":"2026-01-13","time":"20:22:05","timeTooltip":"2026-01-13 20:22:05","isSend":false,"isMedia":false,"content":"这还藏着掖着","senderName":"Wave🌊","timestamp":1768306925,"avatarKey":null},{"date":"2026-01-13","time":"20:22:26","timeTooltip":"2026-01-13 20:22:26","isSend":false,"isMedia":false,"content":"没好友的老板走一波","senderName":"Wave🌊","timestamp":1768306946,"avatarKey":null},{"date":"2026-01-13","time":"20:22:28","timeTooltip":"2026-01-13 20:22:28","isSend":false,"isMedia":false,"content":"[动画表情]","senderName":"校草差一点（工作号）🔥","timestamp":1768306948,"avatarKey":null},{"date":"2026-01-13","time":"20:22:42","timeTooltip":"2026-01-13 20:22:42","isSend":false,"isMedia":false,"content":"8.8出软件","senderName":"Wave🌊","timestamp":1768306962,"avatarKey":null},{"date":"2026-01-13","time":"20:22:48","timeTooltip":"2026-01-13 20:22:48","isSend":false,"isMedia":false,"content":"[坏笑]","senderName":"Wave🌊","timestamp":1768306968,"avatarKey":null},{"date":"2026-01-13","time":"20:22:56","timeTooltip":"2026-01-13 20:22:56","isSend":false,"isMedia":false,"content":"我日 这么全面","senderName":"校草差一点（工作号）🔥","timestamp":1768306976,"avatarKey":null},{"date":"2026-01-13","time":"20:23:04","timeTooltip":"2026-01-13 20:23:04","isSend":false,"isMedia":false,"content":"手机PC都有","senderName":"Wave🌊","timestamp":1768306984,"avatarKey":null},{"date":"2026-01-13","time":"20:23:02","timeTooltip":"2026-01-13 20:23:02","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;独为倾城笑（接代拍、捡漏、录信息&quot;加入了群聊","senderName":"马3","timestamp":1768306982,"avatarKey":null},{"date":"2026-01-13","time":"20:23:20","timeTooltip":"2026-01-13 20:23:20","isSend":false,"isMedia":false,"content":"去年卡验证码了","senderName":"Wave🌊","timestamp":1768307000,"avatarKey":null},{"date":"2026-01-13","time":"20:23:21","timeTooltip":"2026-01-13 20:23:21","isSend":false,"isMedia":false,"content":"很烦","senderName":"Wave🌊","timestamp":1768307001,"avatarKey":null},{"date":"2026-01-13","time":"20:23:25","timeTooltip":"2026-01-13 20:23:25","isSend":false,"isMedia":false,"content":"电脑端的链接在哪里呀？","senderName":"金色传说🥇好运来","timestamp":1768307005,"avatarKey":null},{"date":"2026-01-13","time":"20:23:30","timeTooltip":"2026-01-13 20:23:30","isSend":false,"isMedia":false,"content":"纪念币测试网站:\nhttps://coin.abchina.com.cn/static/mbank/index.html#/appoint/I161（农行的）\nhttps://wap.spdb.com.cn/mspmk-cli-coinrsv/CoinSub?d（浦发的）\nhttps://mcm.hxb.com.cn/m/coin/#/commemorateOrder?publish_channel_id=003（华夏的）\nhttps://mbas.cmcoins.boc.cn/CoinSeller/coinNew/index.html#/appointmentInfo?（中国银行的）","senderName":"聚隆（售苹果ID 演唱会）","timestamp":1768307010,"avatarKey":null},{"date":"2026-01-13","time":"20:23:33","timeTooltip":"2026-01-13 20:23:33","isSend":false,"isMedia":false,"content":"[旺柴]","senderName":"聚隆（售苹果ID 演唱会）","timestamp":1768307013,"avatarKey":null},{"date":"2026-01-13","time":"20:24:21","timeTooltip":"2026-01-13 20:24:21","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;星火番外创意工作室&quot;加入了群聊","senderName":"马3","timestamp":1768307061,"avatarKey":null},{"date":"2026-01-13","time":"20:24:26","timeTooltip":"2026-01-13 20:24:26","isSend":false,"isMedia":false,"content":"屌最大的发一下","senderName":"金色传说🥇好运来","timestamp":1768307066,"avatarKey":null},{"date":"2026-01-13","time":"20:24:27","timeTooltip":"2026-01-13 20:24:27","isSend":false,"isMedia":false,"content":"这个手动应该比较好抢吧","senderName":"校草差一点（工作号）🔥","timestamp":1768307067,"avatarKey":null},{"date":"2026-01-13","time":"20:24:52","timeTooltip":"2026-01-13 20:24:52","isSend":false,"isMedia":false,"content":"&quot;星火番外创意工作室&quot;邀请&quot;MrLee6小李哥周杰伦猫眼查位置&quot;加入了群聊","senderName":"马3","timestamp":1768307092,"avatarKey":null},{"date":"2026-01-13","time":"20:24:55","timeTooltip":"2026-01-13 20:24:55","isSend":false,"isMedia":false,"content":"&quot;校草差一点ᵛⁱᵖ&quot;邀请&quot;XF🍉&quot;加入了群聊","senderName":"马3","timestamp":1768307095,"avatarKey":null},{"date":"2026-01-13","time":"20:24:59","timeTooltip":"2026-01-13 20:24:59","isSend":false,"isMedia":false,"content":"软件自动填信息","senderName":"Wave🌊","timestamp":1768307099,"avatarKey":null},{"date":"2026-01-13","time":"20:25:05","timeTooltip":"2026-01-13 20:25:05","isSend":false,"isMedia":false,"content":"等下纪念币我测试一下","senderName":"Wave🌊","timestamp":1768307105,"avatarKey":null},{"date":"2026-01-13","time":"20:26:13","timeTooltip":"2026-01-13 20:26:13","isSend":false,"isMedia":false,"content":"冲","senderName":"校草差一点（工作号）🔥","timestamp":1768307173,"avatarKey":null},{"date":"2026-01-13","time":"20:28:40","timeTooltip":"2026-01-13 20:28:40","isSend":false,"isMedia":false,"content":"[视频 5秒]","senderName":"Wave🌊","timestamp":1768307320,"avatarKey":null},{"date":"2026-01-13","time":"20:29:23","timeTooltip":"2026-01-13 20:29:23","isSend":false,"isMedia":false,"content":"？","senderName":"校草差一点（工作号）🔥","timestamp":1768307363,"avatarKey":null},{"date":"2026-01-13","time":"20:29:53","timeTooltip":"2026-01-13 20:29:53","isSend":false,"isMedia":false,"content":"梭哈是一种智慧","senderName":"Wave🌊","timestamp":1768307393,"avatarKey":null},{"date":"2026-01-13","time":"20:30:28","timeTooltip":"2026-01-13 20:30:28","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;暗里着迷.（没回多发几次）&quot;加入了群聊","senderName":"马3","timestamp":1768307428,"avatarKey":null},{"date":"2026-01-13","time":"20:30:33","timeTooltip":"2026-01-13 20:30:33","isSend":false,"isMedia":false,"content":"你待会儿测试一下你那个币好不好用软件","senderName":"校草差一点（工作号）🔥","timestamp":1768307433,"avatarKey":null},{"date":"2026-01-13","time":"20:38:28","timeTooltip":"2026-01-13 20:38:28","isSend":false,"isMedia":false,"content":"[图片]","senderName":"和记 👺不回复请语音","timestamp":1768307908,"avatarKey":null},{"date":"2026-01-13","time":"20:38:37","timeTooltip":"2026-01-13 20:38:37","isSend":false,"isMedia":false,"content":"没网点？","senderName":"和记 👺不回复请语音","timestamp":1768307917,"avatarKey":null},{"date":"2026-01-13","time":"20:43:00","timeTooltip":"2026-01-13 20:43:00","isSend":false,"isMedia":false,"content":"撤回了一条消息","senderName":"马3","timestamp":1768308180,"avatarKey":null},{"date":"2026-01-13","time":"20:43:12","timeTooltip":"2026-01-13 20:43:12","isSend":false,"isMedia":false,"content":"1🧧求高质量马钞群","senderName":"暗里着迷.（没回多发几次）","timestamp":1768308192,"avatarKey":null},{"date":"2026-01-13","time":"20:43:17","timeTooltip":"2026-01-13 20:43:17","isSend":false,"isMedia":false,"content":"笑死","senderName":"三金","timestamp":1768308197,"avatarKey":null},{"date":"2026-01-13","time":"20:43:36","timeTooltip":"2026-01-13 20:43:36","isSend":false,"isMedia":false,"content":"[破涕为笑]","senderName":"暗里着迷.（没回多发几次）","timestamp":1768308216,"avatarKey":null},{"date":"2026-01-13","time":"20:44:43","timeTooltip":"2026-01-13 20:44:43","isSend":false,"isMedia":false,"content":"&quot;天文&quot;邀请&quot;平安健康每一天 98折接进货2000+&quot;加入了群聊","senderName":"马3","timestamp":1768308283,"avatarKey":null},{"date":"2026-01-13","time":"20:47:55","timeTooltip":"2026-01-13 20:47:55","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;哈哈🎫商贸&quot;加入了群聊","senderName":"马3","timestamp":1768308475,"avatarKey":null},{"date":"2026-01-13","time":"20:53:05","timeTooltip":"2026-01-13 20:53:05","isSend":false,"isMedia":false,"content":"[图片]","senderName":"三金","timestamp":1768308785,"avatarKey":null},{"date":"2026-01-13","time":"20:53:10","timeTooltip":"2026-01-13 20:53:10","isSend":false,"isMedia":false,"content":"恶心人","senderName":"三金","timestamp":1768308790,"avatarKey":null},{"date":"2026-01-13","time":"20:53:30","timeTooltip":"2026-01-13 20:53:30","isSend":false,"isMedia":false,"content":"哦吼，那这种软件就不行了","senderName":"校草差一点（工作号）🔥","timestamp":1768308810,"avatarKey":null},{"date":"2026-01-13","time":"20:53:41","timeTooltip":"2026-01-13 20:53:41","isSend":false,"isMedia":false,"content":"歇菜了估计","senderName":"三金","timestamp":1768308821,"avatarKey":null},{"date":"2026-01-13","time":"20:53:50","timeTooltip":"2026-01-13 20:53:50","isSend":false,"isMedia":false,"content":"手搓了","senderName":"三金","timestamp":1768308830,"avatarKey":null},{"date":"2026-01-13","time":"21:03:48","timeTooltip":"2026-01-13 21:03:48","isSend":false,"isMedia":false,"content":"&quot;白志昊🎫&quot;邀请&quot;ZZ1&quot;加入了群聊","senderName":"马3","timestamp":1768309428,"avatarKey":null},{"date":"2026-01-13","time":"21:47:40","timeTooltip":"2026-01-13 21:47:40","isSend":false,"isMedia":false,"content":"&quot;Miraitowa&quot;邀请&quot;L🇨🇳. 2.0&quot;加入了群聊","senderName":"马3","timestamp":1768312060,"avatarKey":null},{"date":"2026-01-13","time":"21:47:40","timeTooltip":"2026-01-13 21:47:40","isSend":false,"isMedia":false,"content":"&quot;L🇨🇳. 2.0&quot;与群里其他人都不是朋友关系，请注意隐私安全","senderName":"马3","timestamp":1768312060,"avatarKey":null},{"date":"2026-01-13","time":"21:51:42","timeTooltip":"2026-01-13 21:51:42","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;夜空中最亮的星&quot;加入了群聊","senderName":"马3","timestamp":1768312302,"avatarKey":null},{"date":"2026-01-13","time":"21:55:17","timeTooltip":"2026-01-13 21:55:17","isSend":false,"isMedia":false,"content":"36出马钞标10  7天期 1000张","senderName":"张映南","timestamp":1768312517,"avatarKey":null},{"date":"2026-01-13","time":"21:56:09","timeTooltip":"2026-01-13 21:56:09","isSend":false,"isMedia":false,"content":"中了","senderName":"面包","timestamp":1768312569,"avatarKey":null},{"date":"2026-01-13","time":"21:56:12","timeTooltip":"2026-01-13 21:56:12","isSend":false,"isMedia":false,"content":"付吗","senderName":"面包","timestamp":1768312572,"avatarKey":null},{"date":"2026-01-13","time":"22:04:08","timeTooltip":"2026-01-13 22:04:08","isSend":false,"isMedia":false,"content":"🧧求高300➕马钞群","senderName":"暗里着迷.（没回多发几次）","timestamp":1768313048,"avatarKey":null},{"date":"2026-01-13","time":"22:05:25","timeTooltip":"2026-01-13 22:05:25","isSend":false,"isMedia":false,"content":"得个0","senderName":"和记 👺不回复请语音","timestamp":1768313125,"avatarKey":null},{"date":"2026-01-13","time":"22:06:22","timeTooltip":"2026-01-13 22:06:22","isSend":false,"isMedia":false,"content":"不付，有了","senderName":"葫芦娃","timestamp":1768313182,"avatarKey":null},{"date":"2026-01-13","time":"22:15:40","timeTooltip":"2026-01-13 22:15:40","isSend":false,"isMedia":false,"content":"难","senderName":"校草差一点（工作号）🔥","timestamp":1768313740,"avatarKey":null},{"date":"2026-01-13","time":"22:15:39","timeTooltip":"2026-01-13 22:15:39","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;斌子&quot;加入了群聊","senderName":"马3","timestamp":1768313739,"avatarKey":null},{"date":"2026-01-13","time":"22:15:50","timeTooltip":"2026-01-13 22:15:50","isSend":false,"isMedia":false,"content":"卡死了","senderName":"Wave🌊","timestamp":1768313750,"avatarKey":null},{"date":"2026-01-13","time":"22:16:04","timeTooltip":"2026-01-13 22:16:04","isSend":false,"isMedia":false,"content":"死了 顾着加交易群","senderName":"三金","timestamp":1768313764,"avatarKey":null},{"date":"2026-01-13","time":"22:16:06","timeTooltip":"2026-01-13 22:16:06","isSend":false,"isMedia":false,"content":"我操，有个B都这么难超的话，没法安排了","senderName":"校草差一点（工作号）🔥","timestamp":1768313766,"avatarKey":null},{"date":"2026-01-13","time":"22:16:08","timeTooltip":"2026-01-13 22:16:08","isSend":false,"isMedia":false,"content":"没货怎么交易","senderName":"三金","timestamp":1768313768,"avatarKey":null},{"date":"2026-01-13","time":"22:16:12","timeTooltip":"2026-01-13 22:16:12","isSend":false,"isMedia":false,"content":"币利润也不高啊","senderName":"快乐小博","timestamp":1768313772,"avatarKey":null},{"date":"2026-01-13","time":"22:16:13","timeTooltip":"2026-01-13 22:16:13","isSend":false,"isMedia":false,"content":"这么难","senderName":"快乐小博","timestamp":1768313773,"avatarKey":null},{"date":"2026-01-13","time":"22:16:15","timeTooltip":"2026-01-13 22:16:15","isSend":false,"isMedia":false,"content":"[动画表情]","senderName":"RUI","timestamp":1768313775,"avatarKey":null},{"date":"2026-01-13","time":"22:16:45","timeTooltip":"2026-01-13 22:16:45","isSend":false,"isMedia":false,"content":"都拿这个练手","senderName":"Baron（急事语音","timestamp":1768313805,"avatarKey":null},{"date":"2026-01-13","time":"22:16:50","timeTooltip":"2026-01-13 22:16:50","isSend":false,"isMedia":false,"content":"到马钞会卡的","senderName":"Baron（急事语音","timestamp":1768313810,"avatarKey":null},{"date":"2026-01-13","time":"22:16:52","timeTooltip":"2026-01-13 22:16:52","isSend":false,"isMedia":false,"content":"机会多","senderName":"Baron（急事语音","timestamp":1768313812,"avatarKey":null},{"date":"2026-01-13","time":"22:16:59","timeTooltip":"2026-01-13 22:16:59","isSend":false,"isMedia":false,"content":"14.8出1000枚 7天","senderName":"南山南。","timestamp":1768313819,"avatarKey":null},{"date":"2026-01-13","time":"22:17:04","timeTooltip":"2026-01-13 22:17:04","isSend":false,"isMedia":false,"content":"谁坚持就是谁的[强]","senderName":"Baron（急事语音","timestamp":1768313824,"avatarKey":null},{"date":"2026-01-13","time":"22:17:21","timeTooltip":"2026-01-13 22:17:21","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;Augety&quot;加入了群聊","senderName":"马3","timestamp":1768313841,"avatarKey":null},{"date":"2026-01-13","time":"22:21:51","timeTooltip":"2026-01-13 22:21:51","isSend":true,"isMedia":false,"content":"马钞马币实盘交易网站 www.niuniubase.top，行情一目了然，支持做多做空，目前行情马币最高15元。","senderName":"吕广泰","timestamp":1768314111,"avatarKey":null},{"date":"2026-01-13","time":"22:22:13","timeTooltip":"2026-01-13 22:22:13","isSend":false,"isMedia":false,"content":"&quot;校草差一点ᵛⁱᵖ&quot;邀请&quot;牛牛：&quot;加入了群聊","senderName":"马3","timestamp":1768314133,"avatarKey":null},{"date":"2026-01-13","time":"22:22:26","timeTooltip":"2026-01-13 22:22:26","isSend":false,"isMedia":false,"content":"这个币怎么这么难约啊？待会儿钞票不是机会更少？这个有科技吗","senderName":"校草差一点ᵛⁱᵖ","timestamp":1768314146,"avatarKey":null},{"date":"2026-01-13","time":"22:22:35","timeTooltip":"2026-01-13 22:22:35","isSend":false,"isMedia":false,"content":"有科技","senderName":"Wave🌊","timestamp":1768314155,"avatarKey":null},{"date":"2026-01-13","time":"22:22:37","timeTooltip":"2026-01-13 22:22:37","isSend":false,"isMedia":false,"content":"这个币怎么这么难约啊？待会儿钞票不是机会更少？这个有科技吗","senderName":"牛牛（消息慢回","timestamp":1768314157,"avatarKey":null},{"date":"2026-01-13","time":"22:22:37","timeTooltip":"2026-01-13 22:22:37","isSend":false,"isMedia":false,"content":"科技收费贵","senderName":"Wave🌊","timestamp":1768314157,"avatarKey":null},{"date":"2026-01-13","time":"22:22:39","timeTooltip":"2026-01-13 22:22:39","isSend":false,"isMedia":false,"content":"🈶","senderName":"吱吱","timestamp":1768314159,"avatarKey":null},{"date":"2026-01-13","time":"22:22:43","timeTooltip":"2026-01-13 22:22:43","isSend":false,"isMedia":false,"content":"今年难搞","senderName":"三金","timestamp":1768314163,"avatarKey":null},{"date":"2026-01-13","time":"22:22:45","timeTooltip":"2026-01-13 22:22:45","isSend":false,"isMedia":false,"content":"这个币怎么这么难约啊？待会儿钞票不是机会更少？这个有科技吗","senderName":"紫渝演出（代订机票🎤演出体验）","timestamp":1768314165,"avatarKey":null},{"date":"2026-01-13","time":"22:22:48","timeTooltip":"2026-01-13 22:22:48","isSend":false,"isMedia":false,"content":"今年科技大战","senderName":"Wave🌊","timestamp":1768314168,"avatarKey":null},{"date":"2026-01-13","time":"22:22:57","timeTooltip":"2026-01-13 22:22:57","isSend":false,"isMedia":false,"content":"今年马钞还是可以玩的","senderName":"吱吱","timestamp":1768314177,"avatarKey":null},{"date":"2026-01-13","time":"22:23:00","timeTooltip":"2026-01-13 22:23:00","isSend":false,"isMedia":false,"content":"[图片]","senderName":"校草差一点ᵛⁱᵖ","timestamp":1768314180,"avatarKey":null},{"date":"2026-01-13","time":"22:23:01","timeTooltip":"2026-01-13 22:23:01","isSend":false,"isMedia":false,"content":"看涨","senderName":"吱吱","timestamp":1768314181,"avatarKey":null},{"date":"2026-01-13","time":"22:23:01","timeTooltip":"2026-01-13 22:23:01","isSend":false,"isMedia":false,"content":"往年手搓都十几套最少","senderName":"三金","timestamp":1768314181,"avatarKey":null},{"date":"2026-01-13","time":"22:23:03","timeTooltip":"2026-01-13 22:23:03","isSend":false,"isMedia":false,"content":"马到成功","senderName":"吱吱","timestamp":1768314183,"avatarKey":null},{"date":"2026-01-13","time":"22:23:07","timeTooltip":"2026-01-13 22:23:07","isSend":false,"isMedia":false,"content":"哪个老板是专家，来解答一下这几个价格不一样什么区别","senderName":"校草差一点ᵛⁱᵖ","timestamp":1768314187,"avatarKey":null},{"date":"2026-01-13","time":"22:23:27","timeTooltip":"2026-01-13 22:23:27","isSend":false,"isMedia":false,"content":"一亿张都涨啊","senderName":"校草差一点ᵛⁱᵖ","timestamp":1768314207,"avatarKey":null},{"date":"2026-01-13","time":"22:23:28","timeTooltip":"2026-01-13 22:23:28","isSend":false,"isMedia":false,"content":"@校草差一点ᵛⁱᵖ 百度","senderName":"吱吱","timestamp":1768314208,"avatarKey":null},{"date":"2026-01-13","time":"22:23:28","timeTooltip":"2026-01-13 22:23:28","isSend":false,"isMedia":false,"content":"开头 001-000","senderName":"三金","timestamp":1768314208,"avatarKey":null},{"date":"2026-01-13","time":"22:23:44","timeTooltip":"2026-01-13 22:23:44","isSend":false,"isMedia":false,"content":"看人家挂的价格","senderName":"三金","timestamp":1768314224,"avatarKey":null},{"date":"2026-01-13","time":"22:26:28","timeTooltip":"2026-01-13 22:26:28","isSend":false,"isMedia":false,"content":"准备了","senderName":"校草差一点（工作号）🔥","timestamp":1768314388,"avatarKey":null},{"date":"2026-01-13","time":"22:26:44","timeTooltip":"2026-01-13 22:26:44","isSend":false,"isMedia":false,"content":"&quot;小鬼&quot;邀请&quot;然然票务（内外娱 招代理）&quot;加入了群聊","senderName":"马3","timestamp":1768314404,"avatarKey":null},{"date":"2026-01-13","time":"22:28:12","timeTooltip":"2026-01-13 22:28:12","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;昊东&quot;加入了群聊","senderName":"马3","timestamp":1768314492,"avatarKey":null},{"date":"2026-01-13","time":"22:28:25","timeTooltip":"2026-01-13 22:28:25","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;千行&quot;加入了群聊","senderName":"马3","timestamp":1768314505,"avatarKey":null},{"date":"2026-01-13","time":"22:28:45","timeTooltip":"2026-01-13 22:28:45","isSend":false,"isMedia":false,"content":"&quot;ʚ🙊ྀིɞ&quot;邀请&quot;AOA&quot;加入了群聊","senderName":"马3","timestamp":1768314525,"avatarKey":null},{"date":"2026-01-13","time":"22:29:04","timeTooltip":"2026-01-13 22:29:04","isSend":false,"isMedia":false,"content":"收点马炒","senderName":"AOA","timestamp":1768314544,"avatarKey":null},{"date":"2026-01-13","time":"22:30:20","timeTooltip":"2026-01-13 22:30:20","isSend":false,"isMedia":false,"content":"美团有Bug，苹果17 pm 买一送一 10:30准备购买","senderName":"校草差一点（工作号）🔥","timestamp":1768314620,"avatarKey":null},{"date":"2026-01-13","time":"22:33:45","timeTooltip":"2026-01-13 22:33:45","isSend":false,"isMedia":false,"content":"收点马炒","senderName":"星梦笺羽🎫","timestamp":1768314825,"avatarKey":null},{"date":"2026-01-13","time":"22:33:56","timeTooltip":"2026-01-13 22:33:56","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;Mi Manchi&quot;加入了群聊","senderName":"马3","timestamp":1768314836,"avatarKey":null},{"date":"2026-01-13","time":"22:35:42","timeTooltip":"2026-01-13 22:35:42","isSend":false,"isMedia":false,"content":"多少收马炒啊","senderName":"AOA","timestamp":1768314942,"avatarKey":null},{"date":"2026-01-13","time":"22:36:04","timeTooltip":"2026-01-13 22:36:04","isSend":false,"isMedia":false,"content":"马超什么价？","senderName":"面包","timestamp":1768314964,"avatarKey":null},{"date":"2026-01-13","time":"22:37:08","timeTooltip":"2026-01-13 22:37:08","isSend":false,"isMedia":false,"content":"&quot;佘文安&quot;邀请&quot;别忘（大麦破盾🚗高爆）&quot;加入了群聊","senderName":"马3","timestamp":1768315028,"avatarKey":null},{"date":"2026-01-13","time":"22:38:42","timeTooltip":"2026-01-13 22:38:42","isSend":false,"isMedia":false,"content":"&quot;@伟、&quot;邀请&quot;马小跳&quot;加入了群聊","senderName":"马3","timestamp":1768315122,"avatarKey":null},{"date":"2026-01-13","time":"22:38:42","timeTooltip":"2026-01-13 22:38:42","isSend":false,"isMedia":false,"content":"&quot;马小跳&quot;与群里其他人都不是朋友关系，请注意隐私安全","senderName":"马3","timestamp":1768315122,"avatarKey":null},{"date":"2026-01-13","time":"22:39:12","timeTooltip":"2026-01-13 22:39:12","isSend":true,"isMedia":false,"content":"马钞马币实盘交易网站 www.niuniubase.top，行情一目了然，支持做多做空，目前行情马币最高15元。马钞35","senderName":"吕广泰","timestamp":1768315152,"avatarKey":null},{"date":"2026-01-13","time":"22:39:34","timeTooltip":"2026-01-13 22:39:34","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;A万能小哆啦🎬上午不在线&quot;加入了群聊","senderName":"马3","timestamp":1768315174,"avatarKey":null},{"date":"2026-01-13","time":"22:41:55","timeTooltip":"2026-01-13 22:41:55","isSend":false,"isMedia":false,"content":"⚠️收马钞\n\n33收20连  3天期 \n\n35收标十  3天期\n\n\n⚠️熟人来\n不熟反打定金5/张\n私聊确认即可[抱拳][抱拳][抱拳]","senderName":"蓝海霸王蟹","timestamp":1768315315,"avatarKey":null},{"date":"2026-01-13","time":"22:42:16","timeTooltip":"2026-01-13 22:42:16","isSend":false,"isMedia":false,"content":"先款13.5收币 只要熟人","senderName":"裤衩儿（好友已满主页加小号","timestamp":1768315336,"avatarKey":null},{"date":"2026-01-13","time":"22:42:22","timeTooltip":"2026-01-13 22:42:22","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;吴（不收微信）&quot;加入了群聊","senderName":"马3","timestamp":1768315342,"avatarKey":null},{"date":"2026-01-13","time":"22:42:36","timeTooltip":"2026-01-13 22:42:36","isSend":false,"isMedia":false,"content":"⚠️收马钞马币\n\n13.5收马币三天\n\n32收不挑号散钞七天\n\n36收带4标十三天\n\n33收带4标十七天\n\n3700收带4刀货三天\n\n3600收带4刀货七天\n\n⚠️靓号私聊谈价，不熟反打定金2元一枚5元一张，量大可加，私聊确认即可[抱拳][抱拳][抱拳]","senderName":"聚隆（售苹果ID 演唱会）","timestamp":1768315356,"avatarKey":null},{"date":"2026-01-13","time":"22:43:26","timeTooltip":"2026-01-13 22:43:26","isSend":false,"isMedia":false,"content":"35收标10 标配 1000 张 7天期，反大5元","senderName":"张映南","timestamp":1768315406,"avatarKey":null},{"date":"2026-01-13","time":"22:43:57","timeTooltip":"2026-01-13 22:43:57","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;一枝花&quot;加入了群聊","senderName":"马3","timestamp":1768315437,"avatarKey":null},{"date":"2026-01-13","time":"22:44:51","timeTooltip":"2026-01-13 22:44:51","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;Lee 娱乐🎫 龙龙 - （接代拍）&quot;加入了群聊","senderName":"马3","timestamp":1768315491,"avatarKey":null},{"date":"2026-01-13","time":"22:47:16","timeTooltip":"2026-01-13 22:47:16","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;zen🐮&quot;加入了群聊","senderName":"马3","timestamp":1768315636,"avatarKey":null},{"date":"2026-01-13","time":"22:47:40","timeTooltip":"2026-01-13 22:47:40","isSend":false,"isMedia":false,"content":"34收带4标十  三天\n\n33收带4标十  七天\n\n3700收带4刀货三天\n\n3600收带4刀货七天\n\n只收钞，反打5r一张。不包邮","senderName":"星梦笺羽🎫","timestamp":1768315660,"avatarKey":null},{"date":"2026-01-13","time":"22:48:42","timeTooltip":"2026-01-13 22:48:42","isSend":true,"isMedia":false,"content":"马钞马币实盘交易网站 www.niuniubase.top，行情一目了然，支持做多做空，目前行情马币最高15元。马钞35","senderName":"吕广泰","timestamp":1768315722,"avatarKey":null},{"date":"2026-01-13","time":"22:49:27","timeTooltip":"2026-01-13 22:49:27","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;Seagull🌊（小凡互联网）&quot;加入了群聊","senderName":"马3","timestamp":1768315767,"avatarKey":null},{"date":"2026-01-13","time":"22:49:46","timeTooltip":"2026-01-13 22:49:46","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;Luv&quot;加入了群聊","senderName":"马3","timestamp":1768315786,"avatarKey":null},{"date":"2026-01-13","time":"22:49:46","timeTooltip":"2026-01-13 22:49:46","isSend":false,"isMedia":false,"content":"&quot;吱吱（联系不到请找朋友圈置顶客服&quot;邀请&quot;56&quot;加入了群聊","senderName":"马3","timestamp":1768315786,"avatarKey":null},{"date":"2026-01-13","time":"22:49:51","timeTooltip":"2026-01-13 22:49:51","isSend":false,"isMedia":false,"content":"35收标十  7天期\n\n\n⚠️熟人来\n不熟反打定金5/张\n私聊确认即可[抱拳][抱拳][抱拳]","senderName":"张映南","timestamp":1768315791,"avatarKey":null},{"date":"2026-01-13","time":"22:50:09","timeTooltip":"2026-01-13 22:50:09","isSend":false,"isMedia":false,"content":"&quot;蓝海霸王蟹&quot;邀请&quot;AAA华运先生&quot;加入了群聊","senderName":"马3","timestamp":1768315809,"avatarKey":null},{"date":"2026-01-13","time":"22:50:46","timeTooltip":"2026-01-13 22:50:46","isSend":false,"isMedia":false,"content":"标+是啥","senderName":"和记 👺不回复请语音","timestamp":1768315846,"avatarKey":null},{"date":"2026-01-13","time":"22:50:56","timeTooltip":"2026-01-13 22:50:56","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;A泰州西西（全国演唱会代拍）&quot;加入了群聊","senderName":"马3","timestamp":1768315856,"avatarKey":null},{"date":"2026-01-13","time":"22:50:57","timeTooltip":"2026-01-13 22:50:57","isSend":false,"isMedia":false,"content":"&quot;吱吱（联系不到请找朋友圈置顶客服&quot;邀请&quot;LA&quot;加入了群聊","senderName":"马3","timestamp":1768315857,"avatarKey":null},{"date":"2026-01-13","time":"22:51:11","timeTooltip":"2026-01-13 22:51:11","isSend":false,"isMedia":false,"content":"…","senderName":"虞瑞","timestamp":1768315871,"avatarKey":null},{"date":"2026-01-13","time":"22:51:15","timeTooltip":"2026-01-13 22:51:15","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;浩成 接全国各地演出票务&quot;加入了群聊","senderName":"马3","timestamp":1768315875,"avatarKey":null},{"date":"2026-01-13","time":"22:51:24","timeTooltip":"2026-01-13 22:51:24","isSend":false,"isMedia":false,"content":"标10","senderName":"吱吱","timestamp":1768315884,"avatarKey":null},{"date":"2026-01-13","time":"22:51:22","timeTooltip":"2026-01-13 22:51:22","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;柠檬（急事语音&quot;加入了群聊","senderName":"马3","timestamp":1768315882,"avatarKey":null},{"date":"2026-01-13","time":"22:53:11","timeTooltip":"2026-01-13 22:53:11","isSend":false,"isMedia":false,"content":"33收20连  3天期 \n\n35收标十  3天期\n\n\n350收吉林省长春市资格\n\n⚠️熟人来\n不熟反打定金5/张\n私聊确认即可[抱拳][抱拳][抱拳]","senderName":"蓝海霸王蟹","timestamp":1768315991,"avatarKey":null},{"date":"2026-01-13","time":"22:54:15","timeTooltip":"2026-01-13 22:54:15","isSend":false,"isMedia":false,"content":"哈哈哈哈哈哈哈哈","senderName":"丢丢（香港周深","timestamp":1768316055,"avatarKey":null},{"date":"2026-01-13","time":"22:54:19","timeTooltip":"2026-01-13 22:54:19","isSend":false,"isMedia":false,"content":"[动画表情]","senderName":"丢丢（香港周深","timestamp":1768316059,"avatarKey":null},{"date":"2026-01-13","time":"22:54:36","timeTooltip":"2026-01-13 22:54:36","isSend":false,"isMedia":false,"content":"十连号","senderName":"A泰州西西（全国演唱会代拍）","timestamp":1768316076,"avatarKey":null},{"date":"2026-01-13","time":"22:54:51","timeTooltip":"2026-01-13 22:54:51","isSend":false,"isMedia":false,"content":"先款13.5收币 只要熟人","senderName":"裤衩儿（好友已满主页加小号","timestamp":1768316091,"avatarKey":null},{"date":"2026-01-13","time":"22:55:22","timeTooltip":"2026-01-13 22:55:22","isSend":false,"isMedia":false,"content":"&quot;白志昊🎫&quot;邀请&quot;acrr🎫(没回弹语音)&quot;加入了群聊","senderName":"马3","timestamp":1768316122,"avatarKey":null},{"date":"2026-01-13","time":"22:55:28","timeTooltip":"2026-01-13 22:55:28","isSend":false,"isMedia":false,"content":"标十也不是十连号啊","senderName":"虞瑞","timestamp":1768316128,"avatarKey":null},{"date":"2026-01-13","time":"22:55:49","timeTooltip":"2026-01-13 22:55:49","isSend":false,"isMedia":false,"content":"是x1到x0","senderName":"虞瑞","timestamp":1768316149,"avatarKey":null},{"date":"2026-01-13","time":"22:55:52","timeTooltip":"2026-01-13 22:55:52","isSend":false,"isMedia":false,"content":"33收20连  3天期 \n35收标十   3天期\n\n⚠️熟人来\n不熟反打定金5/张\n或者找中介担保\n私聊确认即可[抱拳][抱拳][抱拳]\n\n💰收吉林长春资格\n💰本人在长春方便\n💰要求飞证给我 量大来谈","senderName":"蓝海霸王蟹","timestamp":1768316152,"avatarKey":null},{"date":"2026-01-13","time":"22:56:10","timeTooltip":"2026-01-13 22:56:10","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;Shy-Viki&quot;加入了群聊","senderName":"马3","timestamp":1768316170,"avatarKey":null},{"date":"2026-01-13","time":"22:56:42","timeTooltip":"2026-01-13 22:56:42","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;门门位&quot;加入了群聊","senderName":"马3","timestamp":1768316202,"avatarKey":null},{"date":"2026-01-13","time":"22:56:57","timeTooltip":"2026-01-13 22:56:57","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;Aa张 周杰伦 薛之谦 新主题&quot;加入了群聊","senderName":"马3","timestamp":1768316217,"avatarKey":null},{"date":"2026-01-13","time":"22:57:03","timeTooltip":"2026-01-13 22:57:03","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;Uncle W&quot;加入了群聊","senderName":"马3","timestamp":1768316223,"avatarKey":null},{"date":"2026-01-13","time":"22:57:08","timeTooltip":"2026-01-13 22:57:08","isSend":false,"isMedia":false,"content":"报价报价","senderName":"Aa张 周杰伦 薛之谦 新主题","timestamp":1768316228,"avatarKey":null},{"date":"2026-01-13","time":"22:57:24","timeTooltip":"2026-01-13 22:57:24","isSend":false,"isMedia":false,"content":"青岛36套\n济南17套\n佛山6套","senderName":"Aa张 周杰伦 薛之谦 新主题","timestamp":1768316244,"avatarKey":null},{"date":"2026-01-13","time":"22:57:48","timeTooltip":"2026-01-13 22:57:48","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;ι．冷沐兮 ァ何以为殇シ&quot;加入了群聊","senderName":"马3","timestamp":1768316268,"avatarKey":null},{"date":"2026-01-13","time":"22:58:02","timeTooltip":"2026-01-13 22:58:02","isSend":false,"isMedia":false,"content":"&quot;丢丢&quot;邀请&quot;xd&quot;加入了群聊","senderName":"马3","timestamp":1768316282,"avatarKey":null},{"date":"2026-01-13","time":"22:58:07","timeTooltip":"2026-01-13 22:58:07","isSend":false,"isMedia":false,"content":"x什么意思 快说呀 我还是不懂","senderName":"丢丢（香港周深","timestamp":1768316287,"avatarKey":null},{"date":"2026-01-13","time":"22:58:10","timeTooltip":"2026-01-13 22:58:10","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;看海🎫(接TF荣耀之战)&quot;加入了群聊","senderName":"马3","timestamp":1768316290,"avatarKey":null},{"date":"2026-01-13","time":"22:58:17","timeTooltip":"2026-01-13 22:58:17","isSend":false,"isMedia":false,"content":"马钞🐎\n35收标十  7天期\n3600收标百，不挑号10刀，7天期\n定金3/张，1000/刀，以上全部单号款","senderName":"星宇票务（消息不回就是被禁言）","timestamp":1768316297,"avatarKey":null},{"date":"2026-01-13","time":"22:58:16","timeTooltip":"2026-01-13 22:58:16","isSend":false,"isMedia":false,"content":"&quot;Aa张 周杰伦 薛之谦 新主题&quot;邀请&quot;🦈（休养中）&quot;加入了群聊","senderName":"马3","timestamp":1768316296,"avatarKey":null},{"date":"2026-01-13","time":"22:58:20","timeTooltip":"2026-01-13 22:58:20","isSend":false,"isMedia":false,"content":"是你以后进的厂","senderName":"虞瑞","timestamp":1768316300,"avatarKey":null},{"date":"2026-01-13","time":"22:58:21","timeTooltip":"2026-01-13 22:58:21","isSend":false,"isMedia":false,"content":"⚠️收马钞马币\n\n13.5收马币三天\n\n32收不挑号散钞七天\n\n34收带4标十三天\n\n33收带4标十七天\n\n3700收带4刀货三天\n\n3600收带4刀货七天\n\n⚠️靓号私聊谈价，不熟反打定金2元一枚5元一张，量大可加，私聊确认即可[抱拳][抱拳][抱拳]","senderName":"普林斯","timestamp":1768316301,"avatarKey":null},{"date":"2026-01-13","time":"22:58:31","timeTooltip":"2026-01-13 22:58:31","isSend":false,"isMedia":false,"content":"收马钞标十  3天期 35\n熟人来，不熟反打\n定金5/张","senderName":"董安然🎫","timestamp":1768316311,"avatarKey":null},{"date":"2026-01-13","time":"22:58:37","timeTooltip":"2026-01-13 22:58:37","isSend":false,"isMedia":false,"content":"@丢丢 ","senderName":"虞瑞","timestamp":1768316317,"avatarKey":null},{"date":"2026-01-13","time":"22:58:47","timeTooltip":"2026-01-13 22:58:47","isSend":false,"isMedia":false,"content":"[动画表情]","senderName":"丢丢（香港周深","timestamp":1768316327,"avatarKey":null},{"date":"2026-01-13","time":"22:58:58","timeTooltip":"2026-01-13 22:58:58","isSend":false,"isMedia":false,"content":"33收20连  3天期 \n35收标十   3天期\n\n⚠️熟人来\n不熟反打定金5/张\n或者找中介担保\n私聊确认即可[抱拳][抱拳][抱拳]\n\n💰收吉林长春资格\n💰本人在长春方便\n💰要求飞证给我 量大来谈","senderName":"蓝海霸王蟹","timestamp":1768316338,"avatarKey":null},{"date":"2026-01-13","time":"22:59:30","timeTooltip":"2026-01-13 22:59:30","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;A票券卡（小全）18696704418&quot;加入了群聊","senderName":"马3","timestamp":1768316370,"avatarKey":null},{"date":"2026-01-13","time":"22:59:31","timeTooltip":"2026-01-13 22:59:31","isSend":false,"isMedia":false,"content":"&quot;杰仔🎫（开始赚钱版）&quot;邀请&quot;ZZZ&quot;加入了群聊","senderName":"马3","timestamp":1768316371,"avatarKey":null},{"date":"2026-01-13","time":"22:59:36","timeTooltip":"2026-01-13 22:59:36","isSend":false,"isMedia":false,"content":"马钞🐎\n35收标十  7天期\n3600收标百，不挑号10刀，7天期\n定金3/张，1000/刀，以上全部单号款","senderName":"星宇票务（消息不回就是被禁言）","timestamp":1768316376,"avatarKey":null},{"date":"2026-01-13","time":"22:59:38","timeTooltip":"2026-01-13 22:59:38","isSend":false,"isMedia":false,"content":"&quot;杰仔🎫（开始赚钱版）&quot;邀请&quot;随风🎫（接全国演出&quot;加入了群聊","senderName":"马3","timestamp":1768316378,"avatarKey":null},{"date":"2026-01-13","time":"23:00:16","timeTooltip":"2026-01-13 23:00:16","isSend":false,"isMedia":false,"content":"撤回了一条消息","senderName":"马3","timestamp":1768316416,"avatarKey":null},{"date":"2026-01-13","time":"23:00:18","timeTooltip":"2026-01-13 23:00:18","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;戒（干中学）（备战马钞）&quot;加入了群聊","senderName":"马3","timestamp":1768316418,"avatarKey":null},{"date":"2026-01-13","time":"23:00:22","timeTooltip":"2026-01-13 23:00:22","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;xiyang&quot;加入了群聊","senderName":"马3","timestamp":1768316422,"avatarKey":null},{"date":"2026-01-13","time":"23:00:39","timeTooltip":"2026-01-13 23:00:39","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;AKA🌈（收代理版&quot;加入了群聊","senderName":"马3","timestamp":1768316439,"avatarKey":null},{"date":"2026-01-13","time":"23:00:51","timeTooltip":"2026-01-13 23:00:51","isSend":false,"isMedia":false,"content":"&quot;聚隆（求数藏马）&quot;邀请&quot;墨岑&quot;加入了群聊","senderName":"马3","timestamp":1768316451,"avatarKey":null},{"date":"2026-01-13","time":"23:00:51","timeTooltip":"2026-01-13 23:00:51","isSend":false,"isMedia":false,"content":"&quot;墨岑&quot;与群里其他人都不是朋友关系，请注意隐私安全","senderName":"马3","timestamp":1768316451,"avatarKey":null},{"date":"2026-01-13","time":"23:01:06","timeTooltip":"2026-01-13 23:01:06","isSend":false,"isMedia":false,"content":"&quot;🦈（休养中）&quot;邀请&quot;懒洋洋大王（招代理）&quot;加入了群聊","senderName":"马3","timestamp":1768316466,"avatarKey":null},{"date":"2026-01-13","time":"23:01:10","timeTooltip":"2026-01-13 23:01:10","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;小张&quot;加入了群聊","senderName":"马3","timestamp":1768316470,"avatarKey":null},{"date":"2026-01-13","time":"23:01:17","timeTooltip":"2026-01-13 23:01:17","isSend":false,"isMedia":false,"content":"先款13.5收币 只要熟人 多散都能要","senderName":"裤衩儿（好友已满主页加小号","timestamp":1768316477,"avatarKey":null},{"date":"2026-01-13","time":"23:01:34","timeTooltip":"2026-01-13 23:01:34","isSend":false,"isMedia":false,"content":"青岛36套\n济南17套\n佛山6套\n湖南7套\n北京41套","senderName":"Aa张 周杰伦 薛之谦 新主题","timestamp":1768316494,"avatarKey":null},{"date":"2026-01-13","time":"23:01:34","timeTooltip":"2026-01-13 23:01:34","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;Lucky-575&quot;加入了群聊","senderName":"马3","timestamp":1768316494,"avatarKey":null},{"date":"2026-01-13","time":"23:01:34","timeTooltip":"2026-01-13 23:01:34","isSend":false,"isMedia":false,"content":"&quot;杰仔🎫（开始赚钱版）&quot;邀请&quot;#天花板（看演唱会找我）&quot;加入了群聊","senderName":"马3","timestamp":1768316494,"avatarKey":null},{"date":"2026-01-13","time":"23:01:39","timeTooltip":"2026-01-13 23:01:39","isSend":false,"isMedia":false,"content":"收100张钞 5卷币 反打的来","senderName":"小张","timestamp":1768316499,"avatarKey":null},{"date":"2026-01-13","time":"23:01:44","timeTooltip":"2026-01-13 23:01:44","isSend":false,"isMedia":false,"content":"🧧求 青岛济南贸易群","senderName":"Aa张 周杰伦 薛之谦 新主题","timestamp":1768316504,"avatarKey":null},{"date":"2026-01-13","time":"23:01:51","timeTooltip":"2026-01-13 23:01:51","isSend":false,"isMedia":false,"content":"⚠️收马钞马币\n\n13.5收马币三天\n\n32收不挑号散钞七天\n\n34收带4标十三天\n\n33收带4标十七天\n\n3700收带4刀货三天\n\n3600收带4刀货七天\n\n⚠️靓号私聊谈价，不熟反打定金2元一枚5元一张，量大可加，私聊确认即可[抱拳][抱拳][抱拳]","senderName":"聚隆（售苹果ID 演唱会）","timestamp":1768316511,"avatarKey":null},{"date":"2026-01-13","time":"23:02:08","timeTooltip":"2026-01-13 23:02:08","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;小蘑&quot;加入了群聊","senderName":"马3","timestamp":1768316528,"avatarKey":null},{"date":"2026-01-13","time":"23:02:24","timeTooltip":"2026-01-13 23:02:24","isSend":false,"isMedia":false,"content":"&quot;杰仔🎫（开始赚钱版）&quot;邀请&quot;幸福快乐.（收马钞）&quot;加入了群聊","senderName":"马3","timestamp":1768316544,"avatarKey":null},{"date":"2026-01-13","time":"23:02:43","timeTooltip":"2026-01-13 23:02:43","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;葛彦麟🎫&quot;加入了群聊","senderName":"马3","timestamp":1768316563,"avatarKey":null},{"date":"2026-01-13","time":"23:02:58","timeTooltip":"2026-01-13 23:02:58","isSend":false,"isMedia":false,"content":"&quot;acrr🎫(没回弹语音)&quot;邀请&quot;超级小荥🎫&quot;加入了群聊","senderName":"马3","timestamp":1768316578,"avatarKey":null},{"date":"2026-01-13","time":"23:03:04","timeTooltip":"2026-01-13 23:03:04","isSend":false,"isMedia":false,"content":"怎么朋友圈都38开始收了","senderName":"A，林镀","timestamp":1768316584,"avatarKey":null},{"date":"2026-01-13","time":"23:03:07","timeTooltip":"2026-01-13 23:03:07","isSend":false,"isMedia":false,"content":"收马钞标十 3天期35.5\n收马钞标十 5天期34.5\n\n熟人来，不熟反打\n定金5一张","senderName":"暗里着迷.（没回多发几次）","timestamp":1768316587,"avatarKey":null},{"date":"2026-01-13","time":"23:03:21","timeTooltip":"2026-01-13 23:03:21","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;小王代拍没回打朋友圈电话&quot;加入了群聊","senderName":"马3","timestamp":1768316601,"avatarKey":null},{"date":"2026-01-13","time":"23:03:31","timeTooltip":"2026-01-13 23:03:31","isSend":false,"isMedia":false,"content":"哪里哪里","senderName":"杰仔🎫（开始赚钱版）","timestamp":1768316611,"avatarKey":null},{"date":"2026-01-13","time":"23:03:37","timeTooltip":"2026-01-13 23:03:37","isSend":false,"isMedia":false,"content":"？","senderName":"🦈（休养中）","timestamp":1768316617,"avatarKey":null},{"date":"2026-01-13","time":"23:03:40","timeTooltip":"2026-01-13 23:03:40","isSend":false,"isMedia":false,"content":"谁，我出点","senderName":"。","timestamp":1768316620,"avatarKey":null},{"date":"2026-01-13","time":"23:03:40","timeTooltip":"2026-01-13 23:03:40","isSend":false,"isMedia":false,"content":"36.5 出80张   14 出80枚币  散单  5天期  发货款 ","senderName":"J.G.J🥥🌴（撸货 线报 滴我进","timestamp":1768316620,"avatarKey":null},{"date":"2026-01-13","time":"23:03:43","timeTooltip":"2026-01-13 23:03:43","isSend":false,"isMedia":false,"content":"38收马币？","senderName":"🦈（休养中）","timestamp":1768316623,"avatarKey":null},{"date":"2026-01-13","time":"23:03:52","timeTooltip":"2026-01-13 23:03:52","isSend":false,"isMedia":false,"content":"那个？","senderName":"🦈（休养中）","timestamp":1768316632,"avatarKey":null},{"date":"2026-01-13","time":"23:03:55","timeTooltip":"2026-01-13 23:03:55","isSend":false,"isMedia":false,"content":"我出","senderName":"🦈（休养中）","timestamp":1768316635,"avatarKey":null},{"date":"2026-01-13","time":"23:03:57","timeTooltip":"2026-01-13 23:03:57","isSend":false,"isMedia":false,"content":"朋友圈看到20收币的","senderName":"玖贰贰","timestamp":1768316637,"avatarKey":null},{"date":"2026-01-13","time":"23:03:58","timeTooltip":"2026-01-13 23:03:58","isSend":false,"isMedia":false,"content":"😂","senderName":"🦈（休养中）","timestamp":1768316638,"avatarKey":null},{"date":"2026-01-13","time":"23:03:58","timeTooltip":"2026-01-13 23:03:58","isSend":false,"isMedia":false,"content":"&quot;白日梦想家（猫眼上号大麦破盾）&quot;邀请&quot;嗷嗷嗷&quot;加入了群聊","senderName":"马3","timestamp":1768316638,"avatarKey":null},{"date":"2026-01-13","time":"23:04:02","timeTooltip":"2026-01-13 23:04:02","isSend":false,"isMedia":false,"content":"[图片]","senderName":"玖贰贰","timestamp":1768316642,"avatarKey":null},{"date":"2026-01-13","time":"23:04:05","timeTooltip":"2026-01-13 23:04:05","isSend":false,"isMedia":false,"content":"Wc","senderName":"懒洋洋大王（招代理）","timestamp":1768316645,"avatarKey":null},{"date":"2026-01-13","time":"23:04:17","timeTooltip":"2026-01-13 23:04:17","isSend":false,"isMedia":false,"content":"赶紧拉","senderName":"A，林镀","timestamp":1768316657,"avatarKey":null},{"date":"2026-01-13","time":"23:04:17","timeTooltip":"2026-01-13 23:04:17","isSend":false,"isMedia":false,"content":"@J.G.J🥥🌴（撸货 线报 滴我进 当天期我要","senderName":"聚隆（售苹果ID 演唱会）","timestamp":1768316657,"avatarKey":null},{"date":"2026-01-13","time":"23:04:21","timeTooltip":"2026-01-13 23:04:21","isSend":false,"isMedia":false,"content":"收收就老实了","senderName":"白志昊🎫","timestamp":1768316661,"avatarKey":null},{"date":"2026-01-13","time":"23:04:22","timeTooltip":"2026-01-13 23:04:22","isSend":false,"isMedia":false,"content":"先款13.5收马币 只要熟人 多散都能要","senderName":"裤衩儿（好友已满主页加小号","timestamp":1768316662,"avatarKey":null},{"date":"2026-01-13","time":"23:04:23","timeTooltip":"2026-01-13 23:04:23","isSend":false,"isMedia":false,"content":"币","senderName":"聚隆（售苹果ID 演唱会）","timestamp":1768316663,"avatarKey":null},{"date":"2026-01-13","time":"23:04:30","timeTooltip":"2026-01-13 23:04:30","isSend":false,"isMedia":false,"content":"我怕骗我定金","senderName":"。","timestamp":1768316670,"avatarKey":null},{"date":"2026-01-13","time":"23:04:30","timeTooltip":"2026-01-13 23:04:30","isSend":false,"isMedia":false,"content":"币","senderName":"聚隆（售苹果ID 演唱会）","timestamp":1768316670,"avatarKey":null},{"date":"2026-01-13","time":"23:04:32","timeTooltip":"2026-01-13 23:04:32","isSend":false,"isMedia":false,"content":"赶紧拉起来准备跑了","senderName":"A，林镀","timestamp":1768316672,"avatarKey":null},{"date":"2026-01-13","time":"23:04:35","timeTooltip":"2026-01-13 23:04:35","isSend":false,"isMedia":false,"content":"[动画表情]","senderName":"A，林镀","timestamp":1768316675,"avatarKey":null},{"date":"2026-01-13","time":"23:04:37","timeTooltip":"2026-01-13 23:04:37","isSend":false,"isMedia":false,"content":"我操快拉进来。","senderName":"Aa张 周杰伦 薛之谦 新主题","timestamp":1768316677,"avatarKey":null},{"date":"2026-01-13","time":"23:04:45","timeTooltip":"2026-01-13 23:04:45","isSend":false,"isMedia":false,"content":"我操","senderName":"🦈（休养中）","timestamp":1768316685,"avatarKey":null},{"date":"2026-01-13","time":"23:04:46","timeTooltip":"2026-01-13 23:04:46","isSend":false,"isMedia":false,"content":"我敲","senderName":"墨岑","timestamp":1768316686,"avatarKey":null},{"date":"2026-01-13","time":"23:04:48","timeTooltip":"2026-01-13 23:04:48","isSend":false,"isMedia":false,"content":"什么啊","senderName":"🦈（休养中）","timestamp":1768316688,"avatarKey":null},{"date":"2026-01-13","time":"23:04:49","timeTooltip":"2026-01-13 23:04:49","isSend":false,"isMedia":false,"content":"我给他塞满","senderName":"墨岑","timestamp":1768316689,"avatarKey":null},{"date":"2026-01-13","time":"23:04:52","timeTooltip":"2026-01-13 23:04:52","isSend":false,"isMedia":false,"content":"400？","senderName":"🦈（休养中）","timestamp":1768316692,"avatarKey":null},{"date":"2026-01-13","time":"23:04:56","timeTooltip":"2026-01-13 23:04:56","isSend":false,"isMedia":false,"content":"开什么玩笑","senderName":"🦈（休养中）","timestamp":1768316696,"avatarKey":null},{"date":"2026-01-13","time":"23:04:57","timeTooltip":"2026-01-13 23:04:57","isSend":false,"isMedia":false,"content":"给定金骗走就老实了","senderName":"。","timestamp":1768316697,"avatarKey":null},{"date":"2026-01-13","time":"23:04:57","timeTooltip":"2026-01-13 23:04:57","isSend":false,"isMedia":false,"content":"高价收重庆主城名额","senderName":"刘飞","timestamp":1768316697,"avatarKey":null},{"date":"2026-01-13","time":"23:05:02","timeTooltip":"2026-01-13 23:05:02","isSend":false,"isMedia":false,"content":"谁给我中介","senderName":"墨岑","timestamp":1768316702,"avatarKey":null},{"date":"2026-01-13","time":"23:05:13","timeTooltip":"2026-01-13 23:05:13","isSend":false,"isMedia":false,"content":"&quot;杰仔🎫（开始赚钱版）&quot;邀请&quot;点.&quot;加入了群聊","senderName":"马3","timestamp":1768316713,"avatarKey":null},{"date":"2026-01-13","time":"23:05:18","timeTooltip":"2026-01-13 23:05:18","isSend":false,"isMedia":false,"content":"[图片]","senderName":"A泰州西西（全国演唱会代拍）","timestamp":1768316718,"avatarKey":null},{"date":"2026-01-13","time":"23:05:22","timeTooltip":"2026-01-13 23:05:22","isSend":false,"isMedia":false,"content":"先款13.5收马币 只要熟人 多散都能要","senderName":"裤衩儿（好友已满主页加小号","timestamp":1768316722,"avatarKey":null},{"date":"2026-01-13","time":"23:05:35","timeTooltip":"2026-01-13 23:05:35","isSend":false,"isMedia":false,"content":"只要定金？","senderName":"AAAA 陈闯 醒狮文化🎫","timestamp":1768316735,"avatarKey":null},{"date":"2026-01-13","time":"23:05:43","timeTooltip":"2026-01-13 23:05:43","isSend":false,"isMedia":false,"content":"钞自己留着","senderName":"AAAA 陈闯 醒狮文化🎫","timestamp":1768316743,"avatarKey":null},{"date":"2026-01-13","time":"23:05:46","timeTooltip":"2026-01-13 23:05:46","isSend":false,"isMedia":false,"content":"这么高","senderName":"星火番外创意工作室","timestamp":1768316746,"avatarKey":null},{"date":"2026-01-13","time":"23:05:48","timeTooltip":"2026-01-13 23:05:48","isSend":false,"isMedia":false,"content":"33收20连  3天期 \n\n35收标十  3天期\n\n\n⚠️熟人来\n不熟反打定金5/张\n私聊确认即可[抱拳][抱拳][抱拳]","senderName":"A人生","timestamp":1768316748,"avatarKey":null},{"date":"2026-01-13","time":"23:05:49","timeTooltip":"2026-01-13 23:05:49","isSend":false,"isMedia":false,"content":"牛逼","senderName":"星火番外创意工作室","timestamp":1768316749,"avatarKey":null},{"date":"2026-01-13","time":"23:05:51","timeTooltip":"2026-01-13 23:05:51","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;。。。&quot;加入了群聊","senderName":"马3","timestamp":1768316751,"avatarKey":null},{"date":"2026-01-13","time":"23:05:55","timeTooltip":"2026-01-13 23:05:55","isSend":false,"isMedia":false,"content":"这么高可能吗","senderName":"🦈（休养中）","timestamp":1768316755,"avatarKey":null},{"date":"2026-01-13","time":"23:06:04","timeTooltip":"2026-01-13 23:06:04","isSend":false,"isMedia":false,"content":"&quot;校草差一点（工作号）🔥&quot;邀请&quot;可乐🥤（高效沟通 跨年演出接单&quot;加入了群聊","senderName":"马3","timestamp":1768316764,"avatarKey":null},{"date":"2026-01-13","time":"23:06:09","timeTooltip":"2026-01-13 23:06:09","isSend":false,"isMedia":false,"content":"可能","senderName":"AAAA 陈闯 醒狮文化🎫","timestamp":1768316769,"avatarKey":null},{"date":"2026-01-13","time":"23:06:10","timeTooltip":"2026-01-13 23:06:10","isSend":false,"isMedia":false,"content":"到时候定金给拿走就老实了","senderName":"🦈（休养中）","timestamp":1768316770,"avatarKey":null},{"date":"2026-01-13","time":"23:06:11","timeTooltip":"2026-01-13 23:06:11","isSend":false,"isMedia":false,"content":"可能跑路","senderName":"AAAA 陈闯 醒狮文化🎫","timestamp":1768316771,"avatarKey":null},{"date":"2026-01-13","time":"23:06:14","timeTooltip":"2026-01-13 23:06:14","isSend":false,"isMedia":false,"content":"反打","senderName":"吱吱","timestamp":1768316774,"avatarKey":null},{"date":"2026-01-13","time":"23:06:14","timeTooltip":"2026-01-13 23:06:14","isSend":false,"isMedia":false,"content":"[呲牙]","senderName":"AAAA 陈闯 醒狮文化🎫","timestamp":1768316774,"avatarKey":null},{"date":"2026-01-13","time":"23:06:16","timeTooltip":"2026-01-13 23:06:16","isSend":false,"isMedia":false,"content":"你敢吗","senderName":"吱吱","timestamp":1768316776,"avatarKey":null},{"date":"2026-01-13","time":"23:06:17","timeTooltip":"2026-01-13 23:06:17","isSend":false,"isMedia":false,"content":"先款13.5收马币 只要熟人 多散都能要","senderName":"裤衩儿（好友已满主页加小号","timestamp":1768316777,"avatarKey":null},{"date":"2026-01-13","time":"23:06:17","timeTooltip":"2026-01-13 23:06:17","isSend":false,"isMedia":false,"content":"笑死我了","senderName":"🦈（休养中）","timestamp":1768316777,"avatarKey":null},{"date":"2026-01-13","time":"23:06:21","timeTooltip":"2026-01-13 23:06:21","isSend":false,"isMedia":false,"content":"36.5 出80张   13.9 出80枚币  散单  5天期  发货款 \n\n快点 睡觉了","senderName":"J.G.J🥥🌴（撸货 线报 滴我进","timestamp":1768316781,"avatarKey":null}];
+    const avatarIndex = {};
+    const INITIAL_BATCH = 100; // 首次加载最新100条
+    const BATCH_SIZE = 200; // 后续每批200条
+    let loadedStart = messagesData.length; // 从末尾开始加载
+    let isLoading = false;
+    let allLoaded = false;
+    
+    const TIME_GAP_SECONDS = 300;
+    let lastShownTimestamp = null;
+    function shouldShowTime(ts) {
+      if (lastShownTimestamp === null) {
+        lastShownTimestamp = ts;
+        return true;
+      }
+      if (Math.abs(ts - lastShownTimestamp) >= TIME_GAP_SECONDS) {
+        lastShownTimestamp = ts;
+        return true;
+      }
+      return false;
+    }
+    function createMessageElement(msg, showDate, showTime) {
+      const fragment = document.createDocumentFragment();
+      if (showDate || showTime) {
+        const dateDivider = document.createElement("div");
+        dateDivider.className = "date-divider";
+        dateDivider.textContent = showDate ? msg.date : msg.time;
+        fragment.appendChild(dateDivider);
+      }
+      const messageEl = document.createElement("div");
+      messageEl.className = `message-item ${msg.isSend ? "sent" : "received"}`;
+      const avatarHtml = msg.avatarKey && avatarIndex[msg.avatarKey] ?
+        `<div class="avatar"><img src="data:image/png;base64,${avatarIndex[msg.avatarKey].base64}" alt="${avatarIndex[msg.avatarKey].displayName}"/></div>` :
+        `<div class="avatar placeholder"></div>`;
+      const bubbleClass = msg.isMedia ? "message-bubble media" : "message-bubble";
+      messageEl.innerHTML = `<div class="message-row">${avatarHtml}<div class="${bubbleClass}"><div class="content">${msg.content}</div></div></div>`;
+      messageEl.setAttribute("data-time", msg.timeTooltip || msg.time);
+      fragment.appendChild(messageEl);
+      return fragment;
+    }
+    
+    function renderMessages(start, end, toTop = true) {
+      const container = document.getElementById("messages-container");
+      if (!container) return;
+      const fragment = document.createDocumentFragment();
+      let lastDate = null;
+      for (let i = start; i < end; i++) {
+        const msg = messagesData[i];
+        const showDate = msg.date !== lastDate;
+        const showTime = shouldShowTime(msg.timestamp);
+        lastDate = msg.date;
+        fragment.appendChild(createMessageElement(msg, showDate, showTime));
+      }
+      if (toTop) {
+        container.insertBefore(fragment, container.firstChild);
+      } else {
+        container.appendChild(fragment);
+      }
+    }
+    
+    function loadInitialMessages() {
+      const container = document.getElementById("messages-container");
+      if (!container) return;
+      container.innerHTML = "";
+      const start = Math.max(0, messagesData.length - INITIAL_BATCH);
+      renderMessages(start, messagesData.length, false);
+      loadedStart = start;
+      updateScrollButton();
+      scrollToBottom();
+    }
+    
+    function loadMoreMessages() {
+      if (isLoading || allLoaded) return;
+      isLoading = true;
+      const nextStart = Math.max(0, loadedStart - BATCH_SIZE);
+      if (nextStart === loadedStart) {
+        allLoaded = true;
+        isLoading = false;
+        return;
+      }
+      const oldScrollHeight = document.getElementById("messages-container").scrollHeight;
+      renderMessages(nextStart, loadedStart, true);
+      const newScrollHeight = document.getElementById("messages-container").scrollHeight;
+      document.getElementById("messages-container").scrollTop = newScrollHeight - oldScrollHeight;
+      loadedStart = nextStart;
+      isLoading = false;
+      if (loadedStart === 0) {
+        allLoaded = true;
+      }
+    }
+    
+    function scrollToBottom() {
+      const container = document.getElementById("messages-container");
+      if (!container) return;
+      container.scrollTop = container.scrollHeight;
+    }
+    
+    function updateScrollButton() {
+      const container = document.getElementById("messages-container");
+      const button = document.getElementById("scroll-to-bottom");
+      if (!container || !button) return;
+      const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+      button.style.display = nearBottom ? "none" : "flex";
+    }
+    
+    document.getElementById("messages-container").addEventListener("scroll", () => {
+      if (document.getElementById("messages-container").scrollTop === 0) {
+        loadMoreMessages();
+      }
+      updateScrollButton();
+    });
+    
+    document.getElementById("scroll-to-bottom").addEventListener("click", scrollToBottom);
+    
+    if (document.getElementById("info-menu-btn")) {
+      document.getElementById("info-menu-btn").addEventListener("click", () => {
+        document.getElementById("info-menu").classList.toggle("show");
+      });
+      document.addEventListener("click", (event) => {
+        const menu = document.getElementById("info-menu");
+        const btn = document.getElementById("info-menu-btn");
+        if (!menu || !btn) return;
+        if (!menu.contains(event.target) && !btn.contains(event.target)) {
+          menu.classList.remove("show");
+        }
+      });
+    }
+    
+    loadInitialMessages();
+  </script>
+</body>
+</html>

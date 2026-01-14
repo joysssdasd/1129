@@ -117,7 +117,7 @@ export default function PublishPage() {
         body: {
           user_id: user.id,
           title,
-          keywords,
+          keywords: keywords || title, // 如果没有单独的关键词，使用标题作为关键词
           price: parseFloat(price),
           trade_type: tradeType,
           delivery_days: (tradeType === 3 || tradeType === 4) ? parseInt(deliveryDays) : null,

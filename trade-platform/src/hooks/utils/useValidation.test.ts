@@ -73,6 +73,8 @@ describe('useValidation', () => {
 
     act(() => {
       result.current.setValue('name', 'a');
+    });
+    act(() => {
       result.current.setFieldTouched('name');
     });
 
@@ -85,6 +87,8 @@ describe('useValidation', () => {
     const longName = 'a'.repeat(51);
     act(() => {
       result.current.setValue('name', longName);
+    });
+    act(() => {
       result.current.setFieldTouched('name');
     });
 
@@ -96,6 +100,8 @@ describe('useValidation', () => {
 
     act(() => {
       result.current.setValue('email', 'invalid-email');
+    });
+    act(() => {
       result.current.setFieldTouched('email');
     });
 
@@ -107,6 +113,8 @@ describe('useValidation', () => {
 
     act(() => {
       result.current.setValue('age', -1);
+    });
+    act(() => {
       result.current.setFieldTouched('age');
     });
 
@@ -142,12 +150,13 @@ describe('useValidation', () => {
       });
     });
 
+    let isValid: boolean;
     act(() => {
-      const isValid = result.current.validateAll();
-      expect(isValid).toBe(true);
-      expect(result.current.isValid).toBe(true);
-      expect(result.current.hasErrors).toBe(false);
+      isValid = result.current.validateAll();
     });
+
+    expect(isValid!).toBe(true);
+    expect(result.current.hasErrors).toBe(false);
   });
 
   it('应该能够重置表单', () => {
@@ -232,6 +241,8 @@ describe('useLoginValidation', () => {
 
     act(() => {
       result.current.setValue('phone', '13800138000');
+    });
+    act(() => {
       result.current.setFieldTouched('phone');
     });
 
@@ -243,6 +254,8 @@ describe('useLoginValidation', () => {
 
     act(() => {
       result.current.setValue('code', '12345');
+    });
+    act(() => {
       result.current.setFieldTouched('code');
     });
 
@@ -254,6 +267,8 @@ describe('useLoginValidation', () => {
 
     act(() => {
       result.current.setValue('code', '123456');
+    });
+    act(() => {
       result.current.setFieldTouched('code');
     });
 

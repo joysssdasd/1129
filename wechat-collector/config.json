@@ -1,0 +1,31 @@
+{
+  "wechat": {
+    "data_path": "E:\\xwechat_files",
+    "wxid": "wxid_yq70a2dy8yg922_ceaf",
+    "db_key": ""
+  },
+  "monitor_groups": [
+    "广州菜市场",
+    "3️⃣禁言 热门项目表格+前排"
+  ],
+  "platform": {
+    "supabase_url": "https://hntiihuxqlklpiyqmlob.supabase.co",
+    "supabase_anon_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhudGlpaHV4cWxrbHBpeXFtbG9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5OTE1ODksImV4cCI6MjA3OTU2NzU4OX0.yh4FiKZPUPR-G1LormpZuKGZIaF7eSRkDbZslvBJzhc",
+    "user_id": "572ecbd7-e1a1-43be-b08f-fbd3e13965d6",
+    "default_wechat_id": "niuniubase"
+  },
+  "schedule": {
+    "interval_minutes": 60,
+    "start_hour": 8,
+    "end_hour": 23
+  },
+  "ai": {
+    "deepseek_api_key": "sk-4dac2f720dfc43a18dc3f46053a68f16",
+    "model": "deepseek-chat"
+  },
+  "filter": {
+    "keywords": ["出", "收", "转", "求", "票", "克", "银", "演唱会", "门票", "内场", "看台", "包厢", "白金", "白银", "金条", "银条"],
+    "min_message_length": 10,
+    "max_message_length": 2000
+  }
+}

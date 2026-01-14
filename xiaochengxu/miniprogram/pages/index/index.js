@@ -61,14 +61,26 @@ Page({
       
       const postsData = res.data?.posts || []
       
-      const posts = postsData.map(post => ({
-        ...post,
-        typeLabel: util.getTradeTypeLabel(post.trade_type),
-        typeClass: util.getTradeTypeClass(post.trade_type),
-        keywordList: post.keywords ? post.keywords.split(',').slice(0, 3) : [],
-        remainingViews: Math.max(0, (post.view_limit || 10) - (post.view_count || 0)),
-        timeAgo: this.getTimeAgo(post.created_at)
-      }))
+      const posts = postsData.map(post => {
+        // 计算交割天数（从 delivery_date 计算）
+        let deliveryDays = null
+        if (post.delivery_date) {
+          const deliveryDate = new Date(post.delivery_date)
+          const now = new Date()
+          const diffTime = deliveryDate - now
+          deliveryDays = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)))
+        }
+        
+        return {
+          ...post,
+          typeLabel: util.getTradeTypeLabel(post.trade_type),
+          typeClass: util.getTradeTypeClass(post.trade_type),
+          keywordList: post.keywords ? post.keywords.split(',').slice(0, 3) : [],
+          remainingViews: Math.max(0, (post.view_limit || 10) - (post.view_count || 0)),
+          timeAgo: this.getTimeAgo(post.created_at),
+          deliveryDays: deliveryDays
+        }
+      })
 
       this.setData({
         posts: refresh ? posts : [...this.data.posts, ...posts],

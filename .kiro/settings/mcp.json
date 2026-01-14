@@ -1,9 +1,9 @@
 {
   "mcpServers": {
     "supabase": {
-      "command": "npx",
+      "command": "pnpm",
       "args": [
-        "-y",
+        "dlx",
         "@supabase/mcp-server-supabase@latest",
         "--project-ref=mgyelmyjeidlvmmmjkqi"
       ],
@@ -24,6 +24,50 @@
         "search_docs",
         "list_migrations"
       ]
+    },
+    "chrome-devtools": {
+      "command": "pnpm",
+      "args": [
+        "dlx",
+        "chrome-devtools-mcp@latest"
+      ],
+      "autoApprove": [
+        "navigate_page",
+        "take_snapshot",
+        "list_console_messages",
+        "list_network_requests",
+        "click",
+        "wait_for",
+        "fill_form",
+        "handle_dialog",
+        "fill",
+        "take_screenshot",
+        "list_pages"
+      ]
+    },
+    "playwright": {
+      "command": "pnpm",
+      "args": [
+        "dlx",
+        "@playwright/mcp@latest"
+      ],
+      "autoApprove": [
+        "browser_press_key",
+        "browser_navigate"
+      ]
+    },
+    "twitter": {
+      "command": "pnpm",
+      "args": [
+        "dlx",
+        "agent-twitter-client-mcp"
+      ],
+      "env": {
+        "AUTH_METHOD": "credentials",
+        "TWITTER_USERNAME": "lutai_39060",
+        "TWITTER_PASSWORD": "lgt94613",
+        "TWITTER_EMAIL": "454645539@qq.com"
+      }
     }
   }
 }

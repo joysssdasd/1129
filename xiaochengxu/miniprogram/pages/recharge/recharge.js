@@ -110,21 +110,49 @@ Page({
   },
 
   // 选择截图
-  chooseScreenshot() {
+  async chooseScreenshot() {
+    const self = this
     wx.chooseImage({
       count: 1,
       sizeType: ['compressed'],
       sourceType: ['album', 'camera'],
-      success: (res) => {
+      success: async (res) => {
         const tempFilePath = res.tempFilePaths[0]
+        
+        util.showLoading('上传中...')
+        
         // 转为 base64
         wx.getFileSystemManager().readFile({
           filePath: tempFilePath,
           encoding: 'base64',
-          success: (data) => {
-            this.setData({
-              screenshot: 'data:image/jpeg;base64,' + data.data
-            })
+          success: async (data) => {
+            try {
+              // 调用 Edge Function 上传
+              const uploadRes = await app.callFunction('upload-file', {
+                user_id: self.data.userInfo.id,
+                file_data: 'data:image/jpeg;base64,' + data.data,
+                bucket: 'recharge-screenshots'
+              })
+              
+              util.hideLoading()
+              
+              if (uploadRes.data?.url) {
+                self.setData({
+                  screenshot: uploadRes.data.url
+                })
+                util.showToast('上传成功', 'success')
+              } else {
+                util.showToast(uploadRes.error?.message || '上传失败')
+              }
+            } catch (e) {
+              util.hideLoading()
+              console.error('上传失败:', e)
+              util.showToast('上传失败')
+            }
+          },
+          fail: () => {
+            util.hideLoading()
+            util.showToast('读取图片失败')
           }
         })
       }
@@ -167,7 +195,7 @@ Page({
         amount: amount,
         points: points,
         is_custom: isCustom,
-        screenshot_data: screenshot
+        screenshot_url: screenshot  // 使用已上传的 URL
       })
       
       util.hideLoading()

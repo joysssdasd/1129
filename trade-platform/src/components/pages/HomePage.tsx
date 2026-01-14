@@ -440,6 +440,8 @@ export default function HomePage() {
               <input
                 ref={searchInputRef}
                 type="text"
+                id="search-input"
+                name="search"
                 value={searchKeyword}
                 onChange={(e) => {
                   setSearchKeyword(e.target.value)

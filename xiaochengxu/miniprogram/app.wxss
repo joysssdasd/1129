@@ -181,3 +181,98 @@ page {
   font-size: 28rpx;
   color: #C7C7CC;
 }
+
+/* ==================================== */
+/* iOS Inset Grouped List Styles (v2)   */
+/* ==================================== */
+
+/* 分组容器 */
+.ios-group {
+  margin: 32rpx 32rpx;
+  background-color: #FFFFFF;
+  border-radius: 20rpx;
+  overflow: hidden;
+}
+
+.ios-group-title {
+  margin: 32rpx 32rpx 16rpx;
+  font-size: 26rpx;
+  color: #8E8E93;
+  text-transform: uppercase;
+}
+
+/* 列表项/单元格 */
+.ios-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 88rpx; /* iOS standard height 44pt */
+  padding: 24rpx 32rpx;
+  background-color: #FFFFFF;
+  transition: background-color 0.2s;
+}
+
+.ios-cell:active {
+  background-color: #F2F2F7;
+}
+
+/* 隐藏分割线的伪类 - 最后一项不需要分割线 */
+.ios-cell:not(:last-child)::after {
+  content: " ";
+  position: absolute;
+  left: 32rpx; /* 左侧缩进 */
+  right: 0;
+  bottom: 0;
+  height: 1rpx;
+  background-color: rgba(60, 60, 67, 0.1); /* iOS separator color */
+}
+
+/* 单元格左侧 */
+.ios-cell-start {
+  display: flex;
+  align-items: center;
+  margin-right: 24rpx;
+}
+
+.ios-cell-icon {
+  font-size: 40rpx;
+  color: #007AFF;
+}
+
+/* 单元格主体内容 (Label) */
+.ios-cell-body {
+  flex: 1;
+  font-size: 34rpx; /* iOS standard body size 17pt */
+  color: #000000;
+}
+
+/* 单元格右侧 (Value/Arrow) */
+.ios-cell-end {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: #8E8E93;
+  font-size: 34rpx;
+}
+
+/* 箭头 */
+.ios-arrow {
+  margin-left: 12rpx;
+  width: 16rpx;
+  height: 16rpx;
+  border-top: 4rpx solid #C7C7CC;
+  border-right: 4rpx solid #C7C7CC;
+  transform: rotate(45deg);
+}
+
+/* 输入框样式适配 */
+.ios-input {
+  text-align: right;
+  height: 100%;
+  color: #000000;
+}
+
+.ios-input::placeholder {
+  color: #C7C7CC;
+}
+

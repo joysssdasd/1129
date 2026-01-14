@@ -21,7 +21,7 @@ const LoadingSpinner: React.FC<{
   };
 
   return (
-    <div className={cn('flex items-center gap-2', className)}>
+    <div className={cn('flex items-center gap-2', className)} role="status" aria-label="加载中">
       <Loader2 className={cn('animate-spin', sizeClasses[size])} />
       {text && <span className="text-sm text-muted-foreground">{text}</span>}
     </div>

@@ -192,6 +192,31 @@
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display';
 }
 
+/* 价格区域 */
+.price-area {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+/* 交割天数徽章 */
+.delivery-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6rpx 16rpx;
+  background: linear-gradient(135deg, #FF9500 0%, #FF6B00 100%);
+  border-radius: 16rpx;
+  box-shadow: 0 2rpx 8rpx rgba(255, 149, 0, 0.3);
+}
+
+.delivery-text {
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #FFFFFF;
+  letter-spacing: 1rpx;
+}
+
 .card-title {
   font-size: 32rpx;
   font-weight: 600;

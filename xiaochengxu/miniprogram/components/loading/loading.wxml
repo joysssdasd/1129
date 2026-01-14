@@ -1,4 +1,4 @@
-<view class="loading-container {{visible ? 'show' : ''}}" wx:if="{{visible}}">
+<view class="loading-container {{visible ? 'show' : ''}} {{!fullscreen ? 'inline' : ''}}" wx:if="{{visible}}">
   <view class="loading-content">
     <!-- iOS 风格加载动画 -->
     <view class="spinner-wrap" wx:if="{{type === 'spinner'}}">

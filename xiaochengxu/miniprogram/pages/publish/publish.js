@@ -5,7 +5,6 @@ Page({
   data: {
     tradeType: 2,
     title: '',
-    keywords: '',
     price: '',
     extraInfo: '',
     viewLimit: 10,
@@ -53,10 +52,6 @@ Page({
     this.setData({ title: e.detail.value })
   },
 
-  onKeywordsInput(e) {
-    this.setData({ keywords: e.detail.value })
-  },
-
   onPriceInput(e) {
     this.setData({ price: e.detail.value })
   },
@@ -86,18 +81,13 @@ Page({
 
   // 发布
   async handlePublish() {
-    const { tradeType, title, keywords, price, extraInfo, viewLimit, deliveryDays, loading } = this.data
+    const { tradeType, title, price, extraInfo, viewLimit, deliveryDays, loading } = this.data
 
     if (loading) return
 
     // 验证
     if (!title.trim()) {
       util.showToast('请输入标题')
-      return
-    }
-
-    if (!keywords.trim()) {
-      util.showToast('请输入关键词')
       return
     }
 
@@ -113,7 +103,7 @@ Page({
     }
 
     // 检查敏感词
-    const allText = `${title} ${keywords} ${extraInfo}`
+    const allText = `${title} ${extraInfo}`
     const bannedWord = this.checkBannedKeywords(allText)
     if (bannedWord) {
       util.showToast(`内容包含敏感词：${bannedWord}`)
@@ -139,7 +129,7 @@ Page({
       const postData = {
         user_id: user.id,
         title: title.trim(),
-        keywords: keywords.trim(),
+        keywords: title.trim(),  // 使用标题作为关键词
         price: parseFloat(price),
         trade_type: tradeType,
         extra_info: extraInfo.trim() || null,
@@ -163,7 +153,6 @@ Page({
         // 清空表单
         this.setData({
           title: '',
-          keywords: '',
           price: '',
           extraInfo: '',
           viewLimit: 10,

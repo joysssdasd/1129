@@ -1,11 +1,38 @@
 {
   "mcpServers": {
     "supabase": {
-      "command": "npx",
-      "args": ["-y", "@supabase/mcp-server-supabase@latest", "--read-only=false", "--project-ref=hntiihuxqlklpiyqmlob"],
+      "command": "pnpm",
+      "args": [
+        "dlx",
+        "@supabase/mcp-server-supabase@latest",
+        "--read-only=false",
+        "--project-ref=mgyelmyjeidlvmmmjkqi"
+      ],
       "env": {
         "SUPABASE_ACCESS_TOKEN": "sbp_d2b2bc15e6e5e402c7410f24f0c81b548bf260f4"
       }
+    },
+    "edgeone-pages-mcp-server": {
+      "timeout": 600,
+      "command": "pnpm",
+      "args": [
+        "dlx",
+        "edgeone-pages-mcp"
+      ]
+    },
+    "playwright": {
+      "command": "pnpm",
+      "args": [
+        "dlx",
+        "@playwright/mcp@latest"
+      ]
+    },
+    "chrome-devtools": {
+      "command": "pnpm",
+      "args": [
+        "dlx",
+        "chrome-devtools-mcp@latest"
+      ]
     }
   }
 }

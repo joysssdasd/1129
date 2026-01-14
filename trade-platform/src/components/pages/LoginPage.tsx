@@ -9,8 +9,9 @@ type LoginMode = 'password' | 'code'
 
 export default function LoginPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login')
-  const [loginMode, setLoginMode] = useState<LoginMode>('password')
+  const [loginMode, setLoginMode] = useState<LoginMode>('password') // 默认使用密码登录
   const [registerStep, setRegisterStep] = useState(1)
+  const [showGuide, setShowGuide] = useState(false) // 显示使用指南
   
   // 通用字段
   const [phone, setPhone] = useState('')
@@ -328,6 +329,7 @@ export default function LoginPage() {
       if (data?.data?.user) {
         setUser(data.data.user)
         setRegisterStep(3)
+        setShowGuide(true) // 显示使用指南
       }
     } catch (error: any) {
       log.error('🔍 老王调试注册错误:', error)
@@ -370,11 +372,13 @@ export default function LoginPage() {
       return (
         <form onSubmit={handlePasswordLogin} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="login-phone" className="block text-sm font-medium text-gray-700 mb-2">
               手机号
             </label>
             <input
               type="tel"
+              id="login-phone"
+              name="phone"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               maxLength={11}
@@ -385,11 +389,13 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="login-password" className="block text-sm font-medium text-gray-700 mb-2">
               密码
             </label>
             <input
               type="password"
+              id="login-password"
+              name="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -398,11 +404,11 @@ export default function LoginPage() {
             />
           </div>
 
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center text-sm">
             <button
               type="button"
               onClick={() => setLoginMode('code')}
-              className="text-sm text-blue-600 hover:underline"
+              className="text-gray-500 hover:text-blue-600 hover:underline"
             >
               使用验证码登录
             </button>
@@ -412,7 +418,7 @@ export default function LoginPage() {
                 setMode('register')
                 setRegisterStep(1)
               }}
-              className="text-sm text-gray-600 hover:underline"
+              className="text-gray-500 hover:text-blue-600 hover:underline"
             >
               忘记密码？
             </button>
@@ -431,11 +437,13 @@ export default function LoginPage() {
       return (
         <form onSubmit={handleCodeLogin} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="code-login-phone" className="block text-sm font-medium text-gray-700 mb-2">
               手机号
             </label>
             <input
               type="tel"
+              id="code-login-phone"
+              name="phone"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               maxLength={11}
@@ -446,12 +454,14 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="verification-code" className="block text-sm font-medium text-gray-700 mb-2">
               验证码
             </label>
             <div className="flex gap-2">
               <input
                 type="text"
+                id="verification-code"
+                name="code"
                 value={verificationCode}
                 onChange={(e) => setVerificationCode(e.target.value)}
                 maxLength={6}
@@ -471,11 +481,11 @@ export default function LoginPage() {
           </div>
 
           {!isAdminPhone(phone) && (
-            <div className="flex justify-between items-center">
+            <div className="text-center">
               <button
                 type="button"
                 onClick={() => setLoginMode('password')}
-                className="text-sm text-blue-600 hover:underline"
+                className="text-sm text-gray-500 hover:text-blue-600 hover:underline"
               >
                 使用密码登录
               </button>
@@ -527,11 +537,13 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="register-phone" className="block text-sm font-medium text-gray-700 mb-2">
               手机号
             </label>
             <input
               type="tel"
+              id="register-phone"
+              name="phone"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               maxLength={11}
@@ -542,12 +554,14 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="register-code" className="block text-sm font-medium text-gray-700 mb-2">
               验证码
             </label>
             <div className="flex gap-2">
               <input
                 type="text"
+                id="register-code"
+                name="code"
                 value={verificationCode}
                 onChange={(e) => setVerificationCode(e.target.value)}
                 maxLength={6}
@@ -600,11 +614,13 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="wechat-id" className="block text-sm font-medium text-gray-700 mb-2">
               微信号
             </label>
             <input
               type="text"
+              id="wechat-id"
+              name="wechatId"
               value={wechatId}
               onChange={(e) => setWechatId(e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -614,11 +630,13 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="register-password" className="block text-sm font-medium text-gray-700 mb-2">
               设置密码
             </label>
             <input
               type="password"
+              id="register-password"
+              name="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -633,11 +651,13 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 mb-2">
               确认密码
             </label>
             <input
               type="password"
+              id="confirm-password"
+              name="confirmPassword"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -650,11 +670,13 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="invite-code" className="block text-sm font-medium text-gray-700 mb-2">
               邀请码（选填）
             </label>
             <input
               type="text"
+              id="invite-code"
+              name="inviteCode"
               value={inviteCode}
               onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
               maxLength={6}
@@ -767,10 +789,17 @@ export default function LoginPage() {
           </div>
 
           <button
+            onClick={() => setShowGuide(true)}
+            className="w-full py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors mb-2"
+          >
+            查看使用指南
+          </button>
+
+          <button
             onClick={() => navigate('/')}
             className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
           >
-            进入平台
+            直接进入平台
           </button>
         </div>
       )
@@ -832,6 +861,165 @@ export default function LoginPage() {
           )}
         </div>
       </div>
+
+      {/* 使用指南弹窗 */}
+      {showGuide && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* 弹窗头部 */}
+            <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6">
+              <h2 className="text-2xl font-bold mb-2">🎉 欢迎来到牛牛基地！</h2>
+              <p className="text-blue-100">快速上手指南，让您轻松开始交易</p>
+            </div>
+
+            {/* 弹窗内容 */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* 平台介绍 */}
+              <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-5">
+                <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <span className="text-2xl">💡</span>
+                  平台简介
+                </h3>
+                <p className="text-gray-700 leading-relaxed">
+                  牛牛基地是一个专业的交易信息发布平台，为商家提供高效、便捷的信息发布和查看服务。
+                  平台采用积分制度，确保信息质量和交易安全。
+                </p>
+              </div>
+
+              {/* 快速开始 */}
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <span className="text-2xl">🚀</span>
+                  快速开始
+                </h3>
+                <div className="space-y-4">
+                  <div className="flex gap-4">
+                    <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">
+                      1
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-900 mb-1">浏览交易信息</h4>
+                      <p className="text-sm text-gray-600">
+                        在首页可以免费浏览所有交易信息，使用搜索和筛选功能快速找到您需要的内容
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4">
+                    <div className="flex-shrink-0 w-8 h-8 bg-green-600 text-white rounded-full flex items-center justify-center font-bold">
+                      2
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-900 mb-1">发布交易信息</h4>
+                      <p className="text-sm text-gray-600">
+                        点击底部"发布"按钮，填写交易信息。<span className="text-red-600 font-medium">发布需要消耗10积分</span>，
+                        信息下架后会返还积分
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4">
+                    <div className="flex-shrink-0 w-8 h-8 bg-purple-600 text-white rounded-full flex items-center justify-center font-bold">
+                      3
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-900 mb-1">查看联系方式</h4>
+                      <p className="text-sm text-gray-600">
+                        点击"交易"按钮查看发布者微信号。<span className="text-red-600 font-medium">每次查看消耗5积分</span>，
+                        系统会自动复制微信号到剪贴板
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4">
+                    <div className="flex-shrink-0 w-8 h-8 bg-yellow-600 text-white rounded-full flex items-center justify-center font-bold">
+                      4
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-900 mb-1">获取更多积分</h4>
+                      <p className="text-sm text-gray-600">
+                        通过充值、邀请好友、发布真实信息等方式获得积分。每邀请一个好友注册可获得<span className="text-green-600 font-medium">100积分</span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 积分说明 */}
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-5">
+                <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <span className="text-2xl">💰</span>
+                  积分规则
+                </h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-700">• 注册奖励</span>
+                    <span className="text-green-600 font-semibold">+100积分</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-700">• 邀请好友</span>
+                    <span className="text-green-600 font-semibold">+100积分/人</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-700">• 发布信息</span>
+                    <span className="text-red-600 font-semibold">-10积分</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-700">• 查看联系方式</span>
+                    <span className="text-red-600 font-semibold">-5积分</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-700">• 信息下架返还</span>
+                    <span className="text-green-600 font-semibold">+10积分</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 重要提示 */}
+              <div className="bg-red-50 border border-red-200 rounded-lg p-5">
+                <h3 className="text-lg font-bold text-red-900 mb-3 flex items-center gap-2">
+                  <span className="text-2xl">⚠️</span>
+                  重要提示
+                </h3>
+                <ul className="space-y-2 text-sm text-red-800">
+                  <li>• 平台仅提供信息发布服务，不参与任何交易</li>
+                  <li>• 请务必核实交易对方身份和信息真实性</li>
+                  <li>• 建议通过共同群或活跃用户进行担保交易</li>
+                  <li>• 发现虚假信息请及时举报</li>
+                  <li>• 所有交易风险由用户自行承担</li>
+                </ul>
+              </div>
+
+              {/* 联系客服 */}
+              <div className="bg-gray-50 rounded-lg p-5 text-center">
+                <h3 className="text-lg font-bold text-gray-900 mb-2">需要帮助？</h3>
+                <p className="text-sm text-gray-600 mb-3">
+                  如有任何问题，请联系客服
+                </p>
+                <div className="flex justify-center gap-4">
+                  <div className="text-sm">
+                    <span className="text-gray-500">客服微信：</span>
+                    <span className="font-semibold text-blue-600">niuniubase</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 弹窗底部 */}
+            <div className="border-t p-6 bg-gray-50">
+              <button
+                onClick={() => {
+                  setShowGuide(false)
+                  navigate('/')
+                }}
+                className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg"
+              >
+                开始使用牛牛基地
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

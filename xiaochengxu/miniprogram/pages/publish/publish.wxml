@@ -1,133 +1,71 @@
 <view class="container">
-  <!-- 交易类型选择 -->
-  <view class="section">
-    <view class="section-title">
-      <view class="title-icon"></view>
-      <text>交易类型</text>
-    </view>
-    <view class="type-grid">
-      <view class="type-item {{tradeType === 1 ? 'active' : ''}} buy" bindtap="selectTradeType" data-type="1">
-        <view class="type-icon-wrap">
-          <view class="type-icon buy-icon"></view>
-        </view>
-        <text class="type-name">求购</text>
-        <view class="type-check" wx:if="{{tradeType === 1}}"></view>
-      </view>
-      <view class="type-item {{tradeType === 2 ? 'active' : ''}} sell" bindtap="selectTradeType" data-type="2">
-        <view class="type-icon-wrap">
-          <view class="type-icon sell-icon"></view>
-        </view>
-        <text class="type-name">出售</text>
-        <view class="type-check" wx:if="{{tradeType === 2}}"></view>
-      </view>
-      <view class="type-item {{tradeType === 3 ? 'active' : ''}} long" bindtap="selectTradeType" data-type="3">
-        <view class="type-icon-wrap">
-          <view class="type-icon long-icon"></view>
-        </view>
-        <text class="type-name">做多</text>
-        <view class="type-check" wx:if="{{tradeType === 3}}"></view>
-      </view>
-      <view class="type-item {{tradeType === 4 ? 'active' : ''}} short" bindtap="selectTradeType" data-type="4">
-        <view class="type-icon-wrap">
-          <view class="type-icon short-icon"></view>
-        </view>
-        <text class="type-name">做空</text>
-        <view class="type-check" wx:if="{{tradeType === 4}}"></view>
-      </view>
+  
+  <!-- 交易类型 (Segmented Control Style) -->
+  <view class="segment-control-container">
+    <view class="segment-control">
+      <view class="segment-item {{tradeType === 1 ? 'active' : ''}}" bindtap="selectTradeType" data-type="1">求购</view>
+      <view class="segment-item {{tradeType === 2 ? 'active' : ''}}" bindtap="selectTradeType" data-type="2">出售</view>
+      <view class="segment-item {{tradeType === 3 ? 'active' : ''}}" bindtap="selectTradeType" data-type="3">做多</view>
+      <view class="segment-item {{tradeType === 4 ? 'active' : ''}}" bindtap="selectTradeType" data-type="4">做空</view>
     </view>
   </view>
 
-  <!-- 风险提示 -->
   <view class="risk-notice" wx:if="{{tradeType === 3 || tradeType === 4}}">
-    <view class="risk-icon"></view>
-    <text class="risk-text">市场有风险，决策需谨慎。发布内容仅代表个人看法，请勿使用"保本"、"稳赚"等承诺性词汇。</text>
+    <text>市场有风险，决策需谨慎。</text>
   </view>
 
-  <!-- 表单 -->
-  <view class="form-card">
-    <view class="input-group">
-      <view class="input-label">
-        <text>标题</text>
-        <text class="required">*</text>
-      </view>
-      <view class="input-wrap">
-        <input class="input" placeholder="请输入标题" value="{{title}}" bindinput="onTitleInput" maxlength="50" />
-        <text class="input-count">{{title.length || 0}}/50</text>
-      </view>
+  <!-- 表单区域 -->
+  <view class="ios-group">
+    <view class="ios-cell">
+      <view class="ios-cell-body" style="flex: 0 0 160rpx;">标题</view>
+      <input class="ios-input" placeholder="请输入标题" value="{{title}}" bindinput="onTitleInput" maxlength="50" style="flex: 1;" />
+    </view>
+    
+    <view class="ios-cell">
+      <view class="ios-cell-body" style="flex: 0 0 160rpx;">价格</view>
+      <input class="ios-input" type="digit" placeholder="0.00" value="{{price}}" bindinput="onPriceInput" style="flex: 1;" />
+      <view class="ios-cell-end" style="padding-left: 10rpx;">¥</view>
     </view>
 
-    <view class="input-group">
-      <view class="input-label">
-        <text>关键词</text>
-        <text class="required">*</text>
-      </view>
-      <view class="input-wrap">
-        <input class="input" placeholder="多个关键词用逗号分隔" value="{{keywords}}" bindinput="onKeywordsInput" />
-      </view>
-      <view class="input-tip">关键词有助于买家快速找到您的信息</view>
-    </view>
-
-    <view class="input-group">
-      <view class="input-label">
-        <text>价格</text>
-        <text class="required">*</text>
-      </view>
-      <view class="price-input-wrap">
-        <text class="price-prefix">¥</text>
-        <input class="input price-input" type="digit" placeholder="请输入价格" value="{{price}}" bindinput="onPriceInput" />
-      </view>
-    </view>
-
-    <view class="input-group" wx:if="{{tradeType === 3 || tradeType === 4}}">
-      <view class="input-label">
-        <text>交割天数</text>
-        <text class="required">*</text>
-      </view>
-      <view class="days-input-wrap">
-        <input class="input days-input" type="number" placeholder="请输入天数" value="{{deliveryDays}}" bindinput="onDeliveryDaysInput" />
-        <text class="days-suffix">天</text>
-      </view>
-    </view>
-
-    <view class="input-group">
-      <view class="input-label">
-        <text>补充信息</text>
-        <text class="optional">选填</text>
-      </view>
-      <view class="textarea-wrap">
-        <textarea class="textarea" placeholder="可补充更多交易细节" value="{{extraInfo}}" bindinput="onExtraInfoInput" maxlength="200"></textarea>
-        <text class="textarea-count">{{extraInfo.length || 0}}/200</text>
-      </view>
-    </view>
-
-    <view class="input-group">
-      <view class="input-label">
-        <text>查看次数限制</text>
-        <view class="points-badge">消耗 {{viewLimit}} 积分</view>
-      </view>
-      <view class="slider-wrap">
-        <view class="slider-track">
-          <slider min="5" max="50" step="5" value="{{viewLimit}}" bindchange="onViewLimitChange" activeColor="#007AFF" block-size="24" />
-        </view>
-        <view class="slider-labels">
-          <text>5次</text>
-          <text class="slider-value">{{viewLimit}}次</text>
-          <text>50次</text>
-        </view>
-      </view>
+    <view class="ios-cell" wx:if="{{tradeType === 3 || tradeType === 4}}">
+      <view class="ios-cell-body" style="flex: 0 0 160rpx;">交割天数</view>
+      <input class="ios-input" type="number" placeholder="0" value="{{deliveryDays}}" bindinput="onDeliveryDaysInput" style="flex: 1;" />
+      <view class="ios-cell-end" style="padding-left: 10rpx;">天</view>
     </view>
   </view>
 
-  <!-- 发布按钮 -->
+  <!-- 补充信息 -->
+  <view class="ios-group-title">补充信息</view>
+  <view class="ios-group">
+    <view class="ios-cell" style="display: block; padding: 24rpx 32rpx; min-height: 200rpx;">
+      <textarea 
+        class="ios-textarea" 
+        placeholder="可补充更多交易细节..." 
+        value="{{extraInfo}}" 
+        bindinput="onExtraInfoInput" 
+        maxlength="200" 
+        style="width: 100%; height: 160rpx; font-size: 34rpx; color: #000;"
+      ></textarea>
+      <view style="text-align: right; font-size: 24rpx; color: #C7C7CC;">{{extraInfo.length || 0}}/200</view>
+    </view>
+  </view>
+
+  <!-- 消耗积分 -->
+  <view class="ios-group-title">查看次数限制 (消耗积分: {{viewLimit}})</view>
+  <view class="ios-group">
+    <view class="ios-cell" style="display: block; padding: 32rpx;">
+      <slider min="5" max="50" step="5" value="{{viewLimit}}" bindchange="onViewLimitChange" activeColor="#007AFF" block-size="28" show-value/>
+    </view>
+  </view>
+
+  <!-- 底部占位 -->
+  <view style="height: 180rpx;"></view>
+
+  <!-- 底部发布按钮栏 -->
   <view class="bottom-bar">
-    <view class="cost-info">
-      <view class="cost-icon"></view>
-      <text class="cost-label">消耗积分</text>
-      <text class="cost-value">{{viewLimit}}</text>
-    </view>
     <button class="publish-btn" bindtap="handlePublish" disabled="{{loading}}">
-      <ios-loading wx:if="{{loading}}" visible="{{true}}" type="spinner" />
-      <text wx:else>立即发布</text>
+      <text wx:if="{{!loading}}">立即发布</text>
+      <ios-loading wx:else visible="{{true}}" type="spinner" fullscreen="{{false}}" />
     </button>
   </view>
 </view>

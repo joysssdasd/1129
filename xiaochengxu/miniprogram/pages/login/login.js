@@ -3,12 +3,18 @@ const util = require('../../utils/util')
 
 Page({
   data: {
-    loading: false
+    loading: false,
+    inviteCode: ''  // 邀请码
   },
 
   onLoad(options) {
     if (options.redirect) {
       this.redirectUrl = decodeURIComponent(options.redirect)
+    }
+    // 获取邀请码
+    if (options.invite) {
+      this.setData({ inviteCode: options.invite })
+      console.log('收到邀请码:', options.invite)
     }
   },
 
@@ -29,9 +35,10 @@ Page({
     try {
       util.showLoading('登录中...')
       
-      // 调用后端微信一键登录接口
+      // 调用后端微信一键登录接口，传入邀请码
       const res = await app.callFunction('wechat-quick-login', {
-        code: e.detail.code  // 手机号授权码
+        code: e.detail.code,  // 手机号授权码
+        invite_code: this.data.inviteCode || null  // 邀请码
       })
       
       util.hideLoading()

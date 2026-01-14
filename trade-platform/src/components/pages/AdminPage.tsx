@@ -102,6 +102,12 @@ export default function AdminPage() {
   const [adjustUserId, setAdjustUserId] = useState('')
   const [adjustAmount, setAdjustAmount] = useState('')
   const [adjustReason, setAdjustReason] = useState('')
+  // 用户详情相关状态
+  const [selectedUser, setSelectedUser] = useState<any>(null)
+  const [showUserDetail, setShowUserDetail] = useState(false)
+  const [userPointHistory, setUserPointHistory] = useState<any[]>([])
+  const [userPosts, setUserPosts] = useState<any[]>([])
+  const [loadingUserDetail, setLoadingUserDetail] = useState(false)
   const { user } = useUser()
   const navigate = useNavigate()
 
@@ -469,6 +475,65 @@ export default function AdminPage() {
     alert(`已${amount > 0 ? '增加' : '扣除'}${Math.abs(amount)}积分`)
   }
 
+  // 加载用户详情
+  const loadUserDetail = async (userId: string) => {
+    setLoadingUserDetail(true)
+    try {
+      // 加载积分变动历史
+      const { data: pointHistory } = await supabase
+        .from('point_transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(50)
+      
+      setUserPointHistory(pointHistory || [])
+
+      // 加载用户所有帖子（包括已下架的）
+      const { data: userPostsData } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+      
+      setUserPosts(userPostsData || [])
+    } catch (error: any) {
+      alert('加载用户详情失败：' + error.message)
+    } finally {
+      setLoadingUserDetail(false)
+    }
+  }
+
+  // 打开用户详情
+  const handleViewUserDetail = async (u: any) => {
+    setSelectedUser(u)
+    setShowUserDetail(true)
+    await loadUserDetail(u.id)
+  }
+
+  // 关闭用户详情
+  const handleCloseUserDetail = () => {
+    setShowUserDetail(false)
+    setSelectedUser(null)
+    setUserPointHistory([])
+    setUserPosts([])
+  }
+
+  // 获取积分变动类型标签
+  const getPointChangeTypeLabel = (type: number) => {
+    const labels: Record<number, string> = {
+      1: '发布信息',
+      2: '查看联系方式',
+      3: '信息下架返还',
+      4: '充值',
+      5: '邀请奖励',
+      6: '管理员增加',
+      7: '管理员扣除',
+      8: '重新上架扣除'
+    }
+    return labels[type] || '其他'
+  }
+
   const loadRechargeRequests = async () => {
     const { data } = await supabase
       .from('recharge_requests')
@@ -822,16 +887,25 @@ export default function AdminPage() {
                         <div className="text-sm text-gray-600">邀请码：{u.invite_code}</div>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleToggleUserStatus(u.id, u.status)}
-                      className={`px-3 py-1 rounded-lg text-sm ${
-                        u.status === 1
-                          ? 'bg-red-100 text-red-700'
-                          : 'bg-green-100 text-green-700'
-                      }`}
-                    >
-                      {u.status === 1 ? '禁用' : '启用'}
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleViewUserDetail(u)}
+                        className="px-3 py-1 rounded-lg text-sm bg-blue-100 text-blue-700 hover:bg-blue-200 flex items-center gap-1"
+                      >
+                        <Eye className="w-4 h-4" />
+                        查看详情
+                      </button>
+                      <button
+                        onClick={() => handleToggleUserStatus(u.id, u.status)}
+                        className={`px-3 py-1 rounded-lg text-sm ${
+                          u.status === 1
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-green-100 text-green-700'
+                        }`}
+                      >
+                        {u.status === 1 ? '禁用' : '启用'}
+                      </button>
+                    </div>
                   </div>
                   <div className="grid grid-cols-3 gap-4 text-sm">
                     <div className={userSortBy === 'points' ? 'bg-yellow-50 rounded px-2 py-1' : ''}>
@@ -1577,6 +1651,185 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+
+      {/* 用户详情弹窗 */}
+      {showUserDetail && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* 弹窗头部 */}
+            <div className="bg-purple-600 text-white p-6 flex justify-between items-center">
+              <div>
+                <h2 className="text-2xl font-bold">{selectedUser.phone}</h2>
+                <div className="text-sm opacity-90 mt-1">
+                  微信：{selectedUser.wechat_id} | 邀请码：{selectedUser.invite_code}
+                </div>
+              </div>
+              <button
+                onClick={handleCloseUserDetail}
+                className="text-white hover:bg-white/20 rounded-lg p-2"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* 弹窗内容 */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {loadingUserDetail ? (
+                <div className="text-center py-12">
+                  <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+                  <div className="mt-4 text-gray-600">加载中...</div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* 用户基本信息 */}
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                      <Users className="w-5 h-5 text-purple-600" />
+                      基本信息
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <div className="text-sm text-gray-500">当前积分</div>
+                        <div className="text-xl font-bold text-yellow-600">{selectedUser.points || 0}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-500">发布数量</div>
+                        <div className="text-xl font-bold text-blue-600">{selectedUser.total_posts || 0}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-500">成交率</div>
+                        <div className="text-xl font-bold text-green-600">{selectedUser.deal_rate || 0}%</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-500">账号状态</div>
+                        <div className={`text-xl font-bold ${selectedUser.status === 1 ? 'text-green-600' : 'text-red-600'}`}>
+                          {selectedUser.status === 1 ? '正常' : '禁用'}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 text-sm text-gray-500">
+                      注册时间：{new Date(selectedUser.created_at).toLocaleString()}
+                    </div>
+                  </div>
+
+                  {/* 积分变动历史 */}
+                  <div>
+                    <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                      <Coins className="w-5 h-5 text-yellow-600" />
+                      积分变动历史
+                      <span className="text-sm font-normal text-gray-500">（最近50条）</span>
+                    </h3>
+                    {userPointHistory.length === 0 ? (
+                      <div className="bg-gray-50 rounded-lg p-8 text-center text-gray-500">
+                        暂无积分变动记录
+                      </div>
+                    ) : (
+                      <div className="bg-white border rounded-lg overflow-hidden">
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead className="bg-gray-50 border-b">
+                              <tr>
+                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">时间</th>
+                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">类型</th>
+                                <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">变动</th>
+                                <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">余额</th>
+                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">说明</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {userPointHistory.map((record) => (
+                                <tr key={record.id} className="hover:bg-gray-50">
+                                  <td className="px-4 py-3 text-sm text-gray-600">
+                                    {new Date(record.created_at).toLocaleString()}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm">
+                                    <span className="inline-block px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
+                                      {getPointChangeTypeLabel(record.change_type)}
+                                    </span>
+                                  </td>
+                                  <td className={`px-4 py-3 text-sm text-right font-semibold ${
+                                    record.change_amount > 0 ? 'text-green-600' : 'text-red-600'
+                                  }`}>
+                                    {record.change_amount > 0 ? '+' : ''}{record.change_amount}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-right font-medium">
+                                    {record.balance_after}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">
+                                    {record.description || '-'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 用户所有交易信息 */}
+                  <div>
+                    <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-blue-600" />
+                      所有交易信息
+                      <span className="text-sm font-normal text-gray-500">（共{userPosts.length}条）</span>
+                    </h3>
+                    {userPosts.length === 0 ? (
+                      <div className="bg-gray-50 rounded-lg p-8 text-center text-gray-500">
+                        该用户暂未发布任何信息
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {userPosts.map((post) => (
+                          <div key={post.id} className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h4 className="font-semibold">{post.title}</h4>
+                                  <span className={`text-xs px-2 py-1 rounded ${
+                                    post.status === 1 
+                                      ? 'bg-green-100 text-green-700' 
+                                      : 'bg-red-100 text-red-700'
+                                  }`}>
+                                    {post.status === 1 ? '上架中' : '已下架'}
+                                  </span>
+                                </div>
+                                <div className="text-sm text-gray-600 space-y-1">
+                                  <div>价格：¥{post.price}</div>
+                                  <div>查看：{post.view_count}/{post.view_limit} 次</div>
+                                  {post.description && (
+                                    <div className="text-gray-500 line-clamp-2">{post.description}</div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex justify-between items-center text-xs text-gray-400 mt-2 pt-2 border-t">
+                              <div>发布时间：{new Date(post.created_at).toLocaleString()}</div>
+                              {post.updated_at && post.updated_at !== post.created_at && (
+                                <div>更新时间：{new Date(post.updated_at).toLocaleString()}</div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 弹窗底部 */}
+            <div className="border-t p-4 bg-gray-50 flex justify-end">
+              <button
+                onClick={handleCloseUserDetail}
+                className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

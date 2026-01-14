@@ -1,122 +1,148 @@
 <view class="container">
-  <!-- 背景装饰 -->
-  <view class="header-bg"></view>
+  <!-- 头部区域 -->
+  <view class="profile-header">
+    <block wx:if="{{isLoggedIn}}">
+      <view class="user-info-section">
+        <view class="avatar-large">
+          <text class="avatar-text-large">{{userInfo.phone ? userInfo.phone.slice(-4) : 'User'}}</text>
+        </view>
+        <view class="user-details">
+          <view class="user-name">{{userInfo.phone || '微信用户'}}</view>
+          <view class="user-id">ID: {{userInfo.id || '---'}}</view>
+        </view>
+      </view>
+      
+      <view class="stats-row">
+        <view class="stat-item">
+          <text class="stat-num">{{userInfo.total_posts || 0}}</text>
+          <text class="stat-lbl">发布</text>
+        </view>
+        <view class="stat-divider"></view>
+        <view class="stat-item">
+          <text class="stat-num">{{userInfo.total_invites || 0}}</text>
+          <text class="stat-lbl">邀请</text>
+        </view>
+        <view class="stat-divider"></view>
+        <view class="stat-item">
+          <text class="stat-num">{{userInfo.points || 0}}</text>
+          <text class="stat-lbl">积分</text>
+        </view>
+      </view>
+    </block>
 
-  <!-- 未登录 -->
-  <view class="login-prompt" wx:if="{{!isLoggedIn}}">
-    <view class="prompt-avatar">
-      <view class="avatar-placeholder"></view>
-    </view>
-    <view class="prompt-text">登录后查看更多功能</view>
-    <button class="login-btn" bindtap="goLogin">
-      <text>立即登录</text>
-      <view class="btn-arrow"></view>
-    </button>
+    <block wx:else>
+      <view class="login-prompt-simple" bindtap="goLogin">
+        <view class="login-avatar-placeholder"></view>
+        <view class="login-text-col">
+          <text class="login-title">登录 / 注册</text>
+          <text class="login-subtitle">登录体验更多功能</text>
+        </view>
+        <view class="ios-arrow"></view>
+      </view>
+    </block>
   </view>
 
-  <!-- 已登录 -->
-  <block wx:else>
-    <!-- 用户卡片 -->
-    <view class="user-card">
-      <view class="avatar">
-        <view class="avatar-inner">
-          <text class="avatar-text">{{userInfo.phone ? userInfo.phone.slice(-4) : '用户'}}</text>
+  <block wx:if="{{isLoggedIn}}">
+    <!-- 资产组 -->
+    <view class="ios-group">
+      <view class="ios-cell">
+        <view class="ios-cell-start">
+          <ios-icon name="coin" size="40" color="#FF9500" />
         </view>
-        <view class="avatar-ring"></view>
+        <view class="ios-cell-body">可用积分</view>
+        <view class="ios-cell-end">
+          <text style="color: #FF9500; font-weight: 600;">{{userInfo.points || 0}}</text>
+        </view>
       </view>
-      <view class="user-info">
-        <view class="phone">{{userInfo.phone || '未知用户'}}</view>
-        <view class="stats">
-          <view class="stat-item">
-            <text class="stat-value">{{userInfo.total_posts || 0}}</text>
-            <text class="stat-label">发布</text>
-          </view>
-          <view class="stat-divider"></view>
-          <view class="stat-item">
-            <text class="stat-value">{{userInfo.total_invites || 0}}</text>
-            <text class="stat-label">邀请</text>
-          </view>
+      <view class="ios-cell" bindtap="copyInviteCode">
+        <view class="ios-cell-start">
+          <ios-icon name="copy" size="40" color="#5856D6" />
+        </view>
+        <view class="ios-cell-body">我的邀请码</view>
+        <view class="ios-cell-end">
+          <text style="margin-right: 12rpx; font-family: monospace;">{{userInfo.invite_code || '---'}}</text>
+          <ios-icon name="copy" size="28" color="#C7C7CC" />
+        </view>
+      </view>
+      <button class="ios-cell share-btn" open-type="share" style="width: 100%; font-weight: normal; margin: 0; background: transparent; padding: 0; border: none; text-align: left;">
+        <view class="ios-cell-start">
+          <ios-icon name="share" size="40" color="#FF2D55" />
+        </view>
+        <view class="ios-cell-body">邀请好友</view>
+        <view class="ios-cell-end">
+          <text style="color: #8E8E93; font-size: 24rpx; margin-right: 8rpx;">分享得积分</text>
+          <view class="ios-arrow"></view>
+        </view>
+      </button>
+    </view>
+
+    <!-- 常用功能组 -->
+    <view class="ios-group">
+      <view class="ios-cell" bindtap="goRecharge">
+        <view class="ios-cell-start">
+          <ios-icon name="wallet" size="40" color="#34C759" />
+        </view>
+        <view class="ios-cell-body">积分充值</view>
+        <view class="ios-cell-end">
+          <view class="ios-arrow"></view>
+        </view>
+      </view>
+      <view class="ios-cell" bindtap="goPointsHistory">
+        <view class="ios-cell-start">
+          <ios-icon name="document" size="40" color="#FF3B30" />
+        </view>
+        <view class="ios-cell-body">积分记录</view>
+        <view class="ios-cell-end">
+          <view class="ios-arrow"></view>
+        </view>
+      </view>
+      <view class="ios-cell" bindtap="goMyPosts">
+        <view class="ios-cell-start">
+          <ios-icon name="publish" size="40" color="#007AFF" />
+        </view>
+        <view class="ios-cell-body">我的发布</view>
+        <view class="ios-cell-end">
+          <view class="ios-arrow"></view>
         </view>
       </view>
     </view>
 
-    <!-- 积分卡片 -->
-    <view class="points-card">
-      <view class="points-bg"></view>
-      <view class="points-content">
-        <view class="points-info">
-          <text class="points-label">可用积分</text>
-          <view class="points-value-wrap">
-            <text class="points-value">{{userInfo.points || 0}}</text>
-            <view class="points-icon"></view>
-          </view>
+    <!-- 服务组 -->
+    <view class="ios-group">
+      <view class="ios-cell">
+        <view class="ios-cell-start">
+          <ios-icon name="wechat" size="40" color="#07C160" />
         </view>
-        <view class="points-actions">
-          <button class="action-btn primary" bindtap="goRecharge">
-            <view class="action-icon recharge-icon"></view>
-            <text>充值</text>
-          </button>
-          <button class="action-btn" bindtap="goPointsHistory">
-            <view class="action-icon history-icon"></view>
-            <text>明细</text>
-          </button>
+        <view class="ios-cell-body">联系方式</view>
+        <view class="ios-cell-end">
+          <text>{{userInfo.wechat_id || userInfo.phone || '未设置'}}</text>
         </view>
       </view>
-    </view>
-
-    <!-- 邀请码 -->
-    <view class="invite-card">
-      <view class="invite-header">
-        <view class="invite-title">
-          <view class="invite-icon"></view>
-          <text>我的邀请码</text>
+      <button class="ios-cell" open-type="contact" style="width: 100%; font-weight: normal; margin: 0;">
+        <view class="ios-cell-start">
+          <ios-icon name="settings" size="40" color="#8E8E93" />
         </view>
-        <text class="invite-tip">邀请好友得积分</text>
-      </view>
-      <view class="invite-code-wrap">
-        <text class="invite-code">{{userInfo.invite_code || '---'}}</text>
-        <button class="copy-btn" bindtap="copyInviteCode">
-          <view class="copy-icon"></view>
-          <text>复制</text>
-        </button>
-      </view>
-    </view>
-
-    <!-- 功能列表 -->
-    <view class="menu-list">
-      <view class="menu-item">
-        <view class="menu-icon phone-menu-icon"></view>
-        <text class="menu-text">联系方式</text>
-        <text class="menu-value">{{userInfo.wechat_id || userInfo.phone || '未设置'}}</text>
-      </view>
-      <view class="menu-item" bindtap="goMyPosts">
-        <view class="menu-icon posts-icon"></view>
-        <text class="menu-text">我的发布</text>
-        <view class="menu-arrow"></view>
-      </view>
-      <view class="menu-item" bindtap="goPointsHistory">
-        <view class="menu-icon points-icon"></view>
-        <text class="menu-text">积分记录</text>
-        <view class="menu-arrow"></view>
-      </view>
-      <view class="menu-item" bindtap="goRecharge">
-        <view class="menu-icon wallet-icon"></view>
-        <text class="menu-text">充值积分</text>
-        <view class="menu-arrow"></view>
-      </view>
-      <view class="menu-item" bindtap="contactService">
-        <view class="menu-icon service-icon"></view>
-        <text class="menu-text">联系客服</text>
-        <view class="menu-arrow"></view>
-      </view>
-      <view class="menu-item" bindtap="viewAgreement">
-        <view class="menu-icon doc-icon"></view>
-        <text class="menu-text">用户协议</text>
-        <view class="menu-arrow"></view>
+        <view class="ios-cell-body">联系客服</view>
+        <view class="ios-cell-end">
+          <view class="ios-arrow"></view>
+        </view>
+      </button>
+      <view class="ios-cell" bindtap="viewAgreement">
+        <view class="ios-cell-start">
+          <ios-icon name="document" size="40" color="#8E8E93" />
+        </view>
+        <view class="ios-cell-body">用户协议</view>
+        <view class="ios-cell-end">
+          <view class="ios-arrow"></view>
+        </view>
       </view>
     </view>
 
     <!-- 退出登录 -->
-    <button class="logout-btn" bindtap="logout">退出登录</button>
+    <view class="ios-group" style="margin-top: 48rpx;">
+      <view class="ios-cell" bindtap="logout" style="justify-content: center;">
+        <text style="color: #FF3B30; font-weight: 500;">退出登录</text>
+      </view>
+    </view>
   </block>
 </view>

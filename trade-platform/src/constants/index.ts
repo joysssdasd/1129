@@ -53,7 +53,7 @@ export const POINTS = {
   PUBLISH_POST_COST: 10,
   VIEW_CONTACT_COST: 1,
   INVITE_REWARD: 10,
-  INITIAL_POINTS: 20,
+  INITIAL_POINTS: 100,
   RECHARGE_PACKAGES: [
     { amount: 10, points: 100, bonus: 0 },
     { amount: 25, points: 250, bonus: 20 },

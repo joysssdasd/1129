@@ -21,7 +21,7 @@
   <view class="section">
     <view class="section-title">三、积分规则</view>
     <view class="section-content">
-      1. <text class="highlight">新用户注册赠送30积分</text>，使用邀请码注册额外获得积分奖励。\n
+      1. <text class="highlight">新用户注册赠送100积分</text>，使用邀请码注册额外获得30积分奖励。\n
       2. 发布信息需消耗<text class="highlight">10积分</text>，信息可被查看10次。\n
       3. 查看他人联系方式需消耗<text class="highlight">1积分</text>。\n
       4. 邀请好友注册并完成首次发布，邀请人可获得<text class="highlight">10积分</text>奖励。\n

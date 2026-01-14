@@ -92,6 +92,22 @@ Page({
     })
   },
 
+  // 邀请好友 - 分享小程序
+  onShareAppMessage() {
+    const inviteCode = this.data.userInfo?.invite_code || ''
+    return {
+      title: '牛牛基地 - 高效可信的交易信息平台',
+      path: `/pages/login/login?invite=${inviteCode}`,
+      imageUrl: '' // 可以设置分享图片
+    }
+  },
+
+  // 点击邀请按钮触发分享
+  inviteFriend() {
+    // 这个方法会被 button 的 open-type="share" 触发
+    // 实际分享逻辑在 onShareAppMessage 中
+  },
+
   // 联系客服
   contactService() {
     wx.showModal({

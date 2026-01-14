@@ -18,6 +18,24 @@
   opacity: 1;
 }
 
+/* Inline Mode */
+.loading-container.inline {
+  position: static;
+  background: transparent;
+  display: inline-flex;
+  width: auto;
+  height: auto;
+  padding: 0;
+  z-index: 1;
+}
+
+.loading-container.inline .loading-content {
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  padding: 0;
+}
+
 .loading-content {
   display: flex;
   flex-direction: column;

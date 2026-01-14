@@ -15,6 +15,10 @@ Component({
     mask: {
       type: Boolean,
       value: true
+    },
+    fullscreen: {
+      type: Boolean,
+      value: true
     }
   }
 })
