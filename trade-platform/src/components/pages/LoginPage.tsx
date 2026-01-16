@@ -6,11 +6,13 @@ import { User } from '../../types'
 import { log } from '../../utils/logger'
 
 type LoginMode = 'password' | 'code'
+type PageMode = 'login' | 'register' | 'forgot'
 
 export default function LoginPage() {
-  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [mode, setMode] = useState<PageMode>('login')
   const [loginMode, setLoginMode] = useState<LoginMode>('password') // 默认使用密码登录
   const [registerStep, setRegisterStep] = useState(1)
+  const [forgotStep, setForgotStep] = useState(1) // 忘记密码步骤: 1=验证手机, 2=设置新密码
   const [showGuide, setShowGuide] = useState(false) // 显示使用指南
   
   // 通用字段
@@ -23,6 +25,8 @@ export default function LoginPage() {
   const isAdminPhone = (phoneNumber: string) => ADMIN_PHONES.includes(phoneNumber)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('') // 忘记密码时的新密码
+  const [confirmNewPassword, setConfirmNewPassword] = useState('') // 确认新密码
   const [verificationCode, setVerificationCode] = useState('')
   const [countdown, setCountdown] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -287,6 +291,88 @@ export default function LoginPage() {
     }
   }
 
+  // 忘记密码第一步：验证手机号存在
+  const handleForgotStep1 = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+
+    try {
+      // 检查用户是否存在
+      const { data: checkResult, error: checkError } = await supabase.functions.invoke('check-user-exists', {
+        body: { phone }
+      })
+
+      if (checkError || !checkResult?.data?.exists) {
+        alert('该手机号未注册')
+        setLoading(false)
+        return
+      }
+
+      // 用户存在，进入第二步
+      setForgotStep(2)
+      alert('请输入验证码和新密码')
+    } catch (error: any) {
+      alert(error.message || '验证失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 忘记密码第二步：验证码+设置新密码
+  const handleForgotStep2 = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!verificationCode || !/^\d{6}$/.test(verificationCode)) {
+      alert('请输入6位数字验证码')
+      return
+    }
+
+    const pwdCheck = checkPasswordStrength(newPassword)
+    if (!pwdCheck.valid) {
+      alert(pwdCheck.message)
+      return
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      alert('两次密码输入不一致')
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      // 调用reset-password Edge Function，它会验证验证码并重置密码
+      const { data, error } = await supabase.functions.invoke('reset-password', {
+        body: { 
+          phone, 
+          verification_code: verificationCode,
+          new_password: newPassword 
+        }
+      })
+
+      if (error) throw error
+
+      if (data?.error) {
+        throw new Error(data.error.message || '密码重置失败')
+      }
+
+      if (data?.data?.success) {
+        alert('密码重置成功，请使用新密码登录')
+        // 重置状态并返回登录页
+        setMode('login')
+        setForgotStep(1)
+        setVerificationCode('')
+        setNewPassword('')
+        setConfirmNewPassword('')
+        setPassword('')
+      }
+    } catch (error: any) {
+      alert(error.message || '密码重置失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // 注册第二步：设置密码和微信号
   const handleRegisterStep2 = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -415,8 +501,11 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => {
-                setMode('register')
-                setRegisterStep(1)
+                setMode('forgot')
+                setForgotStep(1)
+                setVerificationCode('')
+                setNewPassword('')
+                setConfirmNewPassword('')
               }}
               className="text-gray-500 hover:text-blue-600 hover:underline"
             >
@@ -507,6 +596,203 @@ export default function LoginPage() {
           >
             {loading ? '登录中...' : '登录'}
           </button>
+        </form>
+      )
+    }
+  }
+
+  // 渲染忘记密码表单
+  const renderForgotPasswordForm = () => {
+    const pwdCheck = newPassword ? checkPasswordStrength(newPassword) : null
+
+    if (forgotStep === 1) {
+      // 第一步：输入手机号
+      return (
+        <form onSubmit={handleForgotStep1} className="space-y-4">
+          <div className="mb-6">
+            <div className="flex items-center justify-center mb-4">
+              <div className="flex items-center">
+                <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-medium">
+                  1
+                </div>
+                <div className="w-16 h-1 bg-gray-300"></div>
+                <div className="w-8 h-8 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center text-sm font-medium">
+                  2
+                </div>
+              </div>
+            </div>
+            <p className="text-center text-sm text-gray-600">验证手机号</p>
+          </div>
+
+          <div>
+            <label htmlFor="forgot-phone" className="block text-sm font-medium text-gray-700 mb-2">
+              手机号
+            </label>
+            <input
+              type="tel"
+              id="forgot-phone"
+              name="phone"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              maxLength={11}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="请输入注册时的手机号"
+              required
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading || !phone}
+            className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? '验证中...' : '下一步'}
+          </button>
+
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setMode('login')
+                setForgotStep(1)
+                setVerificationCode('')
+              }}
+              className="text-sm text-gray-500 hover:text-blue-600 hover:underline"
+            >
+              返回登录
+            </button>
+          </div>
+        </form>
+      )
+    } else {
+      // 第二步：输入验证码和设置新密码
+      return (
+        <form onSubmit={handleForgotStep2} className="space-y-4">
+          <div className="mb-6">
+            <div className="flex items-center justify-center mb-4">
+              <div className="flex items-center">
+                <div className="w-8 h-8 rounded-full bg-green-600 text-white flex items-center justify-center text-sm font-medium">
+                  1
+                </div>
+                <div className="w-16 h-1 bg-green-600"></div>
+                <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-medium">
+                  2
+                </div>
+              </div>
+            </div>
+            <p className="text-center text-sm text-gray-600">设置新密码</p>
+          </div>
+
+          <div className="bg-blue-50 rounded-lg p-3 mb-4">
+            <p className="text-sm text-blue-800">
+              正在为手机号 {phone} 重置密码
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="forgot-code" className="block text-sm font-medium text-gray-700 mb-2">
+              验证码
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                id="forgot-code"
+                name="code"
+                value={verificationCode}
+                onChange={(e) => setVerificationCode(e.target.value)}
+                maxLength={6}
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="请输入验证码"
+                required
+              />
+              <button
+                type="button"
+                onClick={sendVerificationCode}
+                disabled={countdown > 0 || loading || !phone}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors whitespace-nowrap"
+              >
+                {countdown > 0 ? `${countdown}s` : '发送'}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 mb-2">
+              新密码
+            </label>
+            <input
+              type="password"
+              id="new-password"
+              name="newPassword"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="至少6位，包含数字和字母"
+              required
+            />
+            {pwdCheck && (
+              <p className={`mt-1 text-xs ${pwdCheck.valid ? 'text-green-600' : 'text-red-600'}`}>
+                {pwdCheck.message}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="confirm-new-password" className="block text-sm font-medium text-gray-700 mb-2">
+              确认新密码
+            </label>
+            <input
+              type="password"
+              id="confirm-new-password"
+              name="confirmNewPassword"
+              value={confirmNewPassword}
+              onChange={(e) => setConfirmNewPassword(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="请再次输入新密码"
+              required
+            />
+            {confirmNewPassword && newPassword !== confirmNewPassword && (
+              <p className="mt-1 text-xs text-red-600">两次密码输入不一致</p>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setForgotStep(1)
+                setVerificationCode('')
+                setNewPassword('')
+                setConfirmNewPassword('')
+              }}
+              className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+            >
+              上一步
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? '重置中...' : '重置密码'}
+            </button>
+          </div>
+
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setMode('login')
+                setForgotStep(1)
+                setVerificationCode('')
+                setNewPassword('')
+                setConfirmNewPassword('')
+              }}
+              className="text-sm text-gray-500 hover:text-blue-600 hover:underline"
+            >
+              返回登录
+            </button>
+          </div>
         </form>
       )
     }
@@ -815,7 +1101,7 @@ export default function LoginPage() {
           </h1>
           <p className="text-center text-gray-500 mb-8">高效、可信的交易信息服务</p>
 
-          {registerStep !== 3 && (
+          {registerStep !== 3 && mode !== 'forgot' && (
             <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
               <button
                 onClick={() => {
@@ -850,7 +1136,9 @@ export default function LoginPage() {
             </div>
           )}
 
-          {mode === 'login' ? renderLoginForm() : renderRegisterForm()}
+          {mode === 'login' && renderLoginForm()}
+          {mode === 'register' && renderRegisterForm()}
+          {mode === 'forgot' && renderForgotPasswordForm()}
 
           {mode === 'register' && registerStep === 1 && (
             <div className="mt-4 p-4 bg-blue-50 rounded-lg">
