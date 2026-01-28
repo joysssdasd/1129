@@ -6,6 +6,7 @@ import { Home, PlusCircle, User, Search, LogOut, RefreshCw, TrendingUp, X, Megap
 import { log } from '../../utils/logger'
 import { searchAndSort, extractKeywordStats, getSearchSuggestions } from '../../utils/searchUtils'
 import { cache, CACHE_KEYS, CACHE_TTL } from '../../services/cacheService'
+import CategoryCards from '../CategoryCards'
 
 interface Post {
   id: string
@@ -538,6 +539,11 @@ export default function HomePage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* 交易板块卡片 */}
+      <div className="max-w-7xl mx-auto px-4 py-3">
+        <CategoryCards />
       </div>
 
       {/* 交易信息列表 */}

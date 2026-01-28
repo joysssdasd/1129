@@ -11,6 +11,7 @@ const PublishPage = lazy(() => import('./components/pages/PublishPage'))
 const ProfilePage = lazy(() => import('./components/pages/ProfilePage'))
 const AdminPage = lazy(() => import('./components/pages/AdminPage'))
 const AgreementPage = lazy(() => import('./components/pages/AgreementPage'))
+const CategoryDetailPage = lazy(() => import('./components/pages/CategoryDetailPage'))
 
 // 加载中组件
 const PageLoader = () => (
@@ -44,6 +45,7 @@ function AppRoutes() {
         <Route path="/agreement" element={<AgreementPage />} />
         {/* 首页开放游客浏览 */}
         <Route path="/" element={<HomePage />} />
+        <Route path="/category/:categoryId" element={<CategoryDetailPage />} />
         <Route
           path="/post/:id"
           element={

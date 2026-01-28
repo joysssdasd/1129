@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
 
     try {
         const body = await req.json();
-        const { user_id, title, keywords, price, trade_type, delivery_date, delivery_days, extra_info, view_limit } = body;
+        const { user_id, title, keywords, price, trade_type, delivery_date, delivery_days, extra_info, view_limit, category_id } = body;
         
         console.log('发布请求参数:', body);
 
@@ -91,7 +91,8 @@ Deno.serve(async (req) => {
                 view_count: 0,
                 deal_count: 0,
                 status: 1,
-                expire_at: expireAt
+                expire_at: expireAt,
+                category_id: category_id || null
             })
         });
 

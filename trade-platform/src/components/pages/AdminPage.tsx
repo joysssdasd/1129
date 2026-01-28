@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../../contexts/UserContext'
 import { supabase } from '../../services/supabase'
-import { ArrowLeft, Users, FileText, DollarSign, Sparkles, BarChart3, Megaphone, Edit, Trash2, Plus, Settings, Ban, Coins, Flag, CheckCircle, XCircle, Eye } from 'lucide-react'
+import { ArrowLeft, Users, FileText, DollarSign, Sparkles, BarChart3, Megaphone, Edit, Trash2, Plus, Settings, Ban, Coins, Flag, CheckCircle, XCircle, Eye, Grid3x3 } from 'lucide-react'
 import QRCodeManager from '../../features/QRCodeManager'
 import AIBatchPublish from '../../features/forms/AIBatchPublish'
 import AnalyticsDashboard from '../../features/analytics/AnalyticsDashboard'
+import CategoryManagement from '../CategoryManagement'
 
 const RECHARGE_PACKAGES = [
   { amount: 50, points: 55, name: '充值套餐A' },
@@ -746,6 +747,15 @@ export default function AdminPage() {
               数据分析
             </button>
             <button
+              onClick={() => setActiveTab('categories')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap ${
+                activeTab === 'categories' ? 'bg-purple-100 text-purple-700' : 'text-gray-600'
+              }`}
+            >
+              <Grid3x3 className="w-4 h-4" />
+              板块管理
+            </button>
+            <button
               onClick={() => setActiveTab('announcements')}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap ${
                 activeTab === 'announcements' ? 'bg-purple-100 text-purple-700' : 'text-gray-600'
@@ -1226,6 +1236,9 @@ export default function AdminPage() {
         )}
 
         {activeTab === 'analytics' && <AnalyticsDashboard />}
+
+        {/* 板块管理 */}
+        {activeTab === 'categories' && <CategoryManagement />}
 
         {/* 公告管理 */}
         {activeTab === 'announcements' && (

@@ -4,6 +4,13 @@ import { useUser } from '../../contexts/UserContext'
 import { supabase } from '../../services/supabase'
 import { ArrowLeft } from 'lucide-react'
 
+interface Category {
+  id: string
+  name: string
+  icon: string
+  description: string
+}
+
 export default function PublishPage() {
   const [title, setTitle] = useState('')
   const [keywords, setKeywords] = useState('')
@@ -15,12 +22,15 @@ export default function PublishPage() {
   const [titleSuggestions, setTitleSuggestions] = useState<string[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [bannedKeywords, setBannedKeywords] = useState<string[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('')
   const { user, setUser } = useUser()
   const navigate = useNavigate()
 
-  // 加载敏感词库
+  // 加载敏感词库和板块列表
   useEffect(() => {
     loadBannedKeywords()
+    loadCategories()
   }, [])
 
   const loadBannedKeywords = async () => {
@@ -29,6 +39,24 @@ export default function PublishPage() {
       .select('keyword')
     if (data) {
       setBannedKeywords(data.map(item => item.keyword))
+    }
+  }
+
+  // 加载板块列表
+  const loadCategories = async () => {
+    const { data } = await supabase
+      .from('categories')
+      .select('id, name, icon, description')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+    
+    if (data) {
+      setCategories(data)
+      // 默认选择"其他分类"
+      const otherCategory = data.find(c => c.name === '其他分类')
+      if (otherCategory) {
+        setSelectedCategoryId(otherCategory.id)
+      }
     }
   }
 
@@ -121,7 +149,8 @@ export default function PublishPage() {
           price: parseFloat(price),
           trade_type: tradeType,
           delivery_days: (tradeType === 3 || tradeType === 4) ? parseInt(deliveryDays) : null,
-          extra_info: extraInfo || null
+          extra_info: extraInfo || null,
+          category_id: selectedCategoryId || null // 添加板块ID
         }
       })
 
@@ -248,6 +277,26 @@ export default function PublishPage() {
                     {type.label}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                选择板块（可选）
+              </label>
+              <select
+                value={selectedCategoryId}
+                onChange={(e) => setSelectedCategoryId(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.icon} {category.name}
+                  </option>
+                ))}
+              </select>
+              <div className="text-xs text-gray-500 mt-1">
+                选择合适的板块可以让更多人看到你的交易信息
               </div>
             </div>
 
