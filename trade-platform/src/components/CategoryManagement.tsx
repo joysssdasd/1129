@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../services/supabase'
-import { Plus, Edit, Trash2, Save, X, GripVertical } from 'lucide-react'
+import { Plus, Edit, Trash2, Save, X, Settings2 } from 'lucide-react'
 import { toast } from '../services/toastService'
 
 interface Category {
@@ -22,6 +22,7 @@ export default function CategoryManagement() {
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
+  const [displayCount, setDisplayCount] = useState(4) // 首页显示板块数量
   const [formData, setFormData] = useState({
     name: '',
     icon: '📦',
@@ -32,7 +33,63 @@ export default function CategoryManagement() {
 
   useEffect(() => {
     loadCategories()
+    loadDisplaySettings()
   }, [])
+
+  // 加载显示数量设置
+  const loadDisplaySettings = async () => {
+    try {
+      const { data } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'category_display_count')
+        .single()
+      
+      if (data?.value) {
+        setDisplayCount(parseInt(data.value) || 4)
+      }
+    } catch (error) {
+      // 设置项不存在，使用默认值
+    }
+  }
+
+  // 更新显示数量设置
+  const handleDisplayCountChange = async (count: number) => {
+    try {
+      // 先尝试更新
+      const { data: existingData } = await supabase
+        .from('system_settings')
+        .select('id')
+        .eq('key', 'category_display_count')
+        .single()
+
+      if (existingData) {
+        // 记录存在，更新它
+        const { error: updateError } = await supabase
+          .from('system_settings')
+          .update({ value: count.toString(), updated_at: new Date().toISOString() })
+          .eq('key', 'category_display_count')
+        
+        if (updateError) throw updateError
+      } else {
+        // 记录不存在，插入新记录
+        const { error: insertError } = await supabase
+          .from('system_settings')
+          .insert({
+            key: 'category_display_count',
+            value: count.toString(),
+            category: 'display'
+          })
+        
+        if (insertError) throw insertError
+      }
+
+      setDisplayCount(count)
+      toast.success(`已设置首页显示 ${count} 个板块`)
+    } catch (error: any) {
+      toast.error('设置失败', error.message)
+    }
+  }
 
   const loadCategories = async () => {
     try {
@@ -160,6 +217,41 @@ export default function CategoryManagement() {
           <Plus size={20} />
           添加板块
         </button>
+      </div>
+
+      {/* 首页显示数量设置 */}
+      <div className="bg-white p-4 rounded-lg border">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Settings2 size={20} className="text-purple-600" />
+            <div>
+              <h3 className="font-bold text-sm">首页板块显示数量</h3>
+              <p className="text-xs text-gray-500">设置首页热力图显示的板块数量（建议4或6个）</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleDisplayCountChange(4)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                displayCount === 4
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              4个 (2×2)
+            </button>
+            <button
+              onClick={() => handleDisplayCountChange(6)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                displayCount === 6
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              6个 (3×2)
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* 添加板块表单 */}
