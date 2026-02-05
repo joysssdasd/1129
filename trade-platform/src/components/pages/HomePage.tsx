@@ -6,6 +6,7 @@ import { Home, PlusCircle, User, Search, LogOut, RefreshCw, TrendingUp, X, Megap
 import { log } from '../../utils/logger'
 import { searchAndSort, extractKeywordStats, getSearchSuggestions } from '../../utils/searchUtils'
 import { cache, CACHE_KEYS, CACHE_TTL } from '../../services/cacheService'
+// 热力图板块组件 - 显示交易板块热度
 import CategoryCards from '../CategoryCards'
 
 interface Post {
