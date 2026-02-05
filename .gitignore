@@ -6,7 +6,7 @@ pnpm-lock.yaml
 .pnpm-store/
 
 # 构建产物
-trade-platform/dist/
+# trade-platform/dist/  # 注释掉以便直接部署构建好的文件
 build/
 *.tgz
 
