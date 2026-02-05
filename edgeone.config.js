@@ -1,24 +1,25 @@
 // 老王我给你写个EdgeOne配置文件，让构建更顺畅！
+// 注意：现在使用预构建的dist目录，不需要在EdgeOne上构建
 
 module.exports = {
   // 应用入口
   entry: {
-    main: './trade-platform/index.html'
+    main: './trade-platform/dist/index.html'
   },
 
-  // 构建配置
+  // 构建配置 - 使用预构建的dist目录，跳过构建步骤
   build: {
-    // 项目根目录
-    root: './trade-platform',
+    // 项目根目录 - 直接指向dist
+    root: './trade-platform/dist',
 
-    // 构建命令
-    command: 'pnpm build:prod',
+    // 构建命令 - 空命令，因为已经预构建
+    command: 'echo "Using pre-built dist directory"',
 
-    // 输出目录
+    // 输出目录 - 就是dist本身
     output: './trade-platform/dist',
 
-    // 安装命令
-    install: 'pnpm install --prefer-offline',
+    // 安装命令 - 不需要安装
+    install: 'echo "No install needed for pre-built"',
 
     // Node.js版本
     nodeVersion: '18',
