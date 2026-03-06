@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../services/supabase'
 import { Plus, Edit, Trash2, Save, X, Settings2 } from 'lucide-react'
 import { toast } from '../services/toastService'
+import { useUser } from '../contexts/UserContext'
 
 interface Category {
   id: string
@@ -18,6 +19,7 @@ interface Category {
 }
 
 export default function CategoryManagement() {
+  const { user } = useUser()
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -136,6 +138,35 @@ export default function CategoryManagement() {
   }
 
   const handleUpdate = async (id: string, updates: Partial<Category>) => {
+    if (!user?.id) {
+      toast.error('Please login as admin first')
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/admin/categories/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-user-id': user.id
+        },
+        body: JSON.stringify(updates)
+      })
+
+      const result = await response.json().catch(() => null)
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error?.message || result?.message || 'Update failed')
+      }
+
+      toast.success('Category updated')
+      setEditingId(null)
+      loadCategories()
+      return
+    } catch (error: any) {
+      toast.error('Failed to update category', error.message)
+      return
+    }
+
     try {
       const { error } = await supabase
         .from('categories')
