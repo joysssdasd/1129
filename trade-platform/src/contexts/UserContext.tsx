@@ -3,11 +3,33 @@
  */
 
 import { create } from 'zustand';
-import { persist, subscribeWithSelector } from 'zustand/middleware';
+import { createJSONStorage, persist, subscribeWithSelector, type StateStorage } from 'zustand/middleware';
 import { User } from '@/types';
 import { STORAGE_KEYS } from '@/constants';
 import { toast } from '@/services/toastService';
 import { log } from '@/utils/logger';
+
+const safeLocalStorage: StateStorage = {
+  getItem: (name) => {
+    const value = window.localStorage.getItem(name);
+    if (!value) return null;
+
+    try {
+      JSON.parse(value);
+      return value;
+    } catch (error) {
+      window.localStorage.removeItem(name);
+      log.warn(`Invalid persisted state removed: ${name}`, error);
+      return null;
+    }
+  },
+  setItem: (name, value) => {
+    window.localStorage.setItem(name, value);
+  },
+  removeItem: (name) => {
+    window.localStorage.removeItem(name);
+  },
+};
 
 /**
  * 用户状态接口
@@ -144,6 +166,7 @@ export const useUserStore = create<UserState>()(
       }),
       {
         name: STORAGE_KEYS.USER_INFO,
+        storage: createJSONStorage(() => safeLocalStorage),
         partialize: (state) => ({
           user: state.user,
           isAuthenticated: state.isAuthenticated,
