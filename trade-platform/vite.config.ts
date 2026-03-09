@@ -22,9 +22,12 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom'],
-          router: ['react-router-dom'],
-          ui: [
+          // Keep the React runtime and React-based libraries in one chunk to avoid
+          // circular init order between router/ui chunks in production builds.
+          vendor: [
+            'react',
+            'react-dom',
+            'react-router-dom',
             '@radix-ui/react-dialog',
             '@radix-ui/react-dropdown-menu',
             '@radix-ui/react-toast',
@@ -41,4 +44,3 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000
   }
 })
-
