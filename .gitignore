@@ -209,11 +209,14 @@ database-init-for-new-project.sql
 
 # Tencent Cloud EdgeOne
 .env
-.edgeone/*
+.edgeone/
 !.edgeone/project.json
 trade-platform/.edgeone/*
 !trade-platform/.edgeone/project.json
 .tef_dist/*
+
+# Local browser/automation artifacts
+.playwright-cli/
 
 # WeChat数据库文件（太大，不应该提交）
 wechat/EchoTrace/**/*.db
