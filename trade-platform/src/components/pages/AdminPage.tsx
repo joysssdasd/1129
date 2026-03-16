@@ -523,14 +523,16 @@ export default function AdminPage() {
   // 获取积分变动类型标签
   const getPointChangeTypeLabel = (type: number) => {
     const labels: Record<number, string> = {
-      1: '发布信息',
-      2: '查看联系方式',
-      3: '信息下架返还',
+      1: '注册奖励',
+      2: '发布交易信息',
+      3: '查看联系方式',
       4: '充值',
       5: '邀请奖励',
       6: '管理员增加',
       7: '管理员扣除',
-      8: '重新上架扣除'
+      8: '重新上架扣除',
+      9: '每日发帖奖励',
+      10: '注册送积分补齐'
     }
     return labels[type] || '其他'
   }

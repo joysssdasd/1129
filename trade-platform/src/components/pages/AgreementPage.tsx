@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
+import { POINTS } from '../../constants'
 
 export default function AgreementPage() {
   const navigate = useNavigate()
@@ -79,8 +80,9 @@ export default function AgreementPage() {
               <div>
                 <h3 className="font-bold text-gray-900 mb-2">六、积分规则</h3>
                 <ul className="list-disc list-inside space-y-1">
-                  <li>新用户注册赠送100积分</li>
-                  <li>发布交易信息消耗10积分</li>
+                  <li>新用户注册赠送{POINTS.INITIAL_POINTS}积分</li>
+                  <li>发布交易信息消耗{POINTS.PUBLISH_POST_COST}积分</li>
+                  <li>每日前{POINTS.DAILY_POST_REWARD_LIMIT}条交易信息发布可获得{POINTS.DAILY_POST_REWARD}积分奖励</li>
                   <li>查看联系方式消耗1积分</li>
                   <li>邀请好友完成首次发布，邀请人获得10积分，被邀请人获得30积分</li>
                   <li>积分可通过充值获得，充值比例为1元=10积分</li>

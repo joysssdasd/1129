@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../../contexts/UserContext'
+import { POINTS } from '../../constants'
+import { claimDailyPublishReward } from '../../services/growthRewards'
 import { supabase } from '../../services/supabase'
 import { ArrowLeft } from 'lucide-react'
 
@@ -121,7 +123,7 @@ export default function PublishPage() {
 
     if (!user) return
 
-    if (user.points < 10) {
+    if (user.points < POINTS.PUBLISH_POST_COST) {
       alert('积分不足，请先充值')
       return
     }
@@ -137,7 +139,7 @@ export default function PublishPage() {
     setLoading(true)
     
     // 乐观更新：先更新本地状态，提升用户体验
-    const updatedPoints = user.points - 10
+    const updatedPoints = user.points - POINTS.PUBLISH_POST_COST
     setUser({ ...user, points: updatedPoints, total_posts: user.total_posts + 1 })
     
     try {
@@ -156,7 +158,27 @@ export default function PublishPage() {
 
       if (error) throw error
 
-      alert('发布成功！')
+      const publishedPostId = data?.data?.post?.id || data?.post?.id
+      let successMessage = '发布成功！'
+
+      if (publishedPostId) {
+        try {
+          const rewardResult = await claimDailyPublishReward(user.id, publishedPostId)
+          setUser({
+            ...user,
+            points: rewardResult.user.points,
+            total_posts: rewardResult.user.total_posts ?? user.total_posts + 1
+          })
+
+          if (rewardResult.awarded) {
+            successMessage = `发布成功！今日前${POINTS.DAILY_POST_REWARD_LIMIT}条发帖奖励 +${rewardResult.rewardPoints} 积分已到账`
+          }
+        } catch (rewardError) {
+          console.warn('daily publish reward claim failed', rewardError)
+        }
+      }
+
+      alert(successMessage)
       navigate('/')
     } catch (error: any) {
       // 发布失败，回滚本地状态
@@ -339,10 +361,10 @@ export default function PublishPage() {
             <div className="bg-blue-50 rounded-lg p-4">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-blue-800">发布费用</span>
-                <span className="text-lg font-bold text-blue-600">10积分</span>
+                <span className="text-lg font-bold text-blue-600">{POINTS.PUBLISH_POST_COST}积分</span>
               </div>
               <div className="text-xs text-blue-600 mt-1">
-                当前积分：{user?.points} | 发布后可获得10次联系方式查看机会
+                当前积分：{user?.points} | 发布后可获得10次联系方式查看机会 | 每日前{POINTS.DAILY_POST_REWARD_LIMIT}条发帖返{POINTS.DAILY_POST_REWARD}积分
               </div>
             </div>
 

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useUser } from '../../contexts/UserContext'
+import { POINTS } from '../../constants'
+import { completeRegistrationBonus } from '../../services/growthRewards'
 import { supabase } from '../../services/supabase'
 import { User } from '../../types'
 import { log } from '../../utils/logger'
@@ -413,7 +415,16 @@ export default function LoginPage() {
       if (error) throw error
 
       if (data?.data?.user) {
-        setUser(data.data.user)
+        let registeredUser = data.data.user
+
+        try {
+          const bonusResult = await completeRegistrationBonus(registeredUser.id)
+          registeredUser = bonusResult.user
+        } catch (bonusError) {
+          log.warn('Registration bonus top-up failed, continuing with existing user state', bonusError)
+        }
+
+        setUser(registeredUser)
         setRegisterStep(3)
         setShowGuide(true) // 显示使用指南
       }
@@ -1065,7 +1076,7 @@ export default function LoginPage() {
 
           <div>
             <h3 className="text-xl font-bold text-gray-900 mb-2">注册成功</h3>
-            <p className="text-gray-600">恭喜您，已成功注册并获得100积分奖励！</p>
+            <p className="text-gray-600">恭喜您，已成功注册并获得{POINTS.INITIAL_POINTS}积分奖励！</p>
           </div>
 
           <div className="bg-blue-50 rounded-lg p-4">
@@ -1143,7 +1154,7 @@ export default function LoginPage() {
           {mode === 'register' && registerStep === 1 && (
             <div className="mt-4 p-4 bg-blue-50 rounded-lg">
               <p className="text-sm text-blue-800">
-                注册即可获得100积分奖励，使用邀请码完成首次发布可额外获得30积分
+                注册即可获得{POINTS.INITIAL_POINTS}积分奖励，使用邀请码完成首次发布可额外获得30积分
               </p>
             </div>
           )}
@@ -1213,7 +1224,7 @@ export default function LoginPage() {
                     <div className="flex-1">
                       <h4 className="font-semibold text-gray-900 mb-1">查看联系方式</h4>
                       <p className="text-sm text-gray-600">
-                        点击"交易"按钮查看发布者微信号。<span className="text-red-600 font-medium">每次查看消耗5积分</span>，
+                        点击"交易"按钮查看发布者微信号。<span className="text-red-600 font-medium">每次查看消耗1积分</span>，
                         系统会自动复制微信号到剪贴板
                       </p>
                     </div>
@@ -1226,7 +1237,7 @@ export default function LoginPage() {
                     <div className="flex-1">
                       <h4 className="font-semibold text-gray-900 mb-1">获取更多积分</h4>
                       <p className="text-sm text-gray-600">
-                        通过充值、邀请好友、发布真实信息等方式获得积分。每邀请一个好友注册可获得<span className="text-green-600 font-medium">100积分</span>
+                        通过充值、邀请好友、发布真实信息等方式获得积分。每邀请一个好友完成首次发布可获得<span className="text-green-600 font-medium">10积分</span>，每日前{POINTS.DAILY_POST_REWARD_LIMIT}条发布还可返<span className="text-green-600 font-medium">{POINTS.DAILY_POST_REWARD}积分</span>
                       </p>
                     </div>
                   </div>
@@ -1242,11 +1253,15 @@ export default function LoginPage() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between items-center">
                     <span className="text-gray-700">• 注册奖励</span>
-                    <span className="text-green-600 font-semibold">+100积分</span>
+                    <span className="text-green-600 font-semibold">+{POINTS.INITIAL_POINTS}积分</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-700">• 邀请好友</span>
-                    <span className="text-green-600 font-semibold">+100积分/人</span>
+                    <span className="text-green-600 font-semibold">+10积分/人</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-700">• 每日前5条发帖奖励</span>
+                    <span className="text-green-600 font-semibold">+{POINTS.DAILY_POST_REWARD}积分/条</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-700">• 发布信息</span>
@@ -1254,7 +1269,7 @@ export default function LoginPage() {
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-700">• 查看联系方式</span>
-                    <span className="text-red-600 font-semibold">-5积分</span>
+                    <span className="text-red-600 font-semibold">-1积分</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-700">• 信息下架返还</span>

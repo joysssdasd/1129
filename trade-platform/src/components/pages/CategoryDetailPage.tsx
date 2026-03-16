@@ -4,6 +4,7 @@ import { supabase } from '../../services/supabase'
 import { ArrowLeft, Search, TrendingUp } from 'lucide-react'
 import { useUser } from '../../contexts/UserContext'
 import { toast } from '../../services/toastService'
+import { POINTS } from '../../constants'
 
 interface Post {
   id: string
@@ -29,7 +30,7 @@ export default function CategoryDetailPage() {
   const { categoryId } = useParams<{ categoryId: string }>()
   const location = useLocation()
   const navigate = useNavigate()
-  const { user } = useUser()
+  const { user, setUser } = useUser()
   
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
@@ -81,7 +82,7 @@ export default function CategoryDetailPage() {
       return
     }
 
-    if (user.points < 5) {
+    if (user.points < POINTS.VIEW_CONTACT_COST) {
       toast.error('积分不足，请先充值')
       navigate('/profile')
       return
@@ -99,8 +100,11 @@ export default function CategoryDetailPage() {
       toast.success(`已复制联系方式：${data.wechat_id}`)
 
       // 更新用户积分
-      if (user) {
-        user.points -= 5
+      if (user && !data?.already_viewed) {
+        setUser({
+          ...user,
+          points: Math.max(0, user.points - POINTS.VIEW_CONTACT_COST)
+        })
       }
     } catch (error: any) {
       toast.error('操作失败', error.message)
@@ -191,11 +195,11 @@ export default function CategoryDetailPage() {
                   <button
                     onClick={(e) => handleQuickTrade(post, e)}
                     className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all active:scale-95 ${
-                      user && user.points >= 5
+                      user && user.points >= POINTS.VIEW_CONTACT_COST
                         ? 'bg-green-500 text-white hover:bg-green-600'
                         : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                     }`}
-                    disabled={!user || user.points < 5}
+                    disabled={!user || user.points < POINTS.VIEW_CONTACT_COST}
                   >
                     交易
                   </button>

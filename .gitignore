@@ -66,9 +66,20 @@ Thumbs.db
 *.tmp
 *.temp
 .cache/
+_build*.txt
+_tmp_*/
+_tmp*.js
+_clean_deploy_*/
+_deploy_bundle_full/
+chrome_dump*.html
+chrome_run_*.html
+site.png
+optimization_suggestions.md
+core_call_chain.md
 
 # 浏览器截图
 .browser_screenshots/
+.chrome-debug-profile/
 
 # 测试报告
 *.log
@@ -200,6 +211,8 @@ database-init-for-new-project.sql
 .env
 .edgeone/*
 !.edgeone/project.json
+trade-platform/.edgeone/*
+!trade-platform/.edgeone/project.json
 .tef_dist/*
 
 # WeChat数据库文件（太大，不应该提交）

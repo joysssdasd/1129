@@ -1,0 +1,31 @@
+{
+  "functions": [
+    { "name": "admin-approve-recharge", "source": "external" },
+    { "name": "ai-batch-publish", "source": "external" },
+    { "name": "ai-batch-publish-v2", "source": "external" },
+    { "name": "auth-login", "source": "repo" },
+    { "name": "batch-publish-posts", "source": "repo" },
+    { "name": "change-password", "source": "external" },
+    { "name": "check-user-exists", "source": "external" },
+    { "name": "confirm-deal", "source": "external" },
+    { "name": "detect-arbitrage", "source": "external" },
+    { "name": "generate-daily-report", "source": "external" },
+    { "name": "get-hourly-stats", "source": "external" },
+    { "name": "get-invitation-info", "source": "external" },
+    { "name": "get-keyword-analytics", "source": "external" },
+    { "name": "get-payment-qrcodes", "source": "external" },
+    { "name": "get-price-analysis", "source": "external" },
+    { "name": "get-statistics", "source": "external" },
+    { "name": "login-with-password", "source": "repo" },
+    { "name": "publish-post", "source": "external" },
+    { "name": "recharge-request", "source": "external" },
+    { "name": "register-with-password", "source": "external" },
+    { "name": "reset-password", "source": "external" },
+    { "name": "save-payment-qrcode", "source": "external" },
+    { "name": "send-sms-code", "source": "external" },
+    { "name": "send-verification-code", "source": "repo" },
+    { "name": "toggle-post-status", "source": "external" },
+    { "name": "verify-sms", "source": "external" },
+    { "name": "view-contact", "source": "external" }
+  ]
+}
