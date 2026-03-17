@@ -256,24 +256,89 @@ const computeCheckInStreak = (records = []) => {
 const upsertSystemSettings = async (config, rows) => {
   if (!Array.isArray(rows) || rows.length === 0) return []
 
-  const upsertRes = await restRequest({
+  const normalizedRows = rows.reduce((accumulator, row) => {
+    if (!row?.key) return accumulator
+    const existingIndex = accumulator.findIndex((item) => item.key === row.key)
+    if (existingIndex >= 0) {
+      accumulator[existingIndex] = row
+    } else {
+      accumulator.push(row)
+    }
+    return accumulator
+  }, [])
+
+  const existingRes = await restRequest({
     config,
     resource: 'system_settings',
-    query: 'on_conflict=key&select=id,key,value,category,created_at,updated_at',
-    method: 'POST',
-    body: rows,
-    useServiceRole: true,
-    extraHeaders: {
-      'Content-Type': 'application/json',
-      Prefer: 'resolution=merge-duplicates,return=representation'
-    }
+    query:
+      `key=in.(${normalizedRows.map((row) => `"${row.key}"`).join(',')})` +
+      '&select=id,key,value,category,created_at,updated_at',
+    useServiceRole: true
   })
 
-  if (!upsertRes.ok) {
-    throw new Error(upsertRes.text || 'Failed to upsert system settings')
+  if (!existingRes.ok) {
+    throw new Error(existingRes.text || 'Failed to load existing system settings')
   }
 
-  return Array.isArray(upsertRes.data) ? upsertRes.data : []
+  const existingRows = Array.isArray(existingRes.data) ? existingRes.data : []
+  const existingKeySet = new Set(existingRows.map((row) => row?.key).filter(Boolean))
+  const updatedRows = []
+
+  for (const row of normalizedRows) {
+    const payload = {
+      value: row.value,
+      category: row.category,
+      updated_at: row.updated_at || new Date().toISOString()
+    }
+
+    if (existingKeySet.has(row.key)) {
+      const updateRes = await restRequest({
+        config,
+        resource: 'system_settings',
+        query: `key=eq.${encodeURIComponent(row.key)}&select=id,key,value,category,created_at,updated_at`,
+        method: 'PATCH',
+        body: payload,
+        useServiceRole: true,
+        extraHeaders: {
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation'
+        }
+      })
+
+      if (!updateRes.ok) {
+        throw new Error(updateRes.text || `Failed to update system setting: ${row.key}`)
+      }
+
+      updatedRows.push(...(Array.isArray(updateRes.data) ? updateRes.data : []))
+      continue
+    }
+
+    const insertRes = await restRequest({
+      config,
+      resource: 'system_settings',
+      query: 'select=id,key,value,category,created_at,updated_at',
+      method: 'POST',
+      body: [
+        {
+          key: row.key,
+          ...payload
+        }
+      ],
+      useServiceRole: true,
+      extraHeaders: {
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation'
+      }
+    })
+
+    if (!insertRes.ok) {
+      throw new Error(insertRes.text || `Failed to insert system setting: ${row.key}`)
+    }
+
+    updatedRows.push(...(Array.isArray(insertRes.data) ? insertRes.data : []))
+  }
+
+  return updatedRows
 }
 
 const loadSystemSettingsMap = async (config, keys, options = {}) => {
