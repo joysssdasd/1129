@@ -1,16 +1,41 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useUser } from '../../contexts/UserContext'
 import { supabase } from '../../services/supabase'
-import { ArrowLeft, Copy, Upload, MessageCircle, Receipt, TrendingUp, FileText, Edit, Trash2, Clock, CheckCircle, XCircle, Key, Users, Sparkles, Archive, AlertTriangle, Megaphone, X } from 'lucide-react'
+import { ArrowLeft, Copy, Upload, MessageCircle, Receipt, TrendingUp, FileText, Edit, Trash2, Clock, CheckCircle, XCircle, Key, Users, Sparkles, Archive, AlertTriangle, Megaphone, X, CalendarCheck2, Trophy } from 'lucide-react'
 import InvitationStatistics from '../../features/InvitationStatistics'
 import UserAIBatchPublish from '../../features/forms/UserAIBatchPublish'
 import { autoHideService } from '../../services/autoHideService'
 import { POST_STATUS } from '../../constants'
 import { log } from '../../utils/logger'
+import GrowthCenter from '../../features/growth/GrowthCenter'
+import PublishLeaderboard from '../../features/growth/PublishLeaderboard'
+
+const PROFILE_TABS = new Set([
+  'overview',
+  'growth',
+  'leaderboard',
+  'posts',
+  'expired',
+  'history',
+  'points',
+  'rechargeHistory',
+  'recharge',
+  'service',
+  'invitations',
+  'changePassword',
+  'aiPublish'
+])
 
 export default function ProfilePage() {
-  const [activeTab, setActiveTab] = useState('overview')
+  const location = useLocation()
+  const navigate = useNavigate()
+  const getInitialTab = () => {
+    const nextTab = new URLSearchParams(location.search).get('tab') || 'overview'
+    return PROFILE_TABS.has(nextTab) ? nextTab : 'overview'
+  }
+
+  const [activeTab, setActiveTab] = useState(getInitialTab)
   const [myPosts, setMyPosts] = useState<any[]>([])
   const [expiredPosts, setExpiredPosts] = useState<any[]>([])
   const [viewHistory, setViewHistory] = useState<any[]>([])
@@ -34,7 +59,17 @@ export default function ProfilePage() {
   const [serviceSettings, setServiceSettings] = useState<{ [key: string]: string }>({})
 
   const { user, setUser } = useUser()
-  const navigate = useNavigate()
+
+  const switchTab = (tab: string) => {
+    setActiveTab(tab)
+    navigate(tab === 'overview' ? '/profile' : `/profile?tab=${tab}`)
+  }
+
+  useEffect(() => {
+    const nextTab = new URLSearchParams(location.search).get('tab') || 'overview'
+    const normalizedTab = PROFILE_TABS.has(nextTab) ? nextTab : 'overview'
+    setActiveTab(normalizedTab)
+  }, [location.search])
 
   useEffect(() => {
     if (activeTab === 'posts') loadMyPosts()
@@ -548,6 +583,16 @@ export default function ProfilePage() {
               <h3 className="font-semibold mb-3">快捷功能</h3>
               <div className="grid grid-cols-2 gap-3">
                 <button
+                  onClick={() => switchTab('growth')}
+                  className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-emerald-400 hover:bg-emerald-50 transition-all"
+                >
+                  <CalendarCheck2 className="w-5 h-5 text-emerald-600" />
+                  <div className="text-left">
+                    <div className="font-medium text-sm">活跃中心</div>
+                    <div className="text-xs text-gray-500">签到任务与奖励</div>
+                  </div>
+                </button>
+                <button
                   onClick={() => setActiveTab('posts')}
                   className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all"
                 >
@@ -565,6 +610,16 @@ export default function ProfilePage() {
                   <div className="text-left">
                     <div className="font-medium text-sm">AI批量发布</div>
                     <div className="text-xs text-gray-500">智能生成</div>
+                  </div>
+                </button>
+                <button
+                  onClick={() => switchTab('leaderboard')}
+                  className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-orange-400 hover:bg-orange-50 transition-all"
+                >
+                  <Trophy className="w-5 h-5 text-orange-600" />
+                  <div className="text-left">
+                    <div className="font-medium text-sm">发帖榜</div>
+                    <div className="text-xs text-gray-500">看看谁最活跃</div>
                   </div>
                 </button>
                 <button
@@ -657,6 +712,40 @@ export default function ProfilePage() {
             >
               退出登录
             </button>
+          </div>
+        )}
+
+        {activeTab === 'growth' && user && (
+          <div className="space-y-4">
+            <button
+              onClick={() => switchTab('overview')}
+              className="text-blue-600 text-sm flex items-center gap-1"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              返回
+            </button>
+
+            <GrowthCenter
+              user={user}
+              onUserChange={setUser}
+              onGoPublish={() => navigate('/publish')}
+              onGoInvites={() => switchTab('invitations')}
+              onGoLeaderboard={() => switchTab('leaderboard')}
+            />
+          </div>
+        )}
+
+        {activeTab === 'leaderboard' && user && (
+          <div className="space-y-4">
+            <button
+              onClick={() => switchTab('overview')}
+              className="text-blue-600 text-sm flex items-center gap-1"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              返回
+            </button>
+
+            <PublishLeaderboard userId={user.id} />
           </div>
         )}
 
@@ -963,14 +1052,14 @@ export default function ProfilePage() {
         {activeTab === 'invitations' && (
           <div className="space-y-4">
             <button
-              onClick={() => setActiveTab('overview')}
+              onClick={() => switchTab('overview')}
               className="text-blue-600 text-sm flex items-center gap-1"
             >
               <ArrowLeft className="w-4 h-4" />
               Back
             </button>
             
-            <InvitationStatistics />
+            {user && <InvitationStatistics user={user} />}
           </div>
         )}
 

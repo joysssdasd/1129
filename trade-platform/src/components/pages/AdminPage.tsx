@@ -7,6 +7,7 @@ import QRCodeManager from '../../features/QRCodeManager'
 import AIBatchPublish from '../../features/forms/AIBatchPublish'
 import AnalyticsDashboard from '../../features/analytics/AnalyticsDashboard'
 import CategoryManagement from '../CategoryManagement'
+import { fetchAdminGrowthSettings, updateAdminGrowthSetting, type AdminGrowthSetting } from '../../services/growthService'
 
 const RECHARGE_PACKAGES = [
   { amount: 50, points: 55, name: '充值套餐A' },
@@ -92,6 +93,9 @@ export default function AdminPage() {
   const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null)
   const [announcementForm, setAnnouncementForm] = useState({ title: '', content: '', priority: 0, is_active: true })
   const [showAnnouncementForm, setShowAnnouncementForm] = useState(false)
+  const [growthSettings, setGrowthSettings] = useState<AdminGrowthSetting[]>([])
+  const [growthSettingsLoading, setGrowthSettingsLoading] = useState(false)
+  const [savingGrowthKey, setSavingGrowthKey] = useState('')
   // 系统设置相关状态
   const [systemSettings, setSystemSettings] = useState<SystemSetting[]>([])
   const [bannedKeywords, setBannedKeywords] = useState<BannedKeyword[]>([])
@@ -135,7 +139,7 @@ export default function AdminPage() {
       if (activeTab === 'posts') loadPosts()
       if (activeTab === 'recharge') loadRechargeRequests()
       if (activeTab === 'announcements') loadAnnouncements()
-      if (activeTab === 'settings') { loadSystemSettings(); loadBannedKeywords() }
+      if (activeTab === 'settings') { loadSystemSettings(); loadGrowthSettings(); loadBannedKeywords() }
       if (activeTab === 'reports') loadReports()
     }
   }, [activeTab, user])
@@ -196,6 +200,20 @@ export default function AdminPage() {
       .select('*')
       .order('category')
     setSystemSettings(data || [])
+  }
+
+  const loadGrowthSettings = async () => {
+    if (!user?.id) return
+
+    setGrowthSettingsLoading(true)
+    try {
+      const data = await fetchAdminGrowthSettings(user.id)
+      setGrowthSettings(data.settings || [])
+    } catch (error) {
+      console.error('Failed to load growth settings:', error)
+    } finally {
+      setGrowthSettingsLoading(false)
+    }
   }
 
   const loadBannedKeywords = async () => {
@@ -380,6 +398,26 @@ export default function AdminPage() {
       return
     }
     loadSystemSettings()
+  }
+
+  const handleUpdateGrowthSetting = async (key: string, value: string) => {
+    if (!user?.id) return
+
+    const nextValue = Number(value)
+    if (!Number.isFinite(nextValue)) {
+      alert('Please enter a valid number')
+      return
+    }
+
+    setSavingGrowthKey(key)
+    try {
+      const result = await updateAdminGrowthSetting(user.id, key, nextValue)
+      setGrowthSettings(prev => prev.map(setting => (setting.key === key ? result.setting : setting)))
+    } catch (error) {
+      alert((error && error.message) || 'Failed to save growth settings')
+    } finally {
+      setSavingGrowthKey('')
+    }
   }
 
   // 禁用关键词操作
@@ -1373,6 +1411,41 @@ export default function AdminPage() {
         {/* 系统设置 */}
         {activeTab === 'settings' && (
           <div className="space-y-6">
+            <div className="bg-white rounded-lg p-6">
+              <h3 className="font-semibold mb-4 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-emerald-600" />
+                Growth Settings
+              </h3>
+              {growthSettingsLoading ? (
+                <div className="text-sm text-gray-500">Loading...</div>
+              ) : (
+                <div className="space-y-4">
+                  {growthSettings.map((setting) => (
+                    <div key={setting.key} className="flex items-center justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="font-medium">{setting.label}</div>
+                        <div className="text-xs text-gray-500 mt-1">{setting.description}</div>
+                      </div>
+                      <input
+                        type="number"
+                        min={setting.min}
+                        max={setting.max}
+                        value={setting.value}
+                        onChange={(e) => {
+                          const nextValue = Number(e.target.value)
+                          setGrowthSettings(prev =>
+                            prev.map(item => (item.key === setting.key ? { ...item, value: nextValue } : item))
+                          )
+                        }}
+                        onBlur={(e) => handleUpdateGrowthSetting(setting.key, e.target.value)}
+                        disabled={savingGrowthKey === setting.key}
+                        className="w-28 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 text-center"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             {/* 交易设置 */}
             <div className="bg-white rounded-lg p-6">
               <h3 className="font-semibold mb-4 flex items-center gap-2">

@@ -1,166 +1,165 @@
-// Invitation Statistics Component
-import React, { useState, useEffect } from 'react';
-import { Users, Gift, TrendingUp, Share2 } from 'lucide-react';
-import { supabase } from '../services/supabase';
-import ShareModal from './ui/ShareModal';
-import { log } from '../utils/logger';
+import { useEffect, useState } from 'react'
+import { Gift, Loader2, Share2, Sparkles, Users } from 'lucide-react'
 
-interface InvitationStats {
-    inviteCode: string;
-    invitationLink: string;
-    statistics: {
-        totalInvites: number;
-        successfulInvites: number;
-        pendingInvites: number;
-        totalPointsEarned: number;
-    };
+import type { User } from '@/types'
+import { fetchGrowthDashboard, type GrowthDashboard } from '@/services/growthService'
+import ShareModal from './ui/ShareModal'
+
+interface InvitationStatisticsProps {
+  user: User
 }
 
-function InvitationStatistics() {
-    const [stats, setStats] = useState<InvitationStats | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [showShareModal, setShowShareModal] = useState(false);
+export default function InvitationStatistics({ user }: InvitationStatisticsProps) {
+  const [dashboard, setDashboard] = useState<GrowthDashboard | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [showShareModal, setShowShareModal] = useState(false)
 
-    useEffect(() => {
-        fetchInvitationInfo();
-    }, []);
+  useEffect(() => {
+    let active = true
+    setLoading(true)
 
-    const fetchInvitationInfo = async () => {
-        try {
-            setLoading(true);
-            const { data, error } = await supabase.functions.invoke('get-invitation-info');
-
-            if (error) throw error;
-
-            if (data?.data) {
-                setStats(data.data);
-            }
-        } catch (error) {
-            log.error('Failed to fetch invitation info:', error);
-        } finally {
-            setLoading(false);
+    fetchGrowthDashboard(user.id)
+      .then((data) => {
+        if (active) {
+          setDashboard(data)
         }
-    };
+      })
+      .catch((error) => {
+        console.error('Failed to load invitation dashboard:', error)
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false)
+        }
+      })
 
-    if (loading) {
-        return (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div className="animate-pulse space-y-4">
-                    <div className="h-6 bg-gray-200 rounded w-1/3"></div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="h-20 bg-gray-200 rounded"></div>
-                        <div className="h-20 bg-gray-200 rounded"></div>
-                    </div>
-                </div>
-            </div>
-        );
+    return () => {
+      active = false
     }
+  }, [user.id])
 
-    if (!stats) {
-        return null;
-    }
-
+  if (loading) {
     return (
-        <>
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-bold flex items-center gap-2">
-                        <Users className="w-6 h-6 text-blue-600" />
-                        Invitation Rewards
-                    </h2>
-                    <button
-                        onClick={() => setShowShareModal(true)}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                    >
-                        <Share2 className="w-4 h-4" />
-                        Invite Friends
-                    </button>
-                </div>
+      <div className="bg-white rounded-2xl border border-gray-200 p-6 text-sm text-gray-500 flex items-center gap-2">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        邀请数据加载中...
+      </div>
+    )
+  }
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Users className="w-5 h-5 text-blue-600" />
-                            <div className="text-xs text-gray-600">Total Invites</div>
-                        </div>
-                        <div className="text-2xl font-bold text-blue-600">
-                            {stats.statistics.totalInvites}
-                        </div>
-                    </div>
+  if (!dashboard) {
+    return <div className="bg-white rounded-2xl border border-gray-200 p-6 text-sm text-gray-500">邀请数据暂时不可用。</div>
+  }
 
-                    <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg">
-                        <div className="flex items-center gap-2 mb-2">
-                            <TrendingUp className="w-5 h-5 text-green-600" />
-                            <div className="text-xs text-gray-600">Successful</div>
-                        </div>
-                        <div className="text-2xl font-bold text-green-600">
-                            {stats.statistics.successfulInvites}
-                        </div>
-                    </div>
-
-                    <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 p-4 rounded-lg">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Users className="w-5 h-5 text-yellow-600" />
-                            <div className="text-xs text-gray-600">Pending</div>
-                        </div>
-                        <div className="text-2xl font-bold text-yellow-600">
-                            {stats.statistics.pendingInvites}
-                        </div>
-                    </div>
-
-                    <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Gift className="w-5 h-5 text-purple-600" />
-                            <div className="text-xs text-gray-600">Points Earned</div>
-                        </div>
-                        <div className="text-2xl font-bold text-purple-600">
-                            {stats.statistics.totalPointsEarned}
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 p-6 rounded-lg border border-blue-200">
-                    <div className="text-center mb-4">
-                        <div className="text-sm text-gray-600 mb-2">Your Invitation Code</div>
-                        <div className="text-3xl font-bold text-blue-600 mb-4">
-                            {stats.inviteCode}
-                        </div>
-                    </div>
-
-                    <div className="bg-white bg-opacity-80 p-4 rounded-lg">
-                        <div className="text-sm font-medium text-gray-700 mb-3">How it works:</div>
-                        <div className="space-y-2 text-sm text-gray-600">
-                            <div className="flex items-start gap-2">
-                                <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
-                                    1
-                                </div>
-                                <div>Share your invitation link or code with friends</div>
-                            </div>
-                            <div className="flex items-start gap-2">
-                                <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
-                                    2
-                                </div>
-                                <div>They register using your invitation code</div>
-                            </div>
-                            <div className="flex items-start gap-2">
-                                <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
-                                    3
-                                </div>
-                                <div>You get 10 points, they get 30 points!</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+  return (
+    <>
+      <div className="space-y-4">
+        <div className="rounded-3xl p-6 text-white bg-gradient-to-br from-violet-600 via-fuchsia-600 to-rose-500 shadow-lg">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-sm text-white/80">邀请奖励页</div>
+              <div className="text-2xl font-bold mt-1">分享邀请码，拉新也拉活跃</div>
+              <div className="text-sm text-white/80 mt-2">
+                邀请好友完成首发后，你得 +{dashboard.invitation.inviterRewardPoints}，好友得 +
+                {dashboard.invitation.inviteeRewardPoints}
+              </div>
             </div>
+            <button
+              onClick={() => setShowShareModal(true)}
+              className="px-4 py-2 rounded-full bg-white text-violet-700 text-sm font-semibold hover:bg-violet-50"
+            >
+              立即分享
+            </button>
+          </div>
 
-            <ShareModal
-                isOpen={showShareModal}
-                onClose={() => setShowShareModal(false)}
-                invitationLink={stats.invitationLink}
-                inviteCode={stats.inviteCode}
-            />
-        </>
-    );
+          <div className="mt-5 rounded-2xl bg-white/10 p-4">
+            <div className="text-xs text-white/70">我的邀请码</div>
+            <div className="text-3xl font-bold mt-2 tracking-widest">{dashboard.invitation.inviteCode}</div>
+            <div className="flex items-center gap-2 mt-4">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(dashboard.invitation.inviteCode)
+                  alert('邀请码已复制')
+                }}
+                className="px-3 py-2 rounded-full bg-white/15 text-sm hover:bg-white/20"
+              >
+                复制邀请码
+              </button>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(dashboard.invitation.invitationLink)
+                  alert('邀请链接已复制')
+                }}
+                className="px-3 py-2 rounded-full bg-white text-violet-700 text-sm font-medium"
+              >
+                复制邀请链接
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-2xl border border-gray-200 p-4">
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Users className="w-4 h-4 text-sky-600" />
+              累计邀请
+            </div>
+            <div className="text-2xl font-bold text-gray-900 mt-3">{dashboard.invitation.totalInvites}</div>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-200 p-4">
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Sparkles className="w-4 h-4 text-emerald-600" />
+              成功首发
+            </div>
+            <div className="text-2xl font-bold text-gray-900 mt-3">{dashboard.invitation.successfulInvites}</div>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-200 p-4">
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Share2 className="w-4 h-4 text-amber-600" />
+              待转化
+            </div>
+            <div className="text-2xl font-bold text-gray-900 mt-3">{dashboard.invitation.pendingInvites}</div>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-200 p-4">
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Gift className="w-4 h-4 text-violet-600" />
+              邀请奖励
+            </div>
+            <div className="text-2xl font-bold text-gray-900 mt-3">{dashboard.invitation.totalPointsEarned}</div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-gray-200 p-5">
+          <div className="font-semibold text-gray-900">玩法说明</div>
+          <div className="space-y-3 mt-4 text-sm text-gray-600">
+            <div className="flex gap-3">
+              <div className="h-6 w-6 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center text-xs font-semibold">
+                1
+              </div>
+              <div>把邀请码或邀请链接发给潜在用户。</div>
+            </div>
+            <div className="flex gap-3">
+              <div className="h-6 w-6 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center text-xs font-semibold">
+                2
+              </div>
+              <div>好友注册后完成首发，你拿到邀请奖励，好友也拿到首发激励。</div>
+            </div>
+            <div className="flex gap-3">
+              <div className="h-6 w-6 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center text-xs font-semibold">
+                3
+              </div>
+              <div>成功邀请越多，站内活跃度越高，你的拉新积分也会越多。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <ShareModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        invitationLink={dashboard.invitation.invitationLink}
+        inviteCode={dashboard.invitation.inviteCode}
+      />
+    </>
+  )
 }
-
-export default React.memo(InvitationStatistics)
