@@ -12,6 +12,9 @@ const CORS_HEADERS = {
 }
 
 const UUID_RE = /^[0-9a-fA-F-]{36}$/
+const PHONE_RE = /^1[3-9]\d{9}$/
+const INVITE_CODE_RE = /^[A-Z0-9]{6,10}$/
+const INITIAL_REGISTRATION_POINTS = 30
 
 const DEFAULT_GROWTH_SETTINGS = {
   registrationPoints: 500,
@@ -63,6 +66,7 @@ const GROWTH_SETTING_FIELDS = [
 ]
 
 const POINT_CHANGE_TYPES = {
+  registration: 1,
   publishPost: 2,
   inviteReward: 4,
   dailyPostReward: 9,
@@ -692,6 +696,375 @@ const insertPointTransaction = async (config, payload) => {
 
   if (!insertRes.ok) {
     throw new Error(insertRes.text || 'Failed to insert point transaction')
+  }
+}
+
+const sanitizeUserForClient = (user) => {
+  if (!user) return null
+
+  return {
+    id: user.id,
+    phone: user.phone,
+    wechat_id: user.wechat_id || '',
+    invite_code: user.invite_code || '',
+    invited_by: user.invited_by || null,
+    points: Number(user.points || 0),
+    success_rate: Number(user.success_rate ?? user.deal_rate ?? 0),
+    deal_rate: Number(user.deal_rate ?? user.success_rate ?? 0),
+    total_posts: Number(user.total_posts || 0),
+    total_deals: Number(user.total_deals || 0),
+    total_invites: Number(user.total_invites || 0),
+    is_admin: Boolean(user.is_admin),
+    status: Number(user.status ?? 1),
+    created_at: user.created_at,
+    updated_at: user.updated_at || user.created_at
+  }
+}
+
+const buildUserSelect = (includePassword = false) =>
+  [
+    'id',
+    'phone',
+    'wechat_id',
+    'invite_code',
+    'invited_by',
+    'points',
+    'deal_rate',
+    'total_posts',
+    'total_deals',
+    'total_invites',
+    'is_admin',
+    'status',
+    'created_at',
+    'updated_at',
+    includePassword ? 'password' : null
+  ]
+    .filter(Boolean)
+    .join(',')
+
+const loadUserByPhone = async ({ config, phone, includePassword = false }) => {
+  const userRes = await restRequest({
+    config,
+    resource: 'users',
+    query:
+      `phone=eq.${encodeURIComponent(phone)}` +
+      `&select=${buildUserSelect(includePassword)}` +
+      '&limit=1',
+    useServiceRole: true
+  })
+
+  if (!userRes.ok) {
+    throw new Error(userRes.text || 'Failed to load user by phone')
+  }
+
+  return userRes.data?.[0] || null
+}
+
+const loadUserByInviteCode = async ({ config, inviteCode }) => {
+  const inviterRes = await restRequest({
+    config,
+    resource: 'users',
+    query:
+      `invite_code=eq.${encodeURIComponent(inviteCode)}` +
+      `&select=${buildUserSelect(false)}` +
+      '&limit=1',
+    useServiceRole: true
+  })
+
+  if (!inviterRes.ok) {
+    throw new Error(inviterRes.text || 'Failed to load inviter')
+  }
+
+  return inviterRes.data?.[0] || null
+}
+
+const generateInviteCodeCandidate = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let inviteCode = ''
+
+  for (let index = 0; index < 6; index += 1) {
+    inviteCode += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+
+  return inviteCode
+}
+
+const generateUniqueInviteCode = async (config) => {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const inviteCode = generateInviteCodeCandidate()
+    const existingUser = await loadUserByInviteCode({ config, inviteCode })
+    if (!existingUser) {
+      return inviteCode
+    }
+  }
+
+  throw new Error('Failed to generate a unique invite code')
+}
+
+const hashPassword = async (password, existingSalt = '') => {
+  const saltBytes = new Uint8Array(16)
+  const salt =
+    existingSalt ||
+    Array.from(crypto.getRandomValues(saltBytes))
+      .map((value) => value.toString(16).padStart(2, '0'))
+      .join('')
+
+  const encoder = new TextEncoder()
+  const digest = await crypto.subtle.digest('SHA-256', encoder.encode(`${password}${salt}`))
+  const hash = Array.from(new Uint8Array(digest))
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('')
+
+  return `${salt}:${hash}`
+}
+
+const verifyStoredPassword = async (password, storedPassword) => {
+  if (typeof storedPassword !== 'string' || !storedPassword.trim()) return false
+
+  if (!storedPassword.includes(':')) {
+    return storedPassword === password
+  }
+
+  const [salt] = storedPassword.split(':')
+  if (!salt) return false
+
+  return (await hashPassword(password, salt)) === storedPassword
+}
+
+const createUserRecord = async ({ config, payload }) => {
+  const createRes = await restRequest({
+    config,
+    resource: 'users',
+    query: `select=${buildUserSelect(false)}`,
+    method: 'POST',
+    body: payload,
+    useServiceRole: true,
+    extraHeaders: {
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation'
+    }
+  })
+
+  if (!createRes.ok) {
+    throw new Error(createRes.text || 'Failed to create user')
+  }
+
+  return createRes.data?.[0] || null
+}
+
+const cleanupUserRegistration = async ({ config, userId }) => {
+  if (!UUID_RE.test(userId || '')) return
+
+  await Promise.allSettled([
+    restRequest({
+      config,
+      resource: 'point_transactions',
+      query: `user_id=eq.${encodeURIComponent(userId)}`,
+      method: 'DELETE',
+      useServiceRole: true,
+      extraHeaders: {
+        Prefer: 'return=minimal'
+      }
+    }),
+    restRequest({
+      config,
+      resource: 'invitations',
+      query: `invitee_id=eq.${encodeURIComponent(userId)}`,
+      method: 'DELETE',
+      useServiceRole: true,
+      extraHeaders: {
+        Prefer: 'return=minimal'
+      }
+    }),
+    restRequest({
+      config,
+      resource: 'users',
+      query: `id=eq.${encodeURIComponent(userId)}`,
+      method: 'DELETE',
+      useServiceRole: true,
+      extraHeaders: {
+        Prefer: 'return=minimal'
+      }
+    })
+  ])
+}
+
+const handlePasswordLogin = async ({ request, config }) => {
+  const missingServiceRoleResponse = requireServiceRole(config)
+  if (missingServiceRoleResponse) return missingServiceRoleResponse
+
+  const payload = await readJsonBody(request)
+  const phone = typeof payload?.phone === 'string' ? payload.phone.trim() : ''
+  const password = typeof payload?.password === 'string' ? payload.password : ''
+
+  if (!phone || !password) {
+    return json({ success: false, error: { code: 'INVALID_PAYLOAD', message: '请输入手机号和密码。' } }, 400)
+  }
+
+  try {
+    const user = await loadUserByPhone({ config, phone, includePassword: true })
+    if (!user) {
+      return json({ success: false, error: { code: 'INVALID_CREDENTIALS', message: '手机号或密码错误。' } }, 401)
+    }
+
+    if (Number(user.status ?? 1) === 0) {
+      return json({ success: false, error: { code: 'ACCOUNT_DISABLED', message: '账号已被禁用，请联系管理员。' } }, 403)
+    }
+
+    const isPasswordValid = await verifyStoredPassword(password, user.password)
+    if (!isPasswordValid) {
+      return json({ success: false, error: { code: 'INVALID_CREDENTIALS', message: '手机号或密码错误。' } }, 401)
+    }
+
+    return json({
+      success: true,
+      data: {
+        user: sanitizeUserForClient(user),
+        message: '登录成功'
+      }
+    })
+  } catch (error) {
+    return json(
+      {
+        success: false,
+        error: {
+          code: 'PASSWORD_LOGIN_ERROR',
+          message: error?.message || '密码登录失败。'
+        }
+      },
+      500
+    )
+  }
+}
+
+const handlePasswordRegistration = async ({ request, config }) => {
+  const missingServiceRoleResponse = requireServiceRole(config)
+  if (missingServiceRoleResponse) return missingServiceRoleResponse
+
+  const payload = await readJsonBody(request)
+  const phone = typeof payload?.phone === 'string' ? payload.phone.trim() : ''
+  const password = typeof payload?.password === 'string' ? payload.password : ''
+  const wechatId = typeof payload?.wechat_id === 'string' ? payload.wechat_id.trim() : ''
+  const inviteCode = typeof payload?.invite_code === 'string' ? payload.invite_code.trim().toUpperCase() : ''
+
+  if (!phone || !password || !wechatId) {
+    return json({ success: false, error: { code: 'INVALID_PAYLOAD', message: '请填写完整的注册信息。' } }, 400)
+  }
+
+  if (!PHONE_RE.test(phone)) {
+    return json({ success: false, error: { code: 'INVALID_PHONE', message: '请输入正确的手机号。' } }, 400)
+  }
+
+  if (password.length < 6 || !/\d/.test(password) || !/[a-zA-Z]/.test(password)) {
+    return json(
+      {
+        success: false,
+        error: {
+          code: 'INVALID_PASSWORD',
+          message: '密码至少 6 位，且必须同时包含数字和字母。'
+        }
+      },
+      400
+    )
+  }
+
+  if (inviteCode && !INVITE_CODE_RE.test(inviteCode)) {
+    return json({ success: false, error: { code: 'INVALID_INVITE_CODE', message: '邀请码格式不正确。' } }, 400)
+  }
+
+  let createdUserId = ''
+
+  try {
+    const existingUser = await loadUserByPhone({ config, phone, includePassword: false })
+    if (existingUser) {
+      return json({ success: false, error: { code: 'PHONE_ALREADY_EXISTS', message: '该手机号已注册。' } }, 409)
+    }
+
+    let inviter = null
+    if (inviteCode) {
+      inviter = await loadUserByInviteCode({ config, inviteCode })
+      if (!inviter) {
+        return json({ success: false, error: { code: 'INVALID_INVITE_CODE', message: '邀请码无效。' } }, 400)
+      }
+    }
+
+    const userInviteCode = await generateUniqueInviteCode(config)
+    const hashedPassword = await hashPassword(password)
+    const createdUser = await createUserRecord({
+      config,
+      payload: {
+        phone,
+        password: hashedPassword,
+        wechat_id: wechatId,
+        invite_code: userInviteCode,
+        invited_by: inviter?.invite_code || null,
+        points: INITIAL_REGISTRATION_POINTS,
+        status: 1
+      }
+    })
+
+    if (!createdUser?.id) {
+      throw new Error('Failed to create user record')
+    }
+
+    createdUserId = createdUser.id
+
+    await insertPointTransaction(config, {
+      user_id: createdUser.id,
+      change_type: POINT_CHANGE_TYPES.registration,
+      change_amount: INITIAL_REGISTRATION_POINTS,
+      balance_after: INITIAL_REGISTRATION_POINTS,
+      related_id: createdUser.id,
+      description: '注册奖励',
+      created_at: new Date().toISOString()
+    })
+
+    if (inviter?.invite_code) {
+      const invitationRes = await restRequest({
+        config,
+        resource: 'invitations',
+        method: 'POST',
+        body: {
+          inviter_code: inviter.invite_code,
+          invitee_id: createdUser.id,
+          has_posted: false,
+          reward_sent: false,
+          created_at: new Date().toISOString()
+        },
+        useServiceRole: true,
+        extraHeaders: {
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal'
+        }
+      })
+
+      if (!invitationRes.ok) {
+        throw new Error(invitationRes.text || 'Failed to create invitation relationship')
+      }
+    }
+
+    return json({
+      success: true,
+      data: {
+        user: sanitizeUserForClient(createdUser),
+        message: '注册成功'
+      }
+    })
+  } catch (error) {
+    if (createdUserId) {
+      await cleanupUserRegistration({ config, userId: createdUserId })
+    }
+
+    return json(
+      {
+        success: false,
+        error: {
+          code: 'PASSWORD_REGISTRATION_ERROR',
+          message: error?.message || '注册失败。'
+        }
+      },
+      500
+    )
   }
 }
 
@@ -1506,6 +1879,14 @@ export async function onRequest(context) {
       config,
       settingKey: decodeURIComponent(pathSegments[2])
     })
+  }
+
+  if (request.method === 'POST' && pathSegments[0] === 'auth' && pathSegments[1] === 'login-with-password') {
+    return handlePasswordLogin({ request, config })
+  }
+
+  if (request.method === 'POST' && pathSegments[0] === 'auth' && pathSegments[1] === 'register-with-password') {
+    return handlePasswordRegistration({ request, config })
   }
 
   if (request.method === 'POST' && pathSegments[0] === 'auth' && pathSegments[1] === 'registration-bonus') {

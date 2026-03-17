@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useUser } from '../../contexts/UserContext'
 import { POINTS } from '../../constants'
+import { loginWithPassword, registerWithPassword } from '../../services/authService'
 import { completeRegistrationBonus } from '../../services/growthRewards'
 import { supabase } from '../../services/supabase'
 import { User } from '../../types'
@@ -127,9 +128,8 @@ export default function LoginPage() {
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // 管理员禁止使用密码登录
     if (isAdminPhone(phone)) {
-      alert('管理员账号请使用验证码登录')
+      alert('\u7ba1\u7406\u5458\u8d26\u53f7\u8bf7\u4f7f\u7528\u9a8c\u8bc1\u7801\u767b\u5f55')
       setLoginMode('code')
       return
     }
@@ -137,68 +137,19 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      // 先检查用户是否存在
-      const { data: checkResult, error: checkError } = await supabase.functions.invoke('check-user-exists', {
-        body: { phone }
-      })
+      const result = await loginWithPassword({ phone, password })
+      const user = result.user as User
 
-      if (checkError || !checkResult?.data?.exists) {
-        alert('该手机号未注册，请先注册')
-        return
-      }
-
-      // 管理员特殊处理
-      if (checkResult?.data?.isAdmin) {
-        alert('管理员账号请使用验证码登录')
-        setLoginMode('code')
-        return
-      }
-
-      // 调用密码登录 Edge Function（如果有的话）
-      // 暂时使用直接查询方式
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('id, phone, wechat_id, is_admin, points, created_at, password')
-        .eq('phone', phone)
-        .single()
-
-      if (userError || !userData) {
-        alert('该手机号未注册，请先注册')
-        return
-      }
-
-      // 验证密码（这里简单明文比较，实际应该使用bcrypt）
-      if (userData.password !== password) {
-        alert('密码错误')
-        return
-      }
-
-      // 构建符合User接口的对象
-      const user: User = {
-        id: userData.id,
-        phone: userData.phone,
-        wechat_id: userData.wechat_id,
-        invite_code: '',
-        points: userData.points,
-        success_rate: 0,
-        is_admin: userData.is_admin,
-        created_at: userData.created_at,
-        updated_at: userData.created_at
-      }
-
-      // 登录成功
       setUser(user)
-      alert('登录成功')
+      alert('\u767b\u5f55\u6210\u529f')
 
-      // 根据角色跳转
-      if (userData.is_admin) {
+      if (user.is_admin) {
         navigate('/admin')
       } else {
         navigate('/')
       }
-
     } catch (error: any) {
-      alert('登录失败: ' + error.message)
+      alert(error.message || '\u767b\u5f55\u5931\u8d25')
     } finally {
       setLoading(false)
     }
@@ -380,7 +331,7 @@ export default function LoginPage() {
     e.preventDefault()
 
     if (!wechatId) {
-      alert('请输入微信号')
+      alert('\u8bf7\u8f93\u5165\u5fae\u4fe1\u53f7')
       return
     }
 
@@ -391,66 +342,40 @@ export default function LoginPage() {
     }
 
     if (password !== confirmPassword) {
-      alert('两次密码输入不一致')
+      alert('\u4e24\u6b21\u5bc6\u7801\u8f93\u5165\u4e0d\u4e00\u81f4')
       return
     }
 
     if (!agreeDisclaimer) {
-      alert('请先阅读并同意免责声明')
+      alert('\u8bf7\u5148\u9605\u8bfb\u5e76\u540c\u610f\u514d\u8d23\u58f0\u660e')
       return
     }
 
     setLoading(true)
 
     try {
-      const { data, error } = await supabase.functions.invoke('register-with-password', {
-        body: {
-          phone,
-          password,
-          wechat_id: wechatId,
-          invite_code: inviteCode || undefined
-        }
+      const result = await registerWithPassword({
+        phone,
+        password,
+        wechat_id: wechatId,
+        invite_code: inviteCode || undefined
       })
 
-      if (error) throw error
+      let registeredUser = result.user
 
-      if (data?.data?.user) {
-        let registeredUser = data.data.user
-
-        try {
-          const bonusResult = await completeRegistrationBonus(registeredUser.id)
-          registeredUser = bonusResult.user
-        } catch (bonusError) {
-          log.warn('Registration bonus top-up failed, continuing with existing user state', bonusError)
-        }
-
-        setUser(registeredUser)
-        setRegisterStep(3)
-        setShowGuide(true) // 显示使用指南
+      try {
+        const bonusResult = await completeRegistrationBonus(registeredUser.id)
+        registeredUser = bonusResult.user
+      } catch (bonusError) {
+        log.warn('Registration bonus top-up failed, continuing with existing user state', bonusError)
       }
+
+      setUser(registeredUser)
+      setRegisterStep(3)
+      setShowGuide(true)
     } catch (error: any) {
-      log.error('🔍 老王调试注册错误:', error)
-
-      // 更详细的错误处理
-      let errorMessage = '注册失败'
-
-      if (error.message) {
-        if (error.message.includes('该手机号已注册')) {
-          errorMessage = '该手机号已注册，请直接登录或使用其他手机号'
-        } else if (error.message.includes('请填写完整信息')) {
-          errorMessage = '请填写完整的注册信息'
-        } else if (error.message.includes('密码至少需要6位')) {
-          errorMessage = '密码至少需要6位字符'
-        } else if (error.message.includes('密码必须包含数字和字母')) {
-          errorMessage = '密码必须同时包含数字和字母'
-        } else if (error.message.includes('系统配置错误')) {
-          errorMessage = '系统配置错误，请联系管理员'
-        } else {
-          errorMessage = `注册失败: ${error.message}`
-        }
-      }
-
-      alert(errorMessage)
+      log.error('\u6ce8\u518c\u5931\u8d25:', error)
+      alert(error.message || '\u6ce8\u518c\u5931\u8d25')
     } finally {
       setLoading(false)
     }
