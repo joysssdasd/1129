@@ -9,7 +9,6 @@ import { cache, CACHE_KEYS, CACHE_TTL } from '../../services/cacheService'
 // 热力图板块组件 - 显示交易板块热度
 import CategoryCards from '../CategoryCards'
 import HomeGrowthCard from '../../features/growth/HomeGrowthCard'
-import PublishLeaderboard from '../../features/growth/PublishLeaderboard'
 
 interface Post {
   id: string
@@ -557,10 +556,6 @@ export default function HomePage() {
       {/* 交易板块卡片 */}
       <div className="max-w-7xl mx-auto px-4 py-3">
         <CategoryCards />
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 py-3">
-        <PublishLeaderboard userId={user?.id} compact />
       </div>
 
       {/* 交易信息列表 */}
