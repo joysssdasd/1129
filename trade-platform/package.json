@@ -18,7 +18,9 @@
     "test:coverage": "pnpm run setup:virtual-node-modules && vitest run --coverage",
     "test:watch": "pnpm run setup:virtual-node-modules && vitest --watch",
     "check:edge-functions": "node scripts/check-edge-functions.mjs",
-    "mcp:supabase": "node supabase-mcp-server.js"
+    "mcp:supabase": "node supabase-mcp-server.js",
+    "wechat:daily": "node scripts/wechat-market-daily.mjs",
+    "wechat:publish": "node scripts/wechat-market-daily.mjs --publish"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

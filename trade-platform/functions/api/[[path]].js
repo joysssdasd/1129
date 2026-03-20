@@ -637,6 +637,226 @@ const handleAdminGrowthSettingUpdate = async ({ request, config, settingKey }) =
   }
 }
 
+const resolveWechatAutoOperator = async ({ config, requestedUserId = '' }) => {
+  if (UUID_RE.test(requestedUserId)) {
+    const operatorRes = await restRequest({
+      config,
+      resource: 'users',
+      query: `id=eq.${encodeURIComponent(requestedUserId)}&select=id,wechat_id,is_admin&limit=1`,
+      useServiceRole: true
+    })
+
+    if (!operatorRes.ok) {
+      throw new Error(operatorRes.text || 'Failed to load requested operator user')
+    }
+
+    const operator = operatorRes.data?.[0]
+    if (!operator?.is_admin) {
+      throw new Error('Requested operator user must be an admin account')
+    }
+
+    return operator
+  }
+
+  const settingsMap = await loadSystemSettingsMap(config, ['customer_wechat'])
+  const customerWechat = settingsMap.customer_wechat || 'niuniubase'
+  const operatorRes = await restRequest({
+    config,
+    resource: 'users',
+    query:
+      `wechat_id=eq.${encodeURIComponent(customerWechat)}` +
+      '&is_admin=eq.true' +
+      '&select=id,wechat_id,is_admin&limit=1',
+    useServiceRole: true
+  })
+
+  if (!operatorRes.ok) {
+    throw new Error(operatorRes.text || 'Failed to resolve WeChat auto publish operator')
+  }
+
+  const operator = operatorRes.data?.[0]
+  if (!operator?.id) {
+    throw new Error('No admin operator user matches customer_wechat')
+  }
+
+  return operator
+}
+
+const normalizeWechatAutoPost = (rawPost) => {
+  if (!rawPost || typeof rawPost !== 'object') {
+    return { ok: false, message: 'Invalid post payload.' }
+  }
+
+  const title = String(rawPost.title || '').trim()
+  const keywords = String(rawPost.keywords || '').trim()
+  const extraInfo = rawPost.extraInfo == null ? null : String(rawPost.extraInfo).trim()
+  const categoryId = String(rawPost.categoryId || '').trim()
+  const tradeType = Number(rawPost.tradeType)
+  const price = Number(rawPost.price)
+  const expireHours = Math.max(1, Math.min(24 * 30, Number(rawPost.expireHours || 24 * 7)))
+  const viewLimit = Math.max(1, Math.min(1000, Number(rawPost.viewLimit || 100)))
+
+  if (!title) {
+    return { ok: false, message: 'Post title is required.' }
+  }
+
+  if (!keywords) {
+    return { ok: false, message: 'Post keywords are required.' }
+  }
+
+  if (!UUID_RE.test(categoryId)) {
+    return { ok: false, message: 'A valid categoryId is required.' }
+  }
+
+  if (![1, 2].includes(tradeType)) {
+    return { ok: false, message: 'tradeType must be 1 or 2.' }
+  }
+
+  if (!Number.isFinite(price) || price <= 0) {
+    return { ok: false, message: 'price must be a positive number.' }
+  }
+
+  return {
+    ok: true,
+    value: {
+      title: title.slice(0, 100),
+      keywords: keywords.slice(0, 200),
+      extraInfo: extraInfo ? extraInfo.slice(0, 100) : null,
+      categoryId,
+      tradeType,
+      price,
+      expireHours,
+      viewLimit
+    }
+  }
+}
+
+const handleAdminWechatAutoPublish = async ({ request, config }) => {
+  const missingServiceRoleResponse = requireServiceRole(config)
+  if (missingServiceRoleResponse) return missingServiceRoleResponse
+
+  try {
+    const adminCheck = await verifyAdminRequest({ config, request })
+    if (!adminCheck.ok) return adminCheck.response
+
+    const payload = await readJsonBody(request)
+    const posts = Array.isArray(payload?.posts) ? payload.posts : []
+    if (!posts.length) {
+      return json({ success: false, error: { code: 'EMPTY_POSTS', message: 'No posts provided.' } }, 400)
+    }
+
+    const operator = await resolveWechatAutoOperator({
+      config,
+      requestedUserId: payload?.operatorUserId
+    })
+
+    const categoriesRes = await restRequest({
+      config,
+      resource: 'categories',
+      query: 'select=id&is_active=eq.true',
+      useServiceRole: true
+    })
+
+    if (!categoriesRes.ok) {
+      throw new Error(categoriesRes.text || 'Failed to load active categories')
+    }
+
+    const activeCategoryIds = new Set((Array.isArray(categoriesRes.data) ? categoriesRes.data : []).map((row) => row.id))
+    const failures = []
+    const createdPosts = []
+
+    for (const rawPost of posts) {
+      const normalized = normalizeWechatAutoPost(rawPost)
+      if (!normalized.ok) {
+        failures.push({
+          title: String(rawPost?.title || '未命名帖子'),
+          message: normalized.message
+        })
+        continue
+      }
+
+      const post = normalized.value
+      if (!activeCategoryIds.has(post.categoryId)) {
+        failures.push({
+          title: post.title,
+          message: 'categoryId does not match an active category.'
+        })
+        continue
+      }
+
+      const expireAt = new Date(Date.now() + post.expireHours * 60 * 60 * 1000).toISOString()
+      const insertRes = await restRequest({
+        config,
+        resource: 'posts',
+        query: 'select=id,title,price,trade_type,category_id,expire_at',
+        method: 'POST',
+        body: [
+          {
+            user_id: operator.id,
+            title: post.title,
+            keywords: post.keywords,
+            price: post.price,
+            trade_type: post.tradeType,
+            delivery_date: null,
+            extra_info: post.extraInfo,
+            view_limit: post.viewLimit,
+            view_count: 0,
+            deal_count: 0,
+            status: 1,
+            expire_at: expireAt,
+            category_id: post.categoryId
+          }
+        ],
+        useServiceRole: true,
+        extraHeaders: {
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation'
+        }
+      })
+
+      if (!insertRes.ok || !Array.isArray(insertRes.data) || !insertRes.data[0]) {
+        failures.push({
+          title: post.title,
+          message: insertRes.text || 'Failed to create post.'
+        })
+        continue
+      }
+
+      createdPosts.push(insertRes.data[0])
+    }
+
+    return json({
+      success: true,
+      data: {
+        operatorUserId: operator.id,
+        operatorWechatId: operator.wechat_id || '',
+        publishedCount: createdPosts.length,
+        failedCount: failures.length,
+        posts: createdPosts.map((post) => ({
+          id: post.id,
+          title: post.title,
+          price: Number(post.price || 0),
+          tradeType: Number(post.trade_type || 0),
+          categoryId: post.category_id || null,
+          expireAt: post.expire_at
+        })),
+        failures
+      }
+    })
+  } catch (error) {
+    return json(
+      {
+        success: false,
+        error: {
+          code: 'ADMIN_WECHAT_AUTO_PUBLISH_ERROR',
+          message: error?.message || 'Failed to auto publish WeChat posts.'
+        }
+      },
+      500
+    )
+  }
+}
+
 const loadUserForReward = async (config, userId) => {
   const userRes = await restRequest({
     config,
@@ -1551,7 +1771,7 @@ const handlePublishLeaderboard = async ({ request, config }) => {
           resource: 'users',
           query:
             `id=in.(${userIds.map((id) => `"${id}"`).join(',')})` +
-            '&select=id,phone,wechat_id,total_posts,points',
+            '&select=id,phone,wechat_id,total_posts,points,is_admin',
           useServiceRole: true
         })
 
@@ -1561,6 +1781,7 @@ const handlePublishLeaderboard = async ({ request, config }) => {
 
         const users = Array.isArray(usersRes.data) ? usersRes.data : []
         entries = users
+          .filter((item) => !item.is_admin)
           .map((item) => ({
             userId: item.id,
             displayName: item.wechat_id || maskPhone(item.phone),
@@ -1581,7 +1802,7 @@ const handlePublishLeaderboard = async ({ request, config }) => {
       const usersRes = await restRequest({
         config,
         resource: 'users',
-        query: 'select=id,phone,wechat_id,total_posts,points&limit=50',
+        query: 'select=id,phone,wechat_id,total_posts,points,is_admin&limit=50',
         useServiceRole: true
       })
 
@@ -1590,6 +1811,7 @@ const handlePublishLeaderboard = async ({ request, config }) => {
       }
 
       entries = (Array.isArray(usersRes.data) ? usersRes.data : [])
+        .filter((item) => !item.is_admin)
         .map((item) => ({
           userId: item.id,
           displayName: item.wechat_id || maskPhone(item.phone),
@@ -1849,6 +2071,14 @@ export async function onRequest(context) {
       status: 200,
       headers: CORS_HEADERS
     })
+  }
+
+  if (
+    request.method === 'POST' &&
+    pathSegments[0] === 'admin' &&
+    pathSegments[1] === 'wechat-auto-publish'
+  ) {
+    return handleAdminWechatAutoPublish({ request, config })
   }
 
   if (
