@@ -1,4 +1,4 @@
-﻿// EdgeOne Pages Function: proxy Supabase requests and handle privileged app mutations.
+// EdgeOne Pages Function: proxy Supabase requests and handle privileged app mutations.
 
 const DEFAULT_SUPABASE_URL = 'https://hntiihuxqlklpiyqmlob.supabase.co'
 const DEFAULT_SUPABASE_ANON_KEY =
@@ -235,7 +235,7 @@ const buildGrowthSettings = (settingsMap = {}) => ({
 })
 
 const maskPhone = (phone = '') => {
-  if (typeof phone !== 'string' || phone.length < 7) return '鍖垮悕鐢ㄦ埛'
+  if (typeof phone !== 'string' || phone.length < 7) return '??????'
   return `${phone.slice(0, 3)}****${phone.slice(-4)}`
 }
 
@@ -637,6 +637,273 @@ const handleAdminGrowthSettingUpdate = async ({ request, config, settingKey }) =
   }
 }
 
+const resolveWechatAutoOperator = async ({ config, requestedUserId = '' }) => {
+  if (UUID_RE.test(requestedUserId)) {
+    const operatorRes = await restRequest({
+      config,
+      resource: 'users',
+      query: `id=eq.${encodeURIComponent(requestedUserId)}&select=id,wechat_id,is_admin&limit=1`,
+      useServiceRole: true
+    })
+
+    if (!operatorRes.ok) {
+      throw new Error(operatorRes.text || 'Failed to load requested operator user')
+    }
+
+    const operator = operatorRes.data?.[0]
+    if (!operator?.is_admin) {
+      throw new Error('Requested operator user must be an admin account')
+    }
+
+    return operator
+  }
+
+  const settingsMap = await loadSystemSettingsMap(config, ['customer_wechat'])
+  const customerWechat = settingsMap.customer_wechat || 'niuniubase'
+  const operatorRes = await restRequest({
+    config,
+    resource: 'users',
+    query:
+      `wechat_id=eq.${encodeURIComponent(customerWechat)}` +
+      '&is_admin=eq.true' +
+      '&select=id,wechat_id,is_admin&limit=1',
+    useServiceRole: true
+  })
+
+  if (!operatorRes.ok) {
+    throw new Error(operatorRes.text || 'Failed to resolve WeChat auto publish operator')
+  }
+
+  const operator = operatorRes.data?.[0]
+  if (!operator?.id) {
+    throw new Error('No admin operator user matches customer_wechat')
+  }
+
+  return operator
+}
+
+const normalizeWechatAutoPost = (rawPost) => {
+  if (!rawPost || typeof rawPost !== 'object') {
+    return { ok: false, message: 'Invalid post payload.' }
+  }
+
+  const title = String(rawPost.title || '').trim()
+  const keywords = String(rawPost.keywords || '').trim()
+  const extraInfo = rawPost.extraInfo == null ? null : String(rawPost.extraInfo).trim()
+  const categoryId = String(rawPost.categoryId || '').trim()
+  const tradeType = Number(rawPost.tradeType)
+  const price = Number(rawPost.price)
+  const expireHours = Math.max(1, Math.min(24 * 30, Number(rawPost.expireHours || 24 * 7)))
+  const viewLimit = Math.max(1, Math.min(1000, Number(rawPost.viewLimit || 100)))
+
+  if (!title) {
+    return { ok: false, message: 'Post title is required.' }
+  }
+
+  if (!keywords) {
+    return { ok: false, message: 'Post keywords are required.' }
+  }
+
+  if (!UUID_RE.test(categoryId)) {
+    return { ok: false, message: 'A valid categoryId is required.' }
+  }
+
+  if (![1, 2].includes(tradeType)) {
+    return { ok: false, message: 'tradeType must be 1 or 2.' }
+  }
+
+  if (!Number.isFinite(price) || price <= 0) {
+    return { ok: false, message: 'price must be a positive number.' }
+  }
+
+  return {
+    ok: true,
+    value: {
+      title: title.slice(0, 100),
+      keywords: keywords.slice(0, 200),
+      extraInfo: extraInfo ? extraInfo.slice(0, 100) : null,
+      categoryId,
+      tradeType,
+      price,
+      expireHours,
+      viewLimit
+    }
+  }
+}
+
+const findRecentAutoPublishedPost = async ({ config, operatorId, post }) => {
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const existingRes = await restRequest({
+    config,
+    resource: 'posts',
+    query:
+      `user_id=eq.${encodeURIComponent(operatorId)}` +
+      `&category_id=eq.${encodeURIComponent(post.categoryId)}` +
+      `&trade_type=eq.${post.tradeType}` +
+      `&price=eq.${post.price}` +
+      `&title=eq.${encodeURIComponent(post.title)}` +
+      `&created_at=gte.${encodeURIComponent(since)}` +
+      '&select=id,title,price,trade_type,category_id,expire_at,created_at' +
+      '&order=created_at.desc' +
+      '&limit=1',
+    useServiceRole: true
+  })
+
+  if (!existingRes.ok) {
+    throw new Error(existingRes.text || 'Failed to check existing auto-published posts')
+  }
+
+  return Array.isArray(existingRes.data) ? existingRes.data[0] || null : null
+}
+
+const handleAdminWechatAutoPublish = async ({ request, config }) => {
+  const missingServiceRoleResponse = requireServiceRole(config)
+  if (missingServiceRoleResponse) return missingServiceRoleResponse
+
+  try {
+    const adminCheck = await verifyAdminRequest({ config, request })
+    if (!adminCheck.ok) return adminCheck.response
+
+    const payload = await readJsonBody(request)
+    const posts = Array.isArray(payload?.posts) ? payload.posts : []
+    if (!posts.length) {
+      return json({ success: false, error: { code: 'EMPTY_POSTS', message: 'No posts provided.' } }, 400)
+    }
+
+    const operator = await resolveWechatAutoOperator({
+      config,
+      requestedUserId: payload?.operatorUserId
+    })
+
+    const categoriesRes = await restRequest({
+      config,
+      resource: 'categories',
+      query: 'select=id&is_active=eq.true',
+      useServiceRole: true
+    })
+
+    if (!categoriesRes.ok) {
+      throw new Error(categoriesRes.text || 'Failed to load active categories')
+    }
+
+    const activeCategoryIds = new Set((Array.isArray(categoriesRes.data) ? categoriesRes.data : []).map((row) => row.id))
+    const failures = []
+    const skippedPosts = []
+    const createdPosts = []
+
+    for (const rawPost of posts) {
+      const normalized = normalizeWechatAutoPost(rawPost)
+      if (!normalized.ok) {
+        failures.push({
+          title: String(rawPost?.title || '?????'),
+          message: normalized.message
+        })
+        continue
+      }
+
+      const post = normalized.value
+      if (!activeCategoryIds.has(post.categoryId)) {
+        failures.push({
+          title: post.title,
+          message: 'categoryId does not match an active category.'
+        })
+        continue
+      }
+
+      const existingPost = await findRecentAutoPublishedPost({
+        config,
+        operatorId: operator.id,
+        post
+      })
+
+      if (existingPost?.id) {
+        skippedPosts.push({
+          id: existingPost.id,
+          title: existingPost.title,
+          price: Number(existingPost.price || 0),
+          tradeType: Number(existingPost.trade_type || 0),
+          categoryId: existingPost.category_id || null,
+          expireAt: existingPost.expire_at || null,
+          createdAt: existingPost.created_at || null
+        })
+        continue
+      }
+
+      const expireAt = new Date(Date.now() + post.expireHours * 60 * 60 * 1000).toISOString()
+      const insertRes = await restRequest({
+        config,
+        resource: 'posts',
+        query: 'select=id,title,price,trade_type,category_id,expire_at',
+        method: 'POST',
+        body: [
+          {
+            user_id: operator.id,
+            title: post.title,
+            keywords: post.keywords,
+            price: post.price,
+            trade_type: post.tradeType,
+            delivery_date: null,
+            extra_info: post.extraInfo,
+            view_limit: post.viewLimit,
+            view_count: 0,
+            deal_count: 0,
+            status: 1,
+            expire_at: expireAt,
+            category_id: post.categoryId
+          }
+        ],
+        useServiceRole: true,
+        extraHeaders: {
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation'
+        }
+      })
+
+      if (!insertRes.ok || !Array.isArray(insertRes.data) || !insertRes.data[0]) {
+        failures.push({
+          title: post.title,
+          message: insertRes.text || 'Failed to create post.'
+        })
+        continue
+      }
+
+      createdPosts.push(insertRes.data[0])
+    }
+
+    return json({
+      success: true,
+      data: {
+        operatorUserId: operator.id,
+        operatorWechatId: operator.wechat_id || '',
+        publishedCount: createdPosts.length,
+        skippedCount: skippedPosts.length,
+        failedCount: failures.length,
+        posts: createdPosts.map((post) => ({
+          id: post.id,
+          title: post.title,
+          price: Number(post.price || 0),
+          tradeType: Number(post.trade_type || 0),
+          categoryId: post.category_id || null,
+          expireAt: post.expire_at
+        })),
+        skippedPosts,
+        failures
+      }
+    })
+  } catch (error) {
+    return json(
+      {
+        success: false,
+        error: {
+          code: 'ADMIN_WECHAT_AUTO_PUBLISH_ERROR',
+          message: error?.message || 'Failed to auto publish WeChat posts.'
+        }
+      },
+      500
+    )
+  }
+}
+
 const loadUserForReward = async (config, userId) => {
   const userRes = await restRequest({
     config,
@@ -898,29 +1165,29 @@ const handlePasswordLogin = async ({ request, config }) => {
   const password = typeof payload?.password === 'string' ? payload.password : ''
 
   if (!phone || !password) {
-    return json({ success: false, error: { code: 'INVALID_PAYLOAD', message: '请输入手机号和密码。' } }, 400)
+    return json({ success: false, error: { code: 'INVALID_PAYLOAD', message: '??????????' } }, 400)
   }
 
   try {
     const user = await loadUserByPhone({ config, phone, includePassword: true })
     if (!user) {
-      return json({ success: false, error: { code: 'INVALID_CREDENTIALS', message: '手机号或密码错误。' } }, 401)
+      return json({ success: false, error: { code: 'INVALID_CREDENTIALS', message: '?????????' } }, 401)
     }
 
     if (Number(user.status ?? 1) === 0) {
-      return json({ success: false, error: { code: 'ACCOUNT_DISABLED', message: '账号已被禁用，请联系管理员。' } }, 403)
+      return json({ success: false, error: { code: 'ACCOUNT_DISABLED', message: '??????,???????' } }, 403)
     }
 
     const isPasswordValid = await verifyStoredPassword(password, user.password)
     if (!isPasswordValid) {
-      return json({ success: false, error: { code: 'INVALID_CREDENTIALS', message: '手机号或密码错误。' } }, 401)
+      return json({ success: false, error: { code: 'INVALID_CREDENTIALS', message: '?????????' } }, 401)
     }
 
     return json({
       success: true,
       data: {
         user: sanitizeUserForClient(user),
-        message: '登录成功'
+        message: '????'
       }
     })
   } catch (error) {
@@ -929,7 +1196,7 @@ const handlePasswordLogin = async ({ request, config }) => {
         success: false,
         error: {
           code: 'PASSWORD_LOGIN_ERROR',
-          message: error?.message || '密码登录失败。'
+          message: error?.message || '???????'
         }
       },
       500
@@ -948,11 +1215,11 @@ const handlePasswordRegistration = async ({ request, config }) => {
   const inviteCode = typeof payload?.invite_code === 'string' ? payload.invite_code.trim().toUpperCase() : ''
 
   if (!phone || !password || !wechatId) {
-    return json({ success: false, error: { code: 'INVALID_PAYLOAD', message: '请填写完整的注册信息。' } }, 400)
+    return json({ success: false, error: { code: 'INVALID_PAYLOAD', message: '???????????' } }, 400)
   }
 
   if (!PHONE_RE.test(phone)) {
-    return json({ success: false, error: { code: 'INVALID_PHONE', message: '请输入正确的手机号。' } }, 400)
+    return json({ success: false, error: { code: 'INVALID_PHONE', message: '??????????' } }, 400)
   }
 
   if (password.length < 6 || !/\d/.test(password) || !/[a-zA-Z]/.test(password)) {
@@ -961,7 +1228,7 @@ const handlePasswordRegistration = async ({ request, config }) => {
         success: false,
         error: {
           code: 'INVALID_PASSWORD',
-          message: '密码至少 6 位，且必须同时包含数字和字母。'
+          message: '???? 6 ?,?????????????'
         }
       },
       400
@@ -969,7 +1236,7 @@ const handlePasswordRegistration = async ({ request, config }) => {
   }
 
   if (inviteCode && !INVITE_CODE_RE.test(inviteCode)) {
-    return json({ success: false, error: { code: 'INVALID_INVITE_CODE', message: '邀请码格式不正确。' } }, 400)
+    return json({ success: false, error: { code: 'INVALID_INVITE_CODE', message: '?????????' } }, 400)
   }
 
   let createdUserId = ''
@@ -977,14 +1244,14 @@ const handlePasswordRegistration = async ({ request, config }) => {
   try {
     const existingUser = await loadUserByPhone({ config, phone, includePassword: false })
     if (existingUser) {
-      return json({ success: false, error: { code: 'PHONE_ALREADY_EXISTS', message: '该手机号已注册。' } }, 409)
+      return json({ success: false, error: { code: 'PHONE_ALREADY_EXISTS', message: '????????' } }, 409)
     }
 
     let inviter = null
     if (inviteCode) {
       inviter = await loadUserByInviteCode({ config, inviteCode })
       if (!inviter) {
-        return json({ success: false, error: { code: 'INVALID_INVITE_CODE', message: '邀请码无效。' } }, 400)
+        return json({ success: false, error: { code: 'INVALID_INVITE_CODE', message: '??????' } }, 400)
       }
     }
 
@@ -1015,7 +1282,7 @@ const handlePasswordRegistration = async ({ request, config }) => {
       change_amount: INITIAL_REGISTRATION_POINTS,
       balance_after: INITIAL_REGISTRATION_POINTS,
       related_id: createdUser.id,
-      description: '注册奖励',
+      description: '????',
       created_at: new Date().toISOString()
     })
 
@@ -1047,7 +1314,7 @@ const handlePasswordRegistration = async ({ request, config }) => {
       success: true,
       data: {
         user: sanitizeUserForClient(createdUser),
-        message: '注册成功'
+        message: '????'
       }
     })
   } catch (error) {
@@ -1060,7 +1327,7 @@ const handlePasswordRegistration = async ({ request, config }) => {
         success: false,
         error: {
           code: 'PASSWORD_REGISTRATION_ERROR',
-          message: error?.message || '注册失败。'
+          message: error?.message || '?????'
         }
       },
       500
@@ -1149,7 +1416,7 @@ const handleRegistrationBonus = async ({ request, config }) => {
         change_amount: pointsAdded,
         balance_after: updatedUser?.points ?? Number(user.points || 0) + pointsAdded,
         related_id: userId,
-        description: `注册送积分补齐至${growthSettings.registrationPoints}`,
+        description: `????????${growthSettings.registrationPoints}`,
         created_at: new Date().toISOString()
       })
     } catch (error) {
@@ -1181,33 +1448,33 @@ const handleRegistrationBonus = async ({ request, config }) => {
 const buildGrowthTasks = ({ growthSettings, checkedInToday, rewardedCount, successfulInvites }) => [
   {
     key: 'daily_checkin',
-    title: '每日签到',
-    description: '每天来站里打卡，维持活跃度',
+    title: '????',
+    description: '???????,?????',
     rewardPoints: growthSettings.dailyCheckinReward,
     completed: checkedInToday,
     progress: checkedInToday ? 1 : 0,
     target: 1,
-    actionLabel: checkedInToday ? '已完成' : '去签到'
+    actionLabel: checkedInToday ? '???' : '???'
   },
   {
     key: 'daily_publish',
-    title: '每日发帖任务',
-    description: '当天前几条发帖可拿额外积分奖励',
+    title: '??????',
+    description: '???????????????',
     rewardPoints: growthSettings.dailyPostReward,
     completed: rewardedCount >= growthSettings.dailyPostRewardLimit,
     progress: rewardedCount,
     target: growthSettings.dailyPostRewardLimit,
-    actionLabel: rewardedCount >= growthSettings.dailyPostRewardLimit ? '已完成' : '去发帖'
+    actionLabel: rewardedCount >= growthSettings.dailyPostRewardLimit ? '???' : '???'
   },
   {
     key: 'invite_reward',
-    title: '邀请好友首发',
-    description: '邀请好友注册并完成首发，双方都有奖励',
+    title: '??????',
+    description: '???????????,??????',
     rewardPoints: growthSettings.inviterRewardPoints,
     completed: successfulInvites > 0,
     progress: successfulInvites,
     target: 1,
-    actionLabel: successfulInvites > 0 ? '继续邀请' : '去邀请'
+    actionLabel: successfulInvites > 0 ? '????' : '???'
   }
 ]
 
@@ -1474,7 +1741,7 @@ const handleDailyCheckIn = async ({ request, config }) => {
       change_type: POINT_CHANGE_TYPES.dailyCheckIn,
       change_amount: growthSettings.dailyCheckinReward,
       balance_after: updatedUser?.points ?? Number(user.points || 0) + growthSettings.dailyCheckinReward,
-      description: '每日签到奖励',
+      description: '??????',
       created_at: checkedInAt
     })
 
@@ -1551,7 +1818,7 @@ const handlePublishLeaderboard = async ({ request, config }) => {
           resource: 'users',
           query:
             `id=in.(${userIds.map((id) => `"${id}"`).join(',')})` +
-            '&select=id,phone,wechat_id,total_posts,points',
+            '&select=id,phone,wechat_id,total_posts,points,is_admin',
           useServiceRole: true
         })
 
@@ -1561,6 +1828,7 @@ const handlePublishLeaderboard = async ({ request, config }) => {
 
         const users = Array.isArray(usersRes.data) ? usersRes.data : []
         entries = users
+          .filter((item) => !item.is_admin)
           .map((item) => ({
             userId: item.id,
             displayName: item.wechat_id || maskPhone(item.phone),
@@ -1581,7 +1849,7 @@ const handlePublishLeaderboard = async ({ request, config }) => {
       const usersRes = await restRequest({
         config,
         resource: 'users',
-        query: 'select=id,phone,wechat_id,total_posts,points&limit=50',
+        query: 'select=id,phone,wechat_id,total_posts,points,is_admin&limit=50',
         useServiceRole: true
       })
 
@@ -1590,6 +1858,7 @@ const handlePublishLeaderboard = async ({ request, config }) => {
       }
 
       entries = (Array.isArray(usersRes.data) ? usersRes.data : [])
+        .filter((item) => !item.is_admin)
         .map((item) => ({
           userId: item.id,
           displayName: item.wechat_id || maskPhone(item.phone),
@@ -1618,7 +1887,7 @@ const handlePublishLeaderboard = async ({ request, config }) => {
       success: true,
       data: {
         window,
-        windowLabel: window === '7d' ? '近7天发帖榜' : '总发帖榜',
+        windowLabel: window === '7d' ? '?7????' : '????',
         entries: rankedEntries,
         currentUserRank
       }
@@ -1803,7 +2072,7 @@ const handleDailyPostReward = async ({ request, config }) => {
         change_amount: growthSettings.dailyPostReward,
         balance_after: updatedUser?.points ?? Number(user.points || 0) + growthSettings.dailyPostReward,
         related_id: postId,
-        description: `每日前${growthSettings.dailyPostRewardLimit}条发帖奖励`,
+        description: `???${growthSettings.dailyPostRewardLimit}?????`,
         created_at: new Date().toISOString()
       })
     } catch (error) {
@@ -1849,6 +2118,14 @@ export async function onRequest(context) {
       status: 200,
       headers: CORS_HEADERS
     })
+  }
+
+  if (
+    request.method === 'POST' &&
+    pathSegments[0] === 'admin' &&
+    pathSegments[1] === 'wechat-auto-publish'
+  ) {
+    return handleAdminWechatAutoPublish({ request, config })
   }
 
   if (
