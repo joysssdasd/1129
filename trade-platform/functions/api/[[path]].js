@@ -731,6 +731,31 @@ const normalizeWechatAutoPost = (rawPost) => {
   }
 }
 
+const findRecentAutoPublishedPost = async ({ config, operatorId, post }) => {
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const existingRes = await restRequest({
+    config,
+    resource: 'posts',
+    query:
+      `user_id=eq.${encodeURIComponent(operatorId)}` +
+      `&category_id=eq.${encodeURIComponent(post.categoryId)}` +
+      `&trade_type=eq.${post.tradeType}` +
+      `&price=eq.${post.price}` +
+      `&title=eq.${encodeURIComponent(post.title)}` +
+      `&created_at=gte.${encodeURIComponent(since)}` +
+      '&select=id,title,price,trade_type,category_id,expire_at,created_at' +
+      '&order=created_at.desc' +
+      '&limit=1',
+    useServiceRole: true
+  })
+
+  if (!existingRes.ok) {
+    throw new Error(existingRes.text || 'Failed to check existing auto-published posts')
+  }
+
+  return Array.isArray(existingRes.data) ? existingRes.data[0] || null : null
+}
+
 const handleAdminWechatAutoPublish = async ({ request, config }) => {
   const missingServiceRoleResponse = requireServiceRole(config)
   if (missingServiceRoleResponse) return missingServiceRoleResponse
@@ -763,6 +788,7 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
 
     const activeCategoryIds = new Set((Array.isArray(categoriesRes.data) ? categoriesRes.data : []).map((row) => row.id))
     const failures = []
+    const skippedPosts = []
     const createdPosts = []
 
     for (const rawPost of posts) {
@@ -780,6 +806,25 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
         failures.push({
           title: post.title,
           message: 'categoryId does not match an active category.'
+        })
+        continue
+      }
+
+      const existingPost = await findRecentAutoPublishedPost({
+        config,
+        operatorId: operator.id,
+        post
+      })
+
+      if (existingPost?.id) {
+        skippedPosts.push({
+          id: existingPost.id,
+          title: existingPost.title,
+          price: Number(existingPost.price || 0),
+          tradeType: Number(existingPost.trade_type || 0),
+          categoryId: existingPost.category_id || null,
+          expireAt: existingPost.expire_at || null,
+          createdAt: existingPost.created_at || null
         })
         continue
       }
@@ -831,6 +876,7 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
         operatorUserId: operator.id,
         operatorWechatId: operator.wechat_id || '',
         publishedCount: createdPosts.length,
+        skippedCount: skippedPosts.length,
         failedCount: failures.length,
         posts: createdPosts.map((post) => ({
           id: post.id,
@@ -840,6 +886,7 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
           categoryId: post.category_id || null,
           expireAt: post.expire_at
         })),
+        skippedPosts,
         failures
       }
     })
