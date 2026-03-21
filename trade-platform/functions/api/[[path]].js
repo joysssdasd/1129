@@ -293,6 +293,7 @@ const upsertSystemSettings = async (config, rows) => {
   const existingRows = Array.isArray(existingRes.data) ? existingRes.data : []
   const existingKeySet = new Set(existingRows.map((row) => row?.key).filter(Boolean))
   const updatedRows = []
+  const rowsToInsert = []
 
   for (const row of normalizedRows) {
     const payload = {
@@ -323,17 +324,19 @@ const upsertSystemSettings = async (config, rows) => {
       continue
     }
 
+    rowsToInsert.push({
+      key: row.key,
+      ...payload
+    })
+  }
+
+  if (rowsToInsert.length) {
     const insertRes = await restRequest({
       config,
       resource: 'system_settings',
       query: 'select=id,key,value,category,created_at,updated_at',
       method: 'POST',
-      body: [
-        {
-          key: row.key,
-          ...payload
-        }
-      ],
+      body: rowsToInsert,
       useServiceRole: true,
       extraHeaders: {
         'Content-Type': 'application/json',
@@ -342,7 +345,7 @@ const upsertSystemSettings = async (config, rows) => {
     })
 
     if (!insertRes.ok) {
-      throw new Error(insertRes.text || `Failed to insert system setting: ${row.key}`)
+      throw new Error(insertRes.text || 'Failed to insert system settings')
     }
 
     updatedRows.push(...(Array.isArray(insertRes.data) ? insertRes.data : []))
@@ -857,6 +860,31 @@ const loadPostById = async (config, postId) => {
   return Array.isArray(postRes.data) ? postRes.data[0] || null : null
 }
 
+const loadPostsByIds = async (config, postIds) => {
+  const uniqueIds = [...new Set((Array.isArray(postIds) ? postIds : []).filter((id) => UUID_RE.test(id)))]
+  if (!uniqueIds.length) return {}
+
+  const postsRes = await restRequest({
+    config,
+    resource: 'posts',
+    query:
+      `id=in.(${uniqueIds.map((id) => `"${id}"`).join(',')})` +
+      '&select=id,user_id,title,keywords,price,trade_type,category_id,extra_info,view_limit,status,expire_at,created_at,updated_at',
+    useServiceRole: true
+  })
+
+  if (!postsRes.ok) {
+    throw new Error(postsRes.text || 'Failed to load managed market posts by ids')
+  }
+
+  return (Array.isArray(postsRes.data) ? postsRes.data : []).reduce((accumulator, row) => {
+    if (row?.id) {
+      accumulator[row.id] = row
+    }
+    return accumulator
+  }, {})
+}
+
 const findRecentAutoPublishedPost = async ({ config, operatorId, post }) => {
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
   const existingRes = await restRequest({
@@ -967,12 +995,19 @@ const updateManagedMarketPost = async ({ config, postId, payload }) => {
   return updateRes.data[0]
 }
 
+const shouldRefreshManagedExpireAt = (currentExpireAt, nextExpireAt) => {
+  if (!currentExpireAt) return true
+
+  const currentMs = Date.parse(currentExpireAt)
+  const nextMs = Date.parse(nextExpireAt)
+  if (!Number.isFinite(currentMs) || !Number.isFinite(nextMs)) return true
+
+  const refreshThresholdMs = 48 * 60 * 60 * 1000
+  return currentMs <= Date.now() + refreshThresholdMs || currentMs > nextMs
+}
+
 const buildManagedPostUpdatePayload = ({ currentPost, post, expireAt }) => {
-  const payload = {
-    expire_at: expireAt,
-    status: 1,
-    updated_at: new Date().toISOString()
-  }
+  const payload = {}
   const changedFields = []
 
   if (currentPost.title !== post.title) {
@@ -1011,10 +1046,23 @@ const buildManagedPostUpdatePayload = ({ currentPost, post, expireAt }) => {
   }
 
   if (Number(currentPost.status || 0) !== 1) {
+    payload.status = 1
     changedFields.push('status')
   }
 
-  return { payload, changedFields }
+  if (shouldRefreshManagedExpireAt(currentPost.expire_at, expireAt)) {
+    payload.expire_at = expireAt
+  }
+
+  if (Object.keys(payload).length > 0) {
+    payload.updated_at = new Date().toISOString()
+  }
+
+  return {
+    payload,
+    changedFields,
+    shouldUpdate: Object.keys(payload).length > 0
+  }
 }
 
 const buildManagedMarketStateRow = ({ marketKey, stateKey, post, postRow, runDate }) => ({
@@ -1061,6 +1109,24 @@ const summarizeManagedPost = (post) => ({
   expireAt: post.expire_at || null,
   status: Number(post.status || 0)
 })
+
+const buildManagedRecentPostKey = (post) =>
+  [post.categoryId || post.category_id || '', post.tradeType || post.trade_type || '', post.title || '']
+    .map((value) => String(value || '').trim())
+    .join('|')
+
+const indexManagedRecentPosts = (rows = []) => {
+  const index = new Map()
+  for (const row of rows) {
+    if (!isManagedAutoMarketPost(row)) continue
+    const key = buildManagedRecentPostKey(row)
+    if (!index.has(key)) {
+      index.set(key, [])
+    }
+    index.get(key).push(row)
+  }
+  return index
+}
 
 const isManagedAutoMarketPost = (post) =>
   Boolean(post) &&
@@ -1164,7 +1230,6 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
     const refreshedPosts = []
     const deactivatedPosts = []
     const stateRows = []
-    const historyRows = []
     const normalizedPosts = []
 
     for (const rawPost of posts) {
@@ -1247,6 +1312,17 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
 
     const stateKeys = normalizedPosts.map((post) => buildManagedStateSettingKey(buildManagedMarketKey(post)))
     const existingStateRows = await loadSystemSettingRowsByKeys(config, stateKeys)
+    const existingStatePostIds = Object.values(existingStateRows)
+      .map((row) => parseJsonValue(row?.value, {})?.postId)
+      .filter((postId) => UUID_RE.test(postId || ''))
+    const existingStatePostMap = await loadPostsByIds(config, existingStatePostIds)
+    const recentManagedPosts = await loadRecentOperatorMarketPosts({
+      config,
+      operatorId: operator.id,
+      categoryIds: [...new Set(normalizedPosts.map((post) => post.categoryId))]
+    })
+    const recentManagedPostIndex = indexManagedRecentPosts(recentManagedPosts)
+    const claimedRecentPostIds = new Set()
     const touchedPostIds = new Set()
 
     for (const post of normalizedPosts) {
@@ -1255,14 +1331,15 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
       const existingState = parseJsonValue(existingStateRows[stateKey]?.value, {})
       const expireAt = new Date(Date.now() + post.expireHours * 60 * 60 * 1000).toISOString()
 
-      let currentPost = UUID_RE.test(existingState?.postId || '') ? await loadPostById(config, existingState.postId) : null
+      let currentPost = UUID_RE.test(existingState?.postId || '') ? existingStatePostMap[existingState.postId] || null : null
 
       if (!currentPost) {
-        currentPost = await findExistingAutoMarketPost({
-          config,
-          operatorId: operator.id,
-          post
-        })
+        const recentKey = buildManagedRecentPostKey(post)
+        const recentCandidates = recentManagedPostIndex.get(recentKey) || []
+        currentPost = recentCandidates.find((row) => !claimedRecentPostIds.has(row.id)) || null
+        if (currentPost?.id) {
+          claimedRecentPostIds.add(currentPost.id)
+        }
       }
 
       try {
@@ -1277,29 +1354,23 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
           createdPosts.push(createdPost)
           touchedPostIds.add(createdPost.id)
           stateRows.push(buildManagedMarketStateRow({ marketKey, stateKey, post, postRow: createdPost, runDate }))
-          historyRows.push(
-            buildManagedHistoryRow({
-              marketKey,
-              action: 'created',
-              payload: {
-                postId: createdPost.id,
-                title: createdPost.title,
-                price: Number(createdPost.price || 0),
-                categoryId: createdPost.category_id || null,
-                tradeType: Number(createdPost.trade_type || 0),
-                runDate
-              }
-            })
-          )
           continue
         }
 
-        const previousSummary = summarizeManagedPost(currentPost)
-        const { payload: updatePayload, changedFields } = buildManagedPostUpdatePayload({
+        const { payload: updatePayload, changedFields, shouldUpdate } = buildManagedPostUpdatePayload({
           currentPost,
           post,
           expireAt
         })
+
+        if (!shouldUpdate) {
+          touchedPostIds.add(currentPost.id)
+          refreshedPosts.push(currentPost)
+          if (!existingState?.postId || existingState.postId !== currentPost.id) {
+            stateRows.push(buildManagedMarketStateRow({ marketKey, stateKey, post, postRow: currentPost, runDate }))
+          }
+          continue
+        }
 
         const updatedPost = await updateManagedMarketPost({
           config,
@@ -1308,25 +1379,12 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
         })
 
         touchedPostIds.add(updatedPost.id)
-        stateRows.push(buildManagedMarketStateRow({ marketKey, stateKey, post, postRow: updatedPost, runDate }))
+        if (!existingState?.postId || existingState.postId !== updatedPost.id || changedFields.length) {
+          stateRows.push(buildManagedMarketStateRow({ marketKey, stateKey, post, postRow: updatedPost, runDate }))
+        }
 
         if (changedFields.length) {
           updatedPosts.push(updatedPost)
-          historyRows.push(
-            buildManagedHistoryRow({
-              marketKey,
-              action: changedFields.includes('price') ? 'repriced' : 'updated',
-              payload: {
-                postId: updatedPost.id,
-                previousPrice: previousSummary.price,
-                price: Number(updatedPost.price || 0),
-                previousTitle: previousSummary.title,
-                title: updatedPost.title,
-                changedFields,
-                runDate
-              }
-            })
-          )
         } else {
           refreshedPosts.push(updatedPost)
         }
@@ -1342,18 +1400,8 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
       await upsertSystemSettings(config, stateRows)
     }
 
-    if (historyRows.length) {
-      await upsertSystemSettings(config, historyRows)
-    }
-
     if (deactivateMissing && normalizedPosts.length && failures.length === 0) {
-      const recentPosts = await loadRecentOperatorMarketPosts({
-        config,
-        operatorId: operator.id,
-        categoryIds: [...new Set(normalizedPosts.map((post) => post.categoryId))]
-      })
-
-      const staleIds = recentPosts
+      const staleIds = recentManagedPosts
         .filter((row) => isManagedAutoMarketPost(row) && !touchedPostIds.has(row.id))
         .map((row) => row.id)
 
@@ -1363,27 +1411,6 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
       })
 
       deactivatedPosts.push(...removed)
-
-      if (removed.length) {
-        await upsertSystemSettings(
-          config,
-          removed.map((row) =>
-            buildManagedHistoryRow({
-              marketKey: `deactivated:${row.id}`,
-              action: 'deactivated',
-              payload: {
-                postId: row.id,
-                title: row.title,
-                price: Number(row.price || 0),
-                categoryId: row.category_id || null,
-                tradeType: Number(row.trade_type || 0),
-                reason: 'missing_from_latest_managed_run',
-                runDate
-              }
-            })
-          )
-        )
-      }
     }
 
     return json({
