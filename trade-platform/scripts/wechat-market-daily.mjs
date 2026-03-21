@@ -16,11 +16,14 @@ const HISTORY_ROOT = path.join(CC_ROOT, 'history')
 const LEARNING_FILE = path.join(CC_ROOT, 'learning', '日报学习记录.md')
 const SITE_ORIGIN = process.argv.find((arg) => arg.startsWith('--site='))?.split('=')[1] || 'https://www.niuniubase.top'
 const SHOULD_PUBLISH = process.argv.includes('--publish')
+const SHOULD_PREVIEW_SYNC = process.argv.includes('--preview-sync') || SHOULD_PUBLISH
 const PUBLISH_LIMIT = Number(process.argv.find((arg) => arg.startsWith('--limit='))?.split('=')[1] || 24)
 const PUBLISH_BATCH_SIZE = Number(process.argv.find((arg) => arg.startsWith('--batch='))?.split('=')[1] || 4)
 const DATE_OVERRIDE = process.argv.find((arg) => arg.startsWith('--date='))?.split('=')[1] || ''
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/.test(DATE_OVERRIDE) ? DATE_OVERRIDE : getShanghaiDateKey(new Date())
 const DEFAULT_OPERATOR_WECHAT = 'niuniubase'
+const MANAGED_SYNC_KIND = 'niuniubase.managed-market-sync'
+const MANAGED_SYNC_PROTOCOL_VERSION = 1
 
 const CITIES = ['北京','上海','广州','深圳','杭州','南宁','武汉','天津','郑州','重庆','成都','长沙','青岛','绍兴','厦门','佛山','烟台','泉州','贵阳','大连','香港','澳门','首尔','仁川','全国']
 const ARTISTS = ['周杰伦','谢霆锋','陶喆','蔡依林','凤凰传奇','张杰','李宗盛','梁静茹','薛之谦','单依纯','张震岳','黄丽玲','胡彦斌','潘玮柏','李荣浩','杨千嬅','张天赋','伍佰','周传雄','郑润泽','余佳运','陈嘉桦','顽童','ONER','BTS','SVT','CNBLUE','NEXZ','孙燕姿','刘德华']
@@ -527,7 +530,118 @@ function buildReport(messages, clusters, plan) {
   }
 }
 
-function writeOutputs(rawCandidates, clusters, plan, report) {
+function buildManagedSyncManifest(messages, rawCandidates, clusters, plan, report, operator) {
+  const activeMarketKeys = [...new Set(plan.map((row) => row.marketKey).filter(Boolean))]
+  const sourceFiles = [...new Set(plan.map((row) => row.sourceRef).filter(Boolean))]
+  const planHash = sha1(
+    JSON.stringify(
+      plan.map((row) => ({
+        marketKey: row.marketKey,
+        title: row.title,
+        price: row.price,
+        tradeType: row.tradeType,
+        categoryId: row.categoryId
+      }))
+    )
+  )
+  const runId = `wechat-market-${DATE_KEY}-${planHash.slice(0, 10)}`
+  const planId = `plan-${DATE_KEY}-${planHash.slice(0, 12)}`
+
+  return {
+    kind: MANAGED_SYNC_KIND,
+    protocolVersion: MANAGED_SYNC_PROTOCOL_VERSION,
+    generatedAt: new Date().toISOString(),
+    source: {
+      workflow: 'wechat-market-daily',
+      timezone: 'Asia/Shanghai',
+      siteOrigin: SITE_ORIGIN,
+      sourceDate: DATE_KEY,
+      sourceFiles
+    },
+    run: {
+      runId,
+      runDate: DATE_KEY,
+      dryRun: false
+    },
+    operator: {
+      userId: operator?.id || '',
+      wechatId: DEFAULT_OPERATOR_WECHAT
+    },
+    report: {
+      date: report.meta.date,
+      previousDate: report.meta.previousDate || null,
+      strongestDemand: report.pulse.strongestDemand,
+      strongestSupply: report.pulse.strongestSupply,
+      hottestBoard: report.pulse.hottestBoard,
+      titles: report.promo.titles.slice(0, 3)
+    },
+    stats: {
+      groupCount: report.meta.groupCount,
+      messageCount: messages.length,
+      rawCandidateCount: rawCandidates.length,
+      clusterCount: clusters.length,
+      publishableSignalCount: report.meta.publishableSignalCount,
+      reportOnlySignalCount: report.meta.reportOnlySignalCount,
+      planCount: plan.length
+    },
+    plan: {
+      planId,
+      planHash,
+      payloadHash: planHash,
+      syncMode: 'managed_market',
+      deactivateMissing: true,
+      activeMarketKeys,
+      posts: plan
+    },
+    confirmation: {
+      mode: 'model_confirmed_direct_publish',
+      contactWechat: DEFAULT_OPERATOR_WECHAT,
+      note: '模型负责确认有效交易信号，执行层只负责托管同步、替换旧价和下架缺席旧盘。'
+    }
+  }
+}
+
+function buildBatchManifest(manifest, posts, options = {}) {
+  const activeMarketKeys = options.activeMarketKeys || manifest.plan.activeMarketKeys || []
+  const payloadHash = sha1(
+    JSON.stringify({
+      posts: posts.map((row) => ({
+        marketKey: row.marketKey,
+        title: row.title,
+        price: row.price,
+        tradeType: row.tradeType,
+        categoryId: row.categoryId
+      })),
+      activeMarketKeys,
+      deactivateMissing: options.deactivateMissing === true,
+      dryRun: options.dryRun === true,
+      phase: options.phase || ''
+    })
+  )
+
+  return {
+    ...manifest,
+    generatedAt: new Date().toISOString(),
+    run: {
+      ...manifest.run,
+      dryRun: options.dryRun === true
+    },
+    execution: {
+      phase: options.phase || 'sync-batch',
+      batchIndex: Number.isFinite(options.batchIndex) ? options.batchIndex : null,
+      batchCount: Number.isFinite(options.batchCount) ? options.batchCount : null
+    },
+    plan: {
+      ...manifest.plan,
+      payloadHash,
+      deactivateMissing: options.deactivateMissing === true,
+      activeMarketKeys,
+      posts
+    }
+  }
+}
+
+function writeOutputs(rawCandidates, clusters, plan, report, manifest) {
   const outputDir = path.join(GENERATED_ROOT, DATE_KEY)
   ensureDir(outputDir)
   ensureDir(REPORTS_ROOT)
@@ -537,6 +651,7 @@ function writeOutputs(rawCandidates, clusters, plan, report) {
   fs.writeFileSync(path.join(outputDir, 'raw-candidates.json'), JSON.stringify(rawCandidates, null, 2), 'utf8')
   fs.writeFileSync(path.join(outputDir, 'deduped-clusters.json'), JSON.stringify(clusters, null, 2), 'utf8')
   fs.writeFileSync(path.join(outputDir, 'publish-plan.json'), JSON.stringify(plan, null, 2), 'utf8')
+  fs.writeFileSync(path.join(outputDir, 'managed-sync-manifest.json'), JSON.stringify(manifest, null, 2), 'utf8')
   fs.writeFileSync(path.join(outputDir, 'report-v2.json'), JSON.stringify(report, null, 2), 'utf8')
   fs.writeFileSync(path.join(REPORTS_ROOT, `${DATE_KEY}-牛牛日报.md`), report.markdown, 'utf8')
   fs.writeFileSync(path.join(REPORTS_ROOT, `${DATE_KEY}-牛牛日报-V2.md`), report.markdown, 'utf8')
@@ -555,8 +670,111 @@ function writeOutputs(rawCandidates, clusters, plan, report) {
     )
   }
 }
-async function publishBatch(plan, adminId, options = {}) { const res = await fetch(`${SITE_ORIGIN.replace(/\/$/, '')}/api/admin/wechat-auto-publish`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-user-id': adminId }, body: JSON.stringify({ syncMode: 'managed_market', deactivateMissing: options.deactivateMissing === true, activeMarketKeys: options.activeMarketKeys || [], runDate: DATE_KEY, posts: plan }) }); const text = await res.text(); let data = null; try { data = text ? JSON.parse(text) : null } catch { data = text } if (!res.ok || !data?.success) throw new Error(data?.error?.message || text || 'Failed to publish auto posts'); return data.data }
-async function publishPlan(plan, adminId) { if (!plan.length) return { publishedCount: 0, failedCount: 0, posts: [] }; const batches = []; for (let index = 0; index < plan.length; index += Math.max(1, PUBLISH_BATCH_SIZE)) batches.push(plan.slice(index, index + Math.max(1, PUBLISH_BATCH_SIZE))); const activeMarketKeys = [...new Set(plan.map((row) => row.marketKey).filter(Boolean))]; const aggregate = { operatorUserId: adminId, operatorWechatId: DEFAULT_OPERATOR_WECHAT, publishedCount: 0, updatedCount: 0, refreshedCount: 0, deactivatedCount: 0, failedCount: 0, posts: [], createdPosts: [], updatedPosts: [], refreshedPosts: [], deactivatedPosts: [], failures: [] }; for (const batch of batches) { const result = await publishBatch(batch, adminId, { deactivateMissing: false }); aggregate.operatorUserId = result.operatorUserId || aggregate.operatorUserId; aggregate.operatorWechatId = result.operatorWechatId || aggregate.operatorWechatId; aggregate.publishedCount += Number(result.publishedCount || 0); aggregate.updatedCount += Number(result.updatedCount || 0); aggregate.refreshedCount += Number(result.refreshedCount || 0); aggregate.failedCount += Number(result.failedCount || 0); aggregate.posts.push(...(result.posts || [])); aggregate.createdPosts.push(...(result.createdPosts || [])); aggregate.updatedPosts.push(...(result.updatedPosts || [])); aggregate.refreshedPosts.push(...(result.refreshedPosts || [])); aggregate.failures.push(...(result.failures || [])); } const finalize = await publishBatch([], adminId, { deactivateMissing: true, activeMarketKeys }); aggregate.operatorUserId = finalize.operatorUserId || aggregate.operatorUserId; aggregate.operatorWechatId = finalize.operatorWechatId || aggregate.operatorWechatId; aggregate.deactivatedCount = Number(finalize.deactivatedCount || 0); aggregate.deactivatedPosts = finalize.deactivatedPosts || []; aggregate.failedCount += Number(finalize.failedCount || 0); aggregate.failures.push(...(finalize.failures || [])); return aggregate }
+function writeExecutionOutputs(previewResult, publishResult) {
+  const outputDir = path.join(GENERATED_ROOT, DATE_KEY)
+  ensureDir(outputDir)
+  if (previewResult) {
+    fs.writeFileSync(path.join(outputDir, 'managed-sync-preview.json'), JSON.stringify(previewResult, null, 2), 'utf8')
+  }
+  if (publishResult) {
+    fs.writeFileSync(path.join(outputDir, 'managed-sync-execution.json'), JSON.stringify(publishResult, null, 2), 'utf8')
+  }
+}
+
+async function requestManagedSync(manifest, adminId) {
+  const res = await fetch(`${SITE_ORIGIN.replace(/\/$/, '')}/api/admin/wechat-auto-publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-user-id': adminId },
+    body: JSON.stringify({ manifest })
+  })
+  const text = await res.text()
+  let data = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    data = text
+  }
+  if (!res.ok || !data?.success) throw new Error(data?.error?.message || text || 'Failed to sync managed market posts')
+  return data.data
+}
+
+async function previewManagedSync(manifest, adminId) {
+  const previewManifest = buildBatchManifest(manifest, manifest.plan.posts, {
+    dryRun: true,
+    deactivateMissing: true,
+    activeMarketKeys: manifest.plan.activeMarketKeys,
+    phase: 'preview'
+  })
+  return requestManagedSync(previewManifest, adminId)
+}
+
+async function publishPlan(manifest, adminId) {
+  const plan = manifest.plan.posts || []
+  if (!plan.length) return { publishedCount: 0, failedCount: 0, posts: [] }
+  const batches = []
+  for (let index = 0; index < plan.length; index += Math.max(1, PUBLISH_BATCH_SIZE)) {
+    batches.push(plan.slice(index, index + Math.max(1, PUBLISH_BATCH_SIZE)))
+  }
+
+  const aggregate = {
+    operatorUserId: adminId,
+    operatorWechatId: DEFAULT_OPERATOR_WECHAT,
+    publishedCount: 0,
+    updatedCount: 0,
+    refreshedCount: 0,
+    deactivatedCount: 0,
+    failedCount: 0,
+    posts: [],
+    createdPosts: [],
+    updatedPosts: [],
+    refreshedPosts: [],
+    deactivatedPosts: [],
+    failures: [],
+    actions: [],
+    syncMeta: null
+  }
+
+  for (let index = 0; index < batches.length; index += 1) {
+    const batchManifest = buildBatchManifest(manifest, batches[index], {
+      deactivateMissing: false,
+      phase: 'sync-batch',
+      batchIndex: index + 1,
+      batchCount: batches.length
+    })
+    const result = await requestManagedSync(batchManifest, adminId)
+    aggregate.operatorUserId = result.operatorUserId || aggregate.operatorUserId
+    aggregate.operatorWechatId = result.operatorWechatId || aggregate.operatorWechatId
+    aggregate.publishedCount += Number(result.publishedCount || 0)
+    aggregate.updatedCount += Number(result.updatedCount || 0)
+    aggregate.refreshedCount += Number(result.refreshedCount || 0)
+    aggregate.failedCount += Number(result.failedCount || 0)
+    aggregate.posts.push(...(result.posts || []))
+    aggregate.createdPosts.push(...(result.createdPosts || []))
+    aggregate.updatedPosts.push(...(result.updatedPosts || []))
+    aggregate.refreshedPosts.push(...(result.refreshedPosts || []))
+    aggregate.failures.push(...(result.failures || []))
+    aggregate.actions.push(...(result.actions || []))
+    aggregate.syncMeta = result.syncMeta || aggregate.syncMeta
+  }
+
+  const finalizeManifest = buildBatchManifest(manifest, [], {
+    deactivateMissing: true,
+    activeMarketKeys: manifest.plan.activeMarketKeys,
+    phase: 'finalize',
+    batchIndex: batches.length,
+    batchCount: batches.length
+  })
+  const finalize = await requestManagedSync(finalizeManifest, adminId)
+  aggregate.operatorUserId = finalize.operatorUserId || aggregate.operatorUserId
+  aggregate.operatorWechatId = finalize.operatorWechatId || aggregate.operatorWechatId
+  aggregate.deactivatedCount = Number(finalize.deactivatedCount || 0)
+  aggregate.deactivatedPosts = finalize.deactivatedPosts || []
+  aggregate.failedCount += Number(finalize.failedCount || 0)
+  aggregate.failures.push(...(finalize.failures || []))
+  aggregate.actions.push(...(finalize.actions || []))
+  aggregate.syncMeta = finalize.syncMeta || aggregate.syncMeta
+  return aggregate
+}
 
 const messages = loadMessages()
 const rawCandidates = messages.flatMap((message) => parseMessage(message)).filter((row) => row.itemName && row.normalizedPrice > 0)
@@ -565,6 +783,12 @@ const config = supabaseConfig()
 const { categoryMap, operator } = await loadPublishingContext(config)
 const plan = buildPlan(clusters, categoryMap)
 const report = buildReport(messages, clusters, plan)
-writeOutputs(rawCandidates, clusters, plan, report)
-const publishResult = SHOULD_PUBLISH ? await publishPlan(plan, operator.id) : null
-console.log(JSON.stringify({ date: DATE_KEY, sourceMessages: messages.length, rawCandidates: rawCandidates.length, clusters: clusters.length, publishPlanCount: plan.length, operatorUserId: operator.id, publishResult }, null, 2))
+const manifest = buildManagedSyncManifest(messages, rawCandidates, clusters, plan, report, operator)
+writeOutputs(rawCandidates, clusters, plan, report, manifest)
+const previewResult = SHOULD_PREVIEW_SYNC ? await previewManagedSync(manifest, operator.id) : null
+if (SHOULD_PUBLISH && Number(previewResult?.failedCount || 0) > 0) {
+  throw new Error(`Managed sync preview failed with ${previewResult.failedCount} errors. Aborting publish.`)
+}
+const publishResult = SHOULD_PUBLISH ? await publishPlan(manifest, operator.id) : null
+writeExecutionOutputs(previewResult, publishResult)
+console.log(JSON.stringify({ date: DATE_KEY, sourceMessages: messages.length, rawCandidates: rawCandidates.length, clusters: clusters.length, publishPlanCount: plan.length, operatorUserId: operator.id, previewResult, publishResult }, null, 2))

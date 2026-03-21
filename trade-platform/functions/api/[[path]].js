@@ -75,9 +75,12 @@ const POINT_CHANGE_TYPES = {
 }
 
 const AUTO_MARKET_INFO_PREFIX = '自动整理自微信群行情'
+const MANAGED_SYNC_KIND = 'niuniubase.managed-market-sync'
+const MANAGED_SYNC_PROTOCOL_VERSION = 1
 const AUTO_MARKET_SETTING_CATEGORIES = {
   state: 'wechat_market_state',
-  history: 'wechat_market_history'
+  history: 'wechat_market_history',
+  runs: 'wechat_market_runs'
 }
 
 const json = (payload, status = 200) =>
@@ -353,6 +356,8 @@ const upsertSystemSettings = async (config, rows) => {
 
   return updatedRows
 }
+
+const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 
 const loadSystemSettingsMap = async (config, keys, options = {}) => {
   const { ensureDefaults = false } = options
@@ -1065,7 +1070,7 @@ const buildManagedPostUpdatePayload = ({ currentPost, post, expireAt }) => {
   }
 }
 
-const buildManagedMarketStateRow = ({ marketKey, stateKey, post, postRow, runDate }) => ({
+const buildManagedMarketStateRow = ({ marketKey, stateKey, post, postRow, runDate, syncMeta }) => ({
   key: stateKey,
   category: AUTO_MARKET_SETTING_CATEGORIES.state,
   value: JSON.stringify({
@@ -1085,7 +1090,12 @@ const buildManagedMarketStateRow = ({ marketKey, stateKey, post, postRow, runDat
     signalCount: Number(post.signalCount || 0),
     groupCount: Number(post.groupCount || 0),
     lastSeenAt: new Date().toISOString(),
-    lastRunDate: runDate
+    lastRunDate: runDate,
+    lastRunId: syncMeta?.runId || '',
+    lastPlanId: syncMeta?.planId || '',
+    lastPlanHash: syncMeta?.planHash || '',
+    lastPayloadHash: syncMeta?.payloadHash || '',
+    lastPhase: syncMeta?.phase || ''
   })
 })
 
@@ -1099,6 +1109,131 @@ const buildManagedHistoryRow = ({ marketKey, action, payload }) => ({
     ...payload
   })
 })
+
+const buildManagedRunSettingKey = ({ runId, phase, payloadHash }) =>
+  `${AUTO_MARKET_SETTING_CATEGORIES.runs}:${hashText(`${runId}|${phase}|${payloadHash || 'no-payload'}`)}`
+
+const buildManagedRunHistoryRow = ({ syncMeta, counts, failures }) => ({
+  key: buildManagedRunSettingKey(syncMeta),
+  category: AUTO_MARKET_SETTING_CATEGORIES.runs,
+  value: JSON.stringify({
+    kind: syncMeta.kind || 'legacy_posts_payload',
+    protocolVersion: syncMeta.protocolVersion || 0,
+    runId: syncMeta.runId || '',
+    runDate: syncMeta.runDate || getShanghaiDateKey(new Date()),
+    dryRun: syncMeta.dryRun === true,
+    phase: syncMeta.phase || 'sync',
+    batchIndex: Number.isFinite(syncMeta.batchIndex) ? syncMeta.batchIndex : null,
+    batchCount: Number.isFinite(syncMeta.batchCount) ? syncMeta.batchCount : null,
+    planId: syncMeta.planId || '',
+    planHash: syncMeta.planHash || '',
+    payloadHash: syncMeta.payloadHash || '',
+    actionCounts: counts,
+    failureCount: Array.isArray(failures) ? failures.length : 0,
+    failures: Array.isArray(failures) ? failures.slice(0, 10) : [],
+    at: new Date().toISOString()
+  })
+})
+
+const buildManagedSyncAction = ({
+  action,
+  marketKey,
+  requestedPost,
+  currentPost,
+  nextPost,
+  changedFields = [],
+  reason = '',
+  dryRun = false,
+  status = ''
+}) => ({
+  action,
+  status: status || (dryRun ? 'planned' : 'applied'),
+  marketKey,
+  postId: nextPost?.id || currentPost?.id || null,
+  title: requestedPost?.title || nextPost?.title || currentPost?.title || '',
+  previousTitle: currentPost?.title || null,
+  nextTitle: requestedPost?.title || nextPost?.title || null,
+  previousPrice: currentPost ? Number(currentPost.price || 0) : null,
+  nextPrice:
+    requestedPost && Number.isFinite(Number(requestedPost.price))
+      ? Number(requestedPost.price)
+      : nextPost
+        ? Number(nextPost.price || 0)
+        : null,
+  tradeType:
+    requestedPost && Number.isFinite(Number(requestedPost.tradeType))
+      ? Number(requestedPost.tradeType)
+      : Number(nextPost?.trade_type || currentPost?.trade_type || 0),
+  categoryId: requestedPost?.categoryId || nextPost?.category_id || currentPost?.category_id || null,
+  changedFields,
+  dryRun,
+  reason
+})
+
+const normalizeManagedSyncRequest = (payload) => {
+  const manifest = isPlainObject(payload?.manifest) ? payload.manifest : null
+
+  if (!manifest) {
+    const runDate = /^\d{4}-\d{2}-\d{2}$/.test(String(payload?.runDate || ''))
+      ? String(payload.runDate)
+      : getShanghaiDateKey(new Date())
+
+    return {
+      ok: true,
+      kind: 'legacy_posts_payload',
+      protocolVersion: 0,
+      requestedUserId: payload?.operatorUserId,
+      posts: Array.isArray(payload?.posts) ? payload.posts : [],
+      syncMode: payload?.syncMode === 'managed_market',
+      deactivateMissing: payload?.syncMode === 'managed_market' && payload?.deactivateMissing !== false,
+      activeMarketKeys: [...new Set((Array.isArray(payload?.activeMarketKeys) ? payload.activeMarketKeys : []).map((value) => String(value || '').trim()).filter(Boolean))],
+      runDate,
+      runId: `legacy-${runDate}-${Date.now().toString(36)}`,
+      dryRun: payload?.dryRun === true,
+      planId: '',
+      planHash: '',
+      payloadHash: '',
+      phase: payload?.dryRun === true ? 'preview' : 'sync',
+      batchIndex: null,
+      batchCount: null
+    }
+  }
+
+  if (manifest.kind !== MANAGED_SYNC_KIND) {
+    return { ok: false, message: 'Unsupported managed sync manifest kind.' }
+  }
+
+  if (Number(manifest.protocolVersion || 0) !== MANAGED_SYNC_PROTOCOL_VERSION) {
+    return { ok: false, message: 'Unsupported managed sync manifest version.' }
+  }
+
+  const plan = isPlainObject(manifest.plan) ? manifest.plan : {}
+  const run = isPlainObject(manifest.run) ? manifest.run : {}
+  const execution = isPlainObject(manifest.execution) ? manifest.execution : {}
+  const runDate = /^\d{4}-\d{2}-\d{2}$/.test(String(run.runDate || ''))
+    ? String(run.runDate)
+    : getShanghaiDateKey(new Date())
+
+  return {
+    ok: true,
+    kind: manifest.kind,
+    protocolVersion: Number(manifest.protocolVersion || 0),
+    requestedUserId: payload?.operatorUserId || manifest?.operator?.userId || '',
+    posts: Array.isArray(plan.posts) ? plan.posts : [],
+    syncMode: plan.syncMode === 'managed_market' || payload?.syncMode === 'managed_market',
+    deactivateMissing: plan.syncMode === 'managed_market' && payload?.deactivateMissing !== false && plan.deactivateMissing !== false,
+    activeMarketKeys: [...new Set((Array.isArray(plan.activeMarketKeys) ? plan.activeMarketKeys : []).map((value) => String(value || '').trim()).filter(Boolean))],
+    runDate,
+    runId: String(run.runId || '').trim() || `managed-sync-${runDate}-${Date.now().toString(36)}`,
+    dryRun: run.dryRun === true || payload?.dryRun === true,
+    planId: String(plan.planId || '').trim(),
+    planHash: String(plan.planHash || '').trim(),
+    payloadHash: String(plan.payloadHash || '').trim(),
+    phase: String(execution.phase || '').trim() || (run.dryRun === true ? 'preview' : 'sync'),
+    batchIndex: Number.isFinite(Number(execution.batchIndex)) ? Number(execution.batchIndex) : null,
+    batchCount: Number.isFinite(Number(execution.batchCount)) ? Number(execution.batchCount) : null
+  }
+}
 
 const summarizeManagedPost = (post) => ({
   id: post.id,
@@ -1195,13 +1330,45 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
     if (!adminCheck.ok) return adminCheck.response
 
     const payload = await readJsonBody(request)
-    const posts = Array.isArray(payload?.posts) ? payload.posts : []
-    const syncMode = payload?.syncMode === 'managed_market'
-    const deactivateMissing = syncMode && payload?.deactivateMissing !== false
-    const activeMarketKeys = [...new Set((Array.isArray(payload?.activeMarketKeys) ? payload.activeMarketKeys : []).map((value) => String(value || '').trim()).filter(Boolean))]
-    const runDate = /^\d{4}-\d{2}-\d{2}$/.test(String(payload?.runDate || ''))
-      ? String(payload.runDate)
-      : getShanghaiDateKey(new Date())
+    const syncRequest = normalizeManagedSyncRequest(payload || {})
+    if (!syncRequest.ok) {
+      return json(
+        { success: false, error: { code: 'INVALID_MANAGED_SYNC_REQUEST', message: syncRequest.message } },
+        400
+      )
+    }
+
+    const {
+      posts,
+      syncMode,
+      deactivateMissing,
+      activeMarketKeys,
+      runDate,
+      dryRun,
+      requestedUserId,
+      kind,
+      protocolVersion,
+      runId,
+      planId,
+      planHash,
+      payloadHash,
+      phase,
+      batchIndex,
+      batchCount
+    } = syncRequest
+    const syncMeta = {
+      kind,
+      protocolVersion,
+      runId,
+      runDate,
+      dryRun,
+      planId,
+      planHash,
+      payloadHash,
+      phase,
+      batchIndex,
+      batchCount
+    }
 
     if (!posts.length && !(syncMode && deactivateMissing && activeMarketKeys.length)) {
       return json({ success: false, error: { code: 'EMPTY_POSTS', message: 'No posts provided.' } }, 400)
@@ -1209,7 +1376,7 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
 
     const operator = await resolveWechatAutoOperator({
       config,
-      requestedUserId: payload?.operatorUserId
+      requestedUserId
     })
 
     const categoriesRes = await restRequest({
@@ -1230,7 +1397,9 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
     const refreshedPosts = []
     const deactivatedPosts = []
     const stateRows = []
+    const historyRows = []
     const normalizedPosts = []
+    const actions = []
 
     for (const rawPost of posts) {
       const normalized = normalizeWechatAutoPost(rawPost)
@@ -1275,18 +1444,51 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
               expireAt: existingPost.expire_at || null,
               createdAt: existingPost.created_at || null
             })
+            actions.push(
+              buildManagedSyncAction({
+                action: 'skip',
+                marketKey: buildManagedMarketKey(post),
+                requestedPost: post,
+                currentPost: existingPost,
+                reason: 'duplicate auto-published post already exists within 7 days',
+                dryRun,
+                status: 'skipped'
+              })
+            )
             continue
           }
 
           const expireAt = new Date(Date.now() + post.expireHours * 60 * 60 * 1000).toISOString()
-          const createdPost = await insertManagedMarketPost({
-            config,
-            operatorId: operator.id,
-            post,
-            expireAt
-          })
+          if (dryRun) {
+            actions.push(
+              buildManagedSyncAction({
+                action: 'create',
+                marketKey: buildManagedMarketKey(post),
+                requestedPost: post,
+                reason: 'new auto-publish post',
+                dryRun
+              })
+            )
+          } else {
+            const createdPost = await insertManagedMarketPost({
+              config,
+              operatorId: operator.id,
+              post,
+              expireAt
+            })
 
-          createdPosts.push(createdPost)
+            createdPosts.push(createdPost)
+            actions.push(
+              buildManagedSyncAction({
+                action: 'create',
+                marketKey: buildManagedMarketKey(post),
+                requestedPost: post,
+                nextPost: createdPost,
+                reason: 'new auto-publish post',
+                dryRun
+              })
+            )
+          }
         } catch (error) {
           failures.push({
             title: post.title,
@@ -1300,11 +1502,14 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
         data: {
           operatorUserId: operator.id,
           operatorWechatId: operator.wechat_id || '',
-          publishedCount: createdPosts.length,
+          dryRun,
+          syncMeta,
+          publishedCount: dryRun ? actions.filter((action) => action.action === 'create').length : createdPosts.length,
           skippedCount: skippedPosts.length,
           failedCount: failures.length,
           posts: createdPosts.map((post) => summarizeManagedPost(post)),
           skippedPosts,
+          actions,
           failures
         }
       })
@@ -1347,6 +1552,19 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
 
       try {
         if (!currentPost?.id) {
+          if (dryRun) {
+            actions.push(
+              buildManagedSyncAction({
+                action: 'create',
+                marketKey,
+                requestedPost: post,
+                reason: 'no existing managed market post matched this market key',
+                dryRun
+              })
+            )
+            continue
+          }
+
           const createdPost = await insertManagedMarketPost({
             config,
             operatorId: operator.id,
@@ -1356,7 +1574,33 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
 
           createdPosts.push(createdPost)
           touchedPostIds.add(createdPost.id)
-          stateRows.push(buildManagedMarketStateRow({ marketKey, stateKey, post, postRow: createdPost, runDate }))
+          stateRows.push(buildManagedMarketStateRow({ marketKey, stateKey, post, postRow: createdPost, runDate, syncMeta }))
+          historyRows.push(
+            buildManagedHistoryRow({
+              marketKey,
+              action: 'create',
+              payload: {
+                syncMeta,
+                next: summarizeManagedPost(createdPost),
+                requested: {
+                  title: post.title,
+                  price: post.price,
+                  tradeType: post.tradeType,
+                  categoryId: post.categoryId
+                }
+              }
+            })
+          )
+          actions.push(
+            buildManagedSyncAction({
+              action: 'create',
+              marketKey,
+              requestedPost: post,
+              nextPost: createdPost,
+              reason: 'no existing managed market post matched this market key',
+              dryRun
+            })
+          )
           continue
         }
 
@@ -1366,12 +1610,59 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
           expireAt
         })
 
+        touchedPostIds.add(currentPost.id)
+
         if (!shouldUpdate) {
-          touchedPostIds.add(currentPost.id)
+          if (dryRun) {
+            actions.push(
+              buildManagedSyncAction({
+                action: 'refresh',
+                marketKey,
+                requestedPost: post,
+                currentPost,
+                changedFields: [],
+                reason: 'market key matched and content is unchanged',
+                dryRun
+              })
+            )
+            continue
+          }
+
           refreshedPosts.push(currentPost)
           if (!existingState?.postId || existingState.postId !== currentPost.id) {
-            stateRows.push(buildManagedMarketStateRow({ marketKey, stateKey, post, postRow: currentPost, runDate }))
+            stateRows.push(buildManagedMarketStateRow({ marketKey, stateKey, post, postRow: currentPost, runDate, syncMeta }))
           }
+          actions.push(
+            buildManagedSyncAction({
+              action: 'refresh',
+              marketKey,
+              requestedPost: post,
+              currentPost,
+              changedFields: [],
+              reason: 'market key matched and content is unchanged',
+              dryRun
+            })
+          )
+          continue
+        }
+
+        const actionType = changedFields.length ? 'update' : 'refresh'
+        const actionReason = changedFields.length
+          ? `replace stale fields: ${changedFields.join(', ')}`
+          : 'only refresh expire_at for matched market key'
+
+        if (dryRun) {
+          actions.push(
+            buildManagedSyncAction({
+              action: actionType,
+              marketKey,
+              requestedPost: post,
+              currentPost,
+              changedFields,
+              reason: actionReason,
+              dryRun
+            })
+          )
           continue
         }
 
@@ -1381,16 +1672,50 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
           payload: updatePayload
         })
 
-        touchedPostIds.add(updatedPost.id)
         if (!existingState?.postId || existingState.postId !== updatedPost.id || changedFields.length) {
-          stateRows.push(buildManagedMarketStateRow({ marketKey, stateKey, post, postRow: updatedPost, runDate }))
+          stateRows.push(buildManagedMarketStateRow({ marketKey, stateKey, post, postRow: updatedPost, runDate, syncMeta }))
         }
 
         if (changedFields.length) {
           updatedPosts.push(updatedPost)
+          historyRows.push(
+            buildManagedHistoryRow({
+              marketKey,
+              action: 'update',
+              payload: {
+                syncMeta,
+                changedFields,
+                previous: summarizeManagedPost(currentPost),
+                next: summarizeManagedPost(updatedPost)
+              }
+            })
+          )
         } else {
           refreshedPosts.push(updatedPost)
+          historyRows.push(
+            buildManagedHistoryRow({
+              marketKey,
+              action: 'refresh',
+              payload: {
+                syncMeta,
+                previous: summarizeManagedPost(currentPost),
+                next: summarizeManagedPost(updatedPost)
+              }
+            })
+          )
         }
+        actions.push(
+          buildManagedSyncAction({
+            action: actionType,
+            marketKey,
+            requestedPost: post,
+            currentPost,
+            nextPost: updatedPost,
+            changedFields,
+            reason: actionReason,
+            dryRun
+          })
+        )
       } catch (error) {
         failures.push({
           title: post.title,
@@ -1399,7 +1724,7 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
       }
     }
 
-    if (stateRows.length) {
+    if (!dryRun && stateRows.length) {
       await upsertSystemSettings(config, stateRows)
     }
 
@@ -1408,6 +1733,12 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
         buildManagedStateSettingKey(marketKey)
       )
       const deactivationStateRows = await loadSystemSettingRowsByKeys(config, deactivationStateKeys)
+      const stateMarketKeyByPostId = new Map(
+        Object.values(deactivationStateRows)
+          .map((row) => parseJsonValue(row?.value, {}))
+          .filter((row) => UUID_RE.test(row?.postId || ''))
+          .map((row) => [row.postId, row.marketKey || ''])
+      )
       const activePostIds = new Set(
         [
           ...touchedPostIds,
@@ -1426,16 +1757,80 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
               operatorId: operator.id,
               categoryIds: categoryIdsForDeactivation
             })
-      const staleIds = recentPool
-        .filter((row) => Number(row.status || 0) === 1 && isManagedAutoMarketPost(row) && !activePostIds.has(row.id))
-        .map((row) => row.id)
+      const staleRows = recentPool.filter(
+        (row) => Number(row.status || 0) === 1 && isManagedAutoMarketPost(row) && !activePostIds.has(row.id)
+      )
+      const staleIds = staleRows.map((row) => row.id)
 
-      const removed = await deactivateManagedMarketPosts({
-        config,
-        postIds: staleIds
-      })
+      if (dryRun) {
+        for (const row of staleRows) {
+          actions.push(
+            buildManagedSyncAction({
+              action: 'deactivate',
+              marketKey: stateMarketKeyByPostId.get(row.id) || '',
+              currentPost: row,
+              changedFields: ['status'],
+              reason: 'post is missing from the latest confirmed market key set',
+              dryRun
+            })
+          )
+        }
+      } else {
+        const removed = await deactivateManagedMarketPosts({
+          config,
+          postIds: staleIds
+        })
 
-      deactivatedPosts.push(...removed)
+        deactivatedPosts.push(...removed)
+        actions.push(
+          ...removed.map((row) =>
+            buildManagedSyncAction({
+              action: 'deactivate',
+              marketKey: stateMarketKeyByPostId.get(row.id) || '',
+              currentPost: row,
+              changedFields: ['status'],
+              reason: 'post is missing from the latest confirmed market key set',
+              dryRun
+            })
+          )
+        )
+        historyRows.push(
+          ...removed.map((row) =>
+            buildManagedHistoryRow({
+              marketKey: stateMarketKeyByPostId.get(row.id) || `post:${row.id}`,
+              action: 'deactivate',
+              payload: {
+                syncMeta,
+                previous: summarizeManagedPost(row)
+              }
+            })
+          )
+        )
+      }
+    }
+
+    if (!dryRun) {
+      const actionCounts = {
+        createCount: createdPosts.length,
+        updateCount: updatedPosts.length,
+        refreshCount: refreshedPosts.length,
+        deactivateCount: deactivatedPosts.length
+      }
+      await upsertSystemSettings(config, [
+        ...historyRows,
+        buildManagedRunHistoryRow({
+          syncMeta,
+          counts: actionCounts,
+          failures
+        })
+      ])
+    }
+
+    const actionCounts = {
+      createCount: actions.filter((action) => action.action === 'create').length,
+      updateCount: actions.filter((action) => action.action === 'update').length,
+      refreshCount: actions.filter((action) => action.action === 'refresh').length,
+      deactivateCount: actions.filter((action) => action.action === 'deactivate').length
     }
 
     return json({
@@ -1443,16 +1838,19 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
       data: {
         operatorUserId: operator.id,
         operatorWechatId: operator.wechat_id || '',
-        publishedCount: createdPosts.length,
-        updatedCount: updatedPosts.length,
-        refreshedCount: refreshedPosts.length,
-        deactivatedCount: deactivatedPosts.length,
+        dryRun,
+        syncMeta,
+        publishedCount: dryRun ? actionCounts.createCount : createdPosts.length,
+        updatedCount: dryRun ? actionCounts.updateCount : updatedPosts.length,
+        refreshedCount: dryRun ? actionCounts.refreshCount : refreshedPosts.length,
+        deactivatedCount: dryRun ? actionCounts.deactivateCount : deactivatedPosts.length,
         failedCount: failures.length,
         posts: [...createdPosts, ...updatedPosts, ...refreshedPosts].map((post) => summarizeManagedPost(post)),
         createdPosts: createdPosts.map((post) => summarizeManagedPost(post)),
         updatedPosts: updatedPosts.map((post) => summarizeManagedPost(post)),
         refreshedPosts: refreshedPosts.map((post) => summarizeManagedPost(post)),
         deactivatedPosts: deactivatedPosts.map((post) => summarizeManagedPost(post)),
+        actions,
         failures
       }
     })
