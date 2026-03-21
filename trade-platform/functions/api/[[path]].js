@@ -74,6 +74,12 @@ const POINT_CHANGE_TYPES = {
   dailyCheckIn: 11
 }
 
+const AUTO_MARKET_INFO_PREFIX = '自动整理自微信群行情'
+const AUTO_MARKET_SETTING_CATEGORIES = {
+  state: 'wechat_market_state',
+  history: 'wechat_market_history'
+}
+
 const json = (payload, status = 200) =>
   new Response(JSON.stringify(payload), {
     status,
@@ -287,6 +293,7 @@ const upsertSystemSettings = async (config, rows) => {
   const existingRows = Array.isArray(existingRes.data) ? existingRes.data : []
   const existingKeySet = new Set(existingRows.map((row) => row?.key).filter(Boolean))
   const updatedRows = []
+  const rowsToInsert = []
 
   for (const row of normalizedRows) {
     const payload = {
@@ -317,17 +324,19 @@ const upsertSystemSettings = async (config, rows) => {
       continue
     }
 
+    rowsToInsert.push({
+      key: row.key,
+      ...payload
+    })
+  }
+
+  if (rowsToInsert.length) {
     const insertRes = await restRequest({
       config,
       resource: 'system_settings',
       query: 'select=id,key,value,category,created_at,updated_at',
       method: 'POST',
-      body: [
-        {
-          key: row.key,
-          ...payload
-        }
-      ],
+      body: rowsToInsert,
       useServiceRole: true,
       extraHeaders: {
         'Content-Type': 'application/json',
@@ -336,7 +345,7 @@ const upsertSystemSettings = async (config, rows) => {
     })
 
     if (!insertRes.ok) {
-      throw new Error(insertRes.text || `Failed to insert system setting: ${row.key}`)
+      throw new Error(insertRes.text || 'Failed to insert system settings')
     }
 
     updatedRows.push(...(Array.isArray(insertRes.data) ? insertRes.data : []))
@@ -691,10 +700,20 @@ const normalizeWechatAutoPost = (rawPost) => {
   const keywords = String(rawPost.keywords || '').trim()
   const extraInfo = rawPost.extraInfo == null ? null : String(rawPost.extraInfo).trim()
   const categoryId = String(rawPost.categoryId || '').trim()
+  const categoryName = String(rawPost.categoryName || '').trim()
   const tradeType = Number(rawPost.tradeType)
   const price = Number(rawPost.price)
   const expireHours = Math.max(1, Math.min(24 * 30, Number(rawPost.expireHours || 24 * 7)))
   const viewLimit = Math.max(1, Math.min(1000, Number(rawPost.viewLimit || 100)))
+  const itemName = String(rawPost.itemName || '').trim()
+  const city = String(rawPost.city || '').trim() || '全国'
+  const eventDate = String(rawPost.eventDate || '').trim()
+  const specOrTier = String(rawPost.specOrTier || '').trim()
+  const quantity = String(rawPost.quantity || '').trim()
+  const sourceRef = String(rawPost.sourceRef || '').trim()
+  const marketKey = String(rawPost.marketKey || '').trim()
+  const signalCount = Math.max(0, Number(rawPost.signalCount || 0))
+  const groupCount = Math.max(0, Number(rawPost.groupCount || 0))
 
   if (!title) {
     return { ok: false, message: 'Post title is required.' }
@@ -723,12 +742,147 @@ const normalizeWechatAutoPost = (rawPost) => {
       keywords: keywords.slice(0, 200),
       extraInfo: extraInfo ? extraInfo.slice(0, 100) : null,
       categoryId,
+      categoryName,
       tradeType,
       price,
       expireHours,
-      viewLimit
+      viewLimit,
+      itemName: itemName.slice(0, 100),
+      city: city.slice(0, 32),
+      eventDate: eventDate.slice(0, 32),
+      specOrTier: specOrTier.slice(0, 64),
+      quantity: quantity.slice(0, 32),
+      sourceRef: sourceRef.slice(0, 200),
+      marketKey: marketKey.slice(0, 200),
+      signalCount,
+      groupCount
     }
   }
+}
+
+const normalizeManagedMarketKeyPart = (value) =>
+  String(value || '')
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[【】\[\]()（）{}<>《》:：,，。；;'"`|\\/]/gu, '')
+    .trim()
+
+const hashText = (input = '') => {
+  let h1 = 0x811c9dc5
+  let h2 = 5381
+  for (const char of String(input)) {
+    const code = char.codePointAt(0) || 0
+    h1 ^= code
+    h1 = Math.imul(h1, 16777619) >>> 0
+    h2 = Math.imul(h2, 33) ^ code
+    h2 >>>= 0
+  }
+  return `${h1.toString(16).padStart(8, '0')}${h2.toString(16).padStart(8, '0')}`
+}
+
+const parseJsonValue = (value, fallback = null) => {
+  if (value == null || value === '') return fallback
+
+  try {
+    return typeof value === 'string' ? JSON.parse(value) : value
+  } catch {
+    return fallback
+  }
+}
+
+const buildManagedMarketKey = (post) => {
+  if (post.marketKey) {
+    return post.marketKey
+  }
+
+  const specKey = post.categoryName === '演唱会' ? post.specOrTier : ''
+
+  return [
+    post.categoryId,
+    post.tradeType,
+    post.itemName || post.title,
+    post.city || '全国',
+    post.eventDate || '',
+    specKey || ''
+  ]
+    .map((value) => normalizeManagedMarketKeyPart(value))
+    .filter(Boolean)
+    .join('|')
+}
+
+const buildManagedStateSettingKey = (marketKey) => `${AUTO_MARKET_SETTING_CATEGORIES.state}:${hashText(marketKey)}`
+
+const buildManagedHistorySettingKey = (marketKey, action) =>
+  `${AUTO_MARKET_SETTING_CATEGORIES.history}:${getShanghaiDateKey(new Date())}:${hashText(marketKey)}:${action}:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+
+const loadSystemSettingRowsByKeys = async (config, keys) => {
+  if (!Array.isArray(keys) || keys.length === 0) return {}
+
+  const uniqueKeys = [...new Set(keys.filter(Boolean))]
+  const settingsRes = await restRequest({
+    config,
+    resource: 'system_settings',
+    query:
+      `key=in.(${uniqueKeys.map((key) => `"${key}"`).join(',')})` +
+      '&select=id,key,value,category,created_at,updated_at',
+    useServiceRole: true
+  })
+
+  if (!settingsRes.ok) {
+    throw new Error(settingsRes.text || 'Failed to load managed market settings')
+  }
+
+  return (Array.isArray(settingsRes.data) ? settingsRes.data : []).reduce((accumulator, row) => {
+    if (row?.key) {
+      accumulator[row.key] = row
+    }
+    return accumulator
+  }, {})
+}
+
+const loadPostById = async (config, postId) => {
+  if (!UUID_RE.test(postId)) return null
+
+  const postRes = await restRequest({
+    config,
+    resource: 'posts',
+    query:
+      `id=eq.${encodeURIComponent(postId)}` +
+      '&select=id,user_id,title,keywords,price,trade_type,category_id,extra_info,view_limit,status,expire_at,created_at,updated_at' +
+      '&limit=1',
+    useServiceRole: true
+  })
+
+  if (!postRes.ok) {
+    throw new Error(postRes.text || 'Failed to load managed market post')
+  }
+
+  return Array.isArray(postRes.data) ? postRes.data[0] || null : null
+}
+
+const loadPostsByIds = async (config, postIds) => {
+  const uniqueIds = [...new Set((Array.isArray(postIds) ? postIds : []).filter((id) => UUID_RE.test(id)))]
+  if (!uniqueIds.length) return {}
+
+  const postsRes = await restRequest({
+    config,
+    resource: 'posts',
+    query:
+      `id=in.(${uniqueIds.map((id) => `"${id}"`).join(',')})` +
+      '&select=id,user_id,title,keywords,price,trade_type,category_id,extra_info,view_limit,status,expire_at,created_at,updated_at',
+    useServiceRole: true
+  })
+
+  if (!postsRes.ok) {
+    throw new Error(postsRes.text || 'Failed to load managed market posts by ids')
+  }
+
+  return (Array.isArray(postsRes.data) ? postsRes.data : []).reduce((accumulator, row) => {
+    if (row?.id) {
+      accumulator[row.id] = row
+    }
+    return accumulator
+  }, {})
 }
 
 const findRecentAutoPublishedPost = async ({ config, operatorId, post }) => {
@@ -756,6 +910,282 @@ const findRecentAutoPublishedPost = async ({ config, operatorId, post }) => {
   return Array.isArray(existingRes.data) ? existingRes.data[0] || null : null
 }
 
+const findExistingAutoMarketPost = async ({ config, operatorId, post }) => {
+  const since = new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString()
+  const existingRes = await restRequest({
+    config,
+    resource: 'posts',
+    query:
+      `user_id=eq.${encodeURIComponent(operatorId)}` +
+      `&category_id=eq.${encodeURIComponent(post.categoryId)}` +
+      `&trade_type=eq.${post.tradeType}` +
+      `&title=eq.${encodeURIComponent(post.title)}` +
+      `&created_at=gte.${encodeURIComponent(since)}` +
+      '&select=id,user_id,title,keywords,price,trade_type,category_id,extra_info,view_limit,status,expire_at,created_at,updated_at' +
+      '&order=created_at.desc' +
+      '&limit=5',
+    useServiceRole: true
+  })
+
+  if (!existingRes.ok) {
+    throw new Error(existingRes.text || 'Failed to locate existing auto market post')
+  }
+
+  return Array.isArray(existingRes.data) ? existingRes.data.find((row) => isManagedAutoMarketPost(row)) || null : null
+}
+
+const insertManagedMarketPost = async ({ config, operatorId, post, expireAt }) => {
+  const insertRes = await restRequest({
+    config,
+    resource: 'posts',
+    query:
+      'select=id,user_id,title,keywords,price,trade_type,category_id,extra_info,view_limit,status,expire_at,created_at,updated_at',
+    method: 'POST',
+    body: [
+      {
+        user_id: operatorId,
+        title: post.title,
+        keywords: post.keywords,
+        price: post.price,
+        trade_type: post.tradeType,
+        delivery_date: null,
+        extra_info: post.extraInfo,
+        view_limit: post.viewLimit,
+        view_count: 0,
+        deal_count: 0,
+        status: 1,
+        expire_at: expireAt,
+        category_id: post.categoryId
+      }
+    ],
+    useServiceRole: true,
+    extraHeaders: {
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation'
+    }
+  })
+
+  if (!insertRes.ok || !Array.isArray(insertRes.data) || !insertRes.data[0]) {
+    throw new Error(insertRes.text || 'Failed to create managed market post')
+  }
+
+  return insertRes.data[0]
+}
+
+const updateManagedMarketPost = async ({ config, postId, payload }) => {
+  const updateRes = await restRequest({
+    config,
+    resource: 'posts',
+    query:
+      `id=eq.${encodeURIComponent(postId)}` +
+      '&select=id,user_id,title,keywords,price,trade_type,category_id,extra_info,view_limit,status,expire_at,created_at,updated_at',
+    method: 'PATCH',
+    body: payload,
+    useServiceRole: true,
+    extraHeaders: {
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation'
+    }
+  })
+
+  if (!updateRes.ok || !Array.isArray(updateRes.data) || !updateRes.data[0]) {
+    throw new Error(updateRes.text || 'Failed to update managed market post')
+  }
+
+  return updateRes.data[0]
+}
+
+const shouldRefreshManagedExpireAt = (currentExpireAt, nextExpireAt) => {
+  if (!currentExpireAt) return true
+
+  const currentMs = Date.parse(currentExpireAt)
+  const nextMs = Date.parse(nextExpireAt)
+  if (!Number.isFinite(currentMs) || !Number.isFinite(nextMs)) return true
+
+  const refreshThresholdMs = 48 * 60 * 60 * 1000
+  return currentMs <= Date.now() + refreshThresholdMs || currentMs > nextMs
+}
+
+const buildManagedPostUpdatePayload = ({ currentPost, post, expireAt }) => {
+  const payload = {}
+  const changedFields = []
+
+  if (currentPost.title !== post.title) {
+    payload.title = post.title
+    changedFields.push('title')
+  }
+
+  if ((currentPost.keywords || '') !== post.keywords) {
+    payload.keywords = post.keywords
+    changedFields.push('keywords')
+  }
+
+  if (Number(currentPost.price || 0) !== post.price) {
+    payload.price = post.price
+    changedFields.push('price')
+  }
+
+  if (Number(currentPost.trade_type || 0) !== post.tradeType) {
+    payload.trade_type = post.tradeType
+    changedFields.push('tradeType')
+  }
+
+  if (String(currentPost.category_id || '') !== post.categoryId) {
+    payload.category_id = post.categoryId
+    changedFields.push('categoryId')
+  }
+
+  if ((currentPost.extra_info || null) !== (post.extraInfo || null)) {
+    payload.extra_info = post.extraInfo
+    changedFields.push('extraInfo')
+  }
+
+  if (Number(currentPost.view_limit || 0) !== post.viewLimit) {
+    payload.view_limit = post.viewLimit
+    changedFields.push('viewLimit')
+  }
+
+  if (Number(currentPost.status || 0) !== 1) {
+    payload.status = 1
+    changedFields.push('status')
+  }
+
+  if (shouldRefreshManagedExpireAt(currentPost.expire_at, expireAt)) {
+    payload.expire_at = expireAt
+  }
+
+  if (Object.keys(payload).length > 0) {
+    payload.updated_at = new Date().toISOString()
+  }
+
+  return {
+    payload,
+    changedFields,
+    shouldUpdate: Object.keys(payload).length > 0
+  }
+}
+
+const buildManagedMarketStateRow = ({ marketKey, stateKey, post, postRow, runDate }) => ({
+  key: stateKey,
+  category: AUTO_MARKET_SETTING_CATEGORIES.state,
+  value: JSON.stringify({
+    marketKey,
+    postId: postRow.id,
+    categoryId: post.categoryId,
+    categoryName: post.categoryName || '',
+    tradeType: post.tradeType,
+    title: post.title,
+    itemName: post.itemName || '',
+    city: post.city || '全国',
+    eventDate: post.eventDate || '',
+    specOrTier: post.specOrTier || '',
+    quantity: post.quantity || '',
+    price: post.price,
+    sourceRef: post.sourceRef || '',
+    signalCount: Number(post.signalCount || 0),
+    groupCount: Number(post.groupCount || 0),
+    lastSeenAt: new Date().toISOString(),
+    lastRunDate: runDate
+  })
+})
+
+const buildManagedHistoryRow = ({ marketKey, action, payload }) => ({
+  key: buildManagedHistorySettingKey(marketKey, action),
+  category: AUTO_MARKET_SETTING_CATEGORIES.history,
+  value: JSON.stringify({
+    action,
+    marketKey,
+    at: new Date().toISOString(),
+    ...payload
+  })
+})
+
+const summarizeManagedPost = (post) => ({
+  id: post.id,
+  title: post.title,
+  price: Number(post.price || 0),
+  tradeType: Number(post.trade_type || 0),
+  categoryId: post.category_id || null,
+  expireAt: post.expire_at || null,
+  status: Number(post.status || 0)
+})
+
+const buildManagedRecentPostKey = (post) =>
+  [post.categoryId || post.category_id || '', post.tradeType || post.trade_type || '', post.title || '']
+    .map((value) => String(value || '').trim())
+    .join('|')
+
+const indexManagedRecentPosts = (rows = []) => {
+  const index = new Map()
+  for (const row of rows) {
+    if (!isManagedAutoMarketPost(row)) continue
+    const key = buildManagedRecentPostKey(row)
+    if (!index.has(key)) {
+      index.set(key, [])
+    }
+    index.get(key).push(row)
+  }
+  return index
+}
+
+const isManagedAutoMarketPost = (post) =>
+  Boolean(post) &&
+  typeof post.extra_info === 'string' &&
+  post.extra_info.startsWith(AUTO_MARKET_INFO_PREFIX)
+
+const loadRecentOperatorMarketPosts = async ({ config, operatorId, categoryIds }) => {
+  if (!Array.isArray(categoryIds) || categoryIds.length === 0) return []
+
+  const since = new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString()
+  const postsRes = await restRequest({
+    config,
+    resource: 'posts',
+    query:
+      `user_id=eq.${encodeURIComponent(operatorId)}` +
+      `&category_id=in.(${categoryIds.map((id) => `"${id}"`).join(',')})` +
+      `&created_at=gte.${encodeURIComponent(since)}` +
+      '&select=id,title,price,trade_type,category_id,extra_info,status,expire_at,created_at,updated_at' +
+      '&order=created_at.desc' +
+      '&limit=200',
+    useServiceRole: true
+  })
+
+  if (!postsRes.ok) {
+    throw new Error(postsRes.text || 'Failed to load recent operator market posts')
+  }
+
+  return Array.isArray(postsRes.data) ? postsRes.data : []
+}
+
+const deactivateManagedMarketPosts = async ({ config, postIds }) => {
+  if (!Array.isArray(postIds) || postIds.length === 0) return []
+
+  const updateRes = await restRequest({
+    config,
+    resource: 'posts',
+    query:
+      `id=in.(${postIds.map((id) => `"${id}"`).join(',')})` +
+      '&select=id,title,price,trade_type,category_id,extra_info,status,expire_at,created_at,updated_at',
+    method: 'PATCH',
+    body: {
+      status: 0,
+      expire_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    },
+    useServiceRole: true,
+    extraHeaders: {
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation'
+    }
+  })
+
+  if (!updateRes.ok) {
+    throw new Error(updateRes.text || 'Failed to deactivate stale managed market posts')
+  }
+
+  return Array.isArray(updateRes.data) ? updateRes.data : []
+}
+
 const handleAdminWechatAutoPublish = async ({ request, config }) => {
   const missingServiceRoleResponse = requireServiceRole(config)
   if (missingServiceRoleResponse) return missingServiceRoleResponse
@@ -766,7 +1196,14 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
 
     const payload = await readJsonBody(request)
     const posts = Array.isArray(payload?.posts) ? payload.posts : []
-    if (!posts.length) {
+    const syncMode = payload?.syncMode === 'managed_market'
+    const deactivateMissing = syncMode && payload?.deactivateMissing !== false
+    const activeMarketKeys = [...new Set((Array.isArray(payload?.activeMarketKeys) ? payload.activeMarketKeys : []).map((value) => String(value || '').trim()).filter(Boolean))]
+    const runDate = /^\d{4}-\d{2}-\d{2}$/.test(String(payload?.runDate || ''))
+      ? String(payload.runDate)
+      : getShanghaiDateKey(new Date())
+
+    if (!posts.length && !(syncMode && deactivateMissing && activeMarketKeys.length)) {
       return json({ success: false, error: { code: 'EMPTY_POSTS', message: 'No posts provided.' } }, 400)
     }
 
@@ -788,8 +1225,12 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
 
     const activeCategoryIds = new Set((Array.isArray(categoriesRes.data) ? categoriesRes.data : []).map((row) => row.id))
     const failures = []
-    const skippedPosts = []
     const createdPosts = []
+    const updatedPosts = []
+    const refreshedPosts = []
+    const deactivatedPosts = []
+    const stateRows = []
+    const normalizedPosts = []
 
     for (const rawPost of posts) {
       const normalized = normalizeWechatAutoPost(rawPost)
@@ -810,64 +1251,191 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
         continue
       }
 
-      const existingPost = await findRecentAutoPublishedPost({
-        config,
-        operatorId: operator.id,
-        post
-      })
+      normalizedPosts.push(post)
+    }
 
-      if (existingPost?.id) {
-        skippedPosts.push({
-          id: existingPost.id,
-          title: existingPost.title,
-          price: Number(existingPost.price || 0),
-          tradeType: Number(existingPost.trade_type || 0),
-          categoryId: existingPost.category_id || null,
-          expireAt: existingPost.expire_at || null,
-          createdAt: existingPost.created_at || null
-        })
-        continue
+    if (!syncMode) {
+      const skippedPosts = []
+
+      for (const post of normalizedPosts) {
+        try {
+          const existingPost = await findRecentAutoPublishedPost({
+            config,
+            operatorId: operator.id,
+            post
+          })
+
+          if (existingPost?.id) {
+            skippedPosts.push({
+              id: existingPost.id,
+              title: existingPost.title,
+              price: Number(existingPost.price || 0),
+              tradeType: Number(existingPost.trade_type || 0),
+              categoryId: existingPost.category_id || null,
+              expireAt: existingPost.expire_at || null,
+              createdAt: existingPost.created_at || null
+            })
+            continue
+          }
+
+          const expireAt = new Date(Date.now() + post.expireHours * 60 * 60 * 1000).toISOString()
+          const createdPost = await insertManagedMarketPost({
+            config,
+            operatorId: operator.id,
+            post,
+            expireAt
+          })
+
+          createdPosts.push(createdPost)
+        } catch (error) {
+          failures.push({
+            title: post.title,
+            message: error?.message || 'Failed to create post.'
+          })
+        }
       }
 
-      const expireAt = new Date(Date.now() + post.expireHours * 60 * 60 * 1000).toISOString()
-      const insertRes = await restRequest({
-        config,
-        resource: 'posts',
-        query: 'select=id,title,price,trade_type,category_id,expire_at',
-        method: 'POST',
-        body: [
-          {
-            user_id: operator.id,
-            title: post.title,
-            keywords: post.keywords,
-            price: post.price,
-            trade_type: post.tradeType,
-            delivery_date: null,
-            extra_info: post.extraInfo,
-            view_limit: post.viewLimit,
-            view_count: 0,
-            deal_count: 0,
-            status: 1,
-            expire_at: expireAt,
-            category_id: post.categoryId
-          }
-        ],
-        useServiceRole: true,
-        extraHeaders: {
-          'Content-Type': 'application/json',
-          Prefer: 'return=representation'
+      return json({
+        success: true,
+        data: {
+          operatorUserId: operator.id,
+          operatorWechatId: operator.wechat_id || '',
+          publishedCount: createdPosts.length,
+          skippedCount: skippedPosts.length,
+          failedCount: failures.length,
+          posts: createdPosts.map((post) => summarizeManagedPost(post)),
+          skippedPosts,
+          failures
         }
       })
+    }
 
-      if (!insertRes.ok || !Array.isArray(insertRes.data) || !insertRes.data[0]) {
-        failures.push({
-          title: post.title,
-          message: insertRes.text || 'Failed to create post.'
+    const stateKeys = normalizedPosts.map((post) => buildManagedStateSettingKey(buildManagedMarketKey(post)))
+    const existingStateRows = await loadSystemSettingRowsByKeys(config, stateKeys)
+    const existingStatePostIds = Object.values(existingStateRows)
+      .map((row) => parseJsonValue(row?.value, {})?.postId)
+      .filter((postId) => UUID_RE.test(postId || ''))
+    const existingStatePostMap = await loadPostsByIds(config, existingStatePostIds)
+    const recentCategoryIds = [...new Set(normalizedPosts.map((post) => post.categoryId))]
+    const recentManagedPosts = recentCategoryIds.length
+      ? await loadRecentOperatorMarketPosts({
+          config,
+          operatorId: operator.id,
+          categoryIds: recentCategoryIds
         })
-        continue
+      : []
+    const recentManagedPostIndex = indexManagedRecentPosts(recentManagedPosts)
+    const claimedRecentPostIds = new Set()
+    const touchedPostIds = new Set()
+
+    for (const post of normalizedPosts) {
+      const marketKey = buildManagedMarketKey(post)
+      const stateKey = buildManagedStateSettingKey(marketKey)
+      const existingState = parseJsonValue(existingStateRows[stateKey]?.value, {})
+      const expireAt = new Date(Date.now() + post.expireHours * 60 * 60 * 1000).toISOString()
+
+      let currentPost = UUID_RE.test(existingState?.postId || '') ? existingStatePostMap[existingState.postId] || null : null
+
+      if (!currentPost) {
+        const recentKey = buildManagedRecentPostKey(post)
+        const recentCandidates = recentManagedPostIndex.get(recentKey) || []
+        currentPost = recentCandidates.find((row) => !claimedRecentPostIds.has(row.id)) || null
+        if (currentPost?.id) {
+          claimedRecentPostIds.add(currentPost.id)
+        }
       }
 
-      createdPosts.push(insertRes.data[0])
+      try {
+        if (!currentPost?.id) {
+          const createdPost = await insertManagedMarketPost({
+            config,
+            operatorId: operator.id,
+            post,
+            expireAt
+          })
+
+          createdPosts.push(createdPost)
+          touchedPostIds.add(createdPost.id)
+          stateRows.push(buildManagedMarketStateRow({ marketKey, stateKey, post, postRow: createdPost, runDate }))
+          continue
+        }
+
+        const { payload: updatePayload, changedFields, shouldUpdate } = buildManagedPostUpdatePayload({
+          currentPost,
+          post,
+          expireAt
+        })
+
+        if (!shouldUpdate) {
+          touchedPostIds.add(currentPost.id)
+          refreshedPosts.push(currentPost)
+          if (!existingState?.postId || existingState.postId !== currentPost.id) {
+            stateRows.push(buildManagedMarketStateRow({ marketKey, stateKey, post, postRow: currentPost, runDate }))
+          }
+          continue
+        }
+
+        const updatedPost = await updateManagedMarketPost({
+          config,
+          postId: currentPost.id,
+          payload: updatePayload
+        })
+
+        touchedPostIds.add(updatedPost.id)
+        if (!existingState?.postId || existingState.postId !== updatedPost.id || changedFields.length) {
+          stateRows.push(buildManagedMarketStateRow({ marketKey, stateKey, post, postRow: updatedPost, runDate }))
+        }
+
+        if (changedFields.length) {
+          updatedPosts.push(updatedPost)
+        } else {
+          refreshedPosts.push(updatedPost)
+        }
+      } catch (error) {
+        failures.push({
+          title: post.title,
+          message: error?.message || 'Failed to sync managed market post.'
+        })
+      }
+    }
+
+    if (stateRows.length) {
+      await upsertSystemSettings(config, stateRows)
+    }
+
+    if (deactivateMissing && (normalizedPosts.length || activeMarketKeys.length) && failures.length === 0) {
+      const deactivationStateKeys = (activeMarketKeys.length ? activeMarketKeys : normalizedPosts.map((post) => buildManagedMarketKey(post))).map((marketKey) =>
+        buildManagedStateSettingKey(marketKey)
+      )
+      const deactivationStateRows = await loadSystemSettingRowsByKeys(config, deactivationStateKeys)
+      const activePostIds = new Set(
+        [
+          ...touchedPostIds,
+          ...Object.values(deactivationStateRows)
+            .map((row) => parseJsonValue(row?.value, {})?.postId)
+            .filter((postId) => UUID_RE.test(postId || ''))
+        ].filter(Boolean)
+      )
+      const activePostMap = await loadPostsByIds(config, [...activePostIds])
+      const categoryIdsForDeactivation = [...new Set(Object.values(activePostMap).map((row) => row?.category_id).filter(Boolean))]
+      const recentPool =
+        recentManagedPosts.length || categoryIdsForDeactivation.length === 0
+          ? recentManagedPosts
+          : await loadRecentOperatorMarketPosts({
+              config,
+              operatorId: operator.id,
+              categoryIds: categoryIdsForDeactivation
+            })
+      const staleIds = recentPool
+        .filter((row) => Number(row.status || 0) === 1 && isManagedAutoMarketPost(row) && !activePostIds.has(row.id))
+        .map((row) => row.id)
+
+      const removed = await deactivateManagedMarketPosts({
+        config,
+        postIds: staleIds
+      })
+
+      deactivatedPosts.push(...removed)
     }
 
     return json({
@@ -876,17 +1444,15 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
         operatorUserId: operator.id,
         operatorWechatId: operator.wechat_id || '',
         publishedCount: createdPosts.length,
-        skippedCount: skippedPosts.length,
+        updatedCount: updatedPosts.length,
+        refreshedCount: refreshedPosts.length,
+        deactivatedCount: deactivatedPosts.length,
         failedCount: failures.length,
-        posts: createdPosts.map((post) => ({
-          id: post.id,
-          title: post.title,
-          price: Number(post.price || 0),
-          tradeType: Number(post.trade_type || 0),
-          categoryId: post.category_id || null,
-          expireAt: post.expire_at
-        })),
-        skippedPosts,
+        posts: [...createdPosts, ...updatedPosts, ...refreshedPosts].map((post) => summarizeManagedPost(post)),
+        createdPosts: createdPosts.map((post) => summarizeManagedPost(post)),
+        updatedPosts: updatedPosts.map((post) => summarizeManagedPost(post)),
+        refreshedPosts: refreshedPosts.map((post) => summarizeManagedPost(post)),
+        deactivatedPosts: deactivatedPosts.map((post) => summarizeManagedPost(post)),
         failures
       }
     })
