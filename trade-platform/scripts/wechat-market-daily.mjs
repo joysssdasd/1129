@@ -10,6 +10,7 @@ const WORKSPACE_ROOT = path.resolve(PROJECT_ROOT, '..')
 const WECHAT_ROOT = path.join(WORKSPACE_ROOT, 'wechat')
 const CC_ROOT = path.join(WORKSPACE_ROOT, 'cc')
 const REPORTS_ROOT = path.join(CC_ROOT, 'reports', 'drafts')
+const FINAL_REPORTS_ROOT = path.join(CC_ROOT, 'reports', 'final')
 const GENERATED_ROOT = path.join(CC_ROOT, 'generated')
 const HISTORY_ROOT = path.join(CC_ROOT, 'history')
 const LEARNING_FILE = path.join(CC_ROOT, 'learning', '日报学习记录.md')
@@ -17,7 +18,8 @@ const SITE_ORIGIN = process.argv.find((arg) => arg.startsWith('--site='))?.split
 const SHOULD_PUBLISH = process.argv.includes('--publish')
 const PUBLISH_LIMIT = Number(process.argv.find((arg) => arg.startsWith('--limit='))?.split('=')[1] || 24)
 const PUBLISH_BATCH_SIZE = Number(process.argv.find((arg) => arg.startsWith('--batch='))?.split('=')[1] || 4)
-const DATE_KEY = getShanghaiDateKey(new Date())
+const DATE_OVERRIDE = process.argv.find((arg) => arg.startsWith('--date='))?.split('=')[1] || ''
+const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/.test(DATE_OVERRIDE) ? DATE_OVERRIDE : getShanghaiDateKey(new Date())
 const DEFAULT_OPERATOR_WECHAT = 'niuniubase'
 
 const CITIES = ['北京','上海','广州','深圳','杭州','南宁','武汉','天津','郑州','重庆','成都','长沙','青岛','绍兴','厦门','佛山','烟台','泉州','贵阳','大连','香港','澳门','首尔','仁川','全国']
@@ -58,6 +60,10 @@ function sha1(text) { return crypto.createHash('sha1').update(text).digest('hex'
 function normalize(text) { return String(text || '').replace(/[—–]/g, '-').replace(/\s+/g, ' ').trim() }
 function normalizeMessageBody(text) { return String(text || '').replace(/[—–]/g, '-').replace(/\r\n?/g, '\n').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim() }
 function compact(text) { return normalize(text).replace(/[\s🔥💥‼️❗️🈶🈚️🍉🎫⚠️]/gu, '') }
+function sum(values) { return values.filter((value) => Number.isFinite(value)).reduce((total, value) => total + value, 0) }
+function average(values) { const filtered = values.filter((value) => Number.isFinite(value)); return filtered.length ? sum(filtered) / filtered.length : 0 }
+function formatBand(low, high) { if (!Number.isFinite(low) && !Number.isFinite(high)) return '样本不足'; if (!Number.isFinite(low)) return `${Math.round(high)}`; if (!Number.isFinite(high)) return `${Math.round(low)}`; return Math.round(low) === Math.round(high) ? `${Math.round(low)}` : `${Math.round(low)}-${Math.round(high)}` }
+function percentText(value) { if (!Number.isFinite(value)) return '0%'; const rounded = Math.round(value * 10) / 10; return `${rounded > 0 ? '+' : ''}${rounded}%` }
 function ticketDateLabel(text) { return text.match(/\d{1,2}月\d{1,2}(?:[./]\d{1,2}){0,3}日?/u)?.[0] || text.match(/\d{1,2}[./]\d{1,2}(?:[./]\d{1,2}){1,2}/u)?.[0] || text.match(/\d{1,2}(?:\/\d{1,2}){1,3}号?/u)?.[0] || text.match(/\d{1,2}号/u)?.[0] || '' }
 function sanitizeTicketText(text) { return String(text || '').replace(/[（(]?(?:反|返)\d+(?:\/\d+)?[^)\n\r]*[）)]?/gu, ' ').replace(/(?:无票)?赔付\d+%?/gu, ' ').replace(/(?:重复购票|信息异常|位子轻微差异|小概率|支持长连|轻微差异|默认\d+-\d+区|默认1680随机区域)[^\n\r]{0,40}/gu, ' ').replace(/退差不退票/gu, ' ').replace(/不退换/gu, ' ').replace(/[+-]?\d{2,4}结算/gu, ' ').replace(/扣\d+%/gu, ' ').replace(/\s+/g, ' ').trim() }
 function splitTradeSegments(text) { return String(text || '').split(/\r?\n+/).map((segment) => normalize(segment)).filter((segment) => segment && segment.length >= 4) }
@@ -150,10 +156,405 @@ function familyKeyForCluster(cluster) {
   return ''
 }
 function buildPlan(clusters, categoryMap) { const caps = { '演唱会': 6, '数码和茅台': 6, '贵金属': 1, '纪念币/钞': 4, '其他分类': 1 }; const sourceCaps = { '演唱会': 2, '数码和茅台': 6, '贵金属': 2, '纪念币/钞': 4, '其他分类': 2 }; const familyCaps = { '演唱会': 2, '数码和茅台': 1 }; const seedBoards = ['贵金属', '数码和茅台', '纪念币/钞', '演唱会']; const used = {}; const sourceUsed = {}; const familyUsed = {}; const identityUsed = new Set(); const ordered = [...clusters].sort((a, b) => b.confidenceScore - a.confidenceScore || (b.signalCount || 0) - (a.signalCount || 0) || (b.groupCount || 0) - (a.groupCount || 0)); const plan = []; const canUse = (cluster) => { if (cluster.kind !== 'publishable' || !cluster.directPublish) return false; if (!categoryMap[cluster.categoryName]) return false; const cap = Object.prototype.hasOwnProperty.call(caps, cluster.boardName) ? caps[cluster.boardName] : 2; if ((used[cluster.boardName] || 0) >= cap) return false; const identityKey = marketKeyForCluster(cluster); if (identityUsed.has(identityKey)) return false; const sourceCap = Object.prototype.hasOwnProperty.call(sourceCaps, cluster.boardName) ? sourceCaps[cluster.boardName] : 2; if ((sourceUsed[cluster.source.source_file] || 0) >= sourceCap) return false; const familyKey = familyKeyForCluster(cluster); const familyCap = Object.prototype.hasOwnProperty.call(familyCaps, cluster.boardName) ? familyCaps[cluster.boardName] : Infinity; if (familyKey && (familyUsed[familyKey] || 0) >= familyCap) return false; return true }; const addCluster = (cluster) => { const identityKey = marketKeyForCluster(cluster); const familyKey = familyKeyForCluster(cluster); identityUsed.add(identityKey); sourceUsed[cluster.source.source_file] = (sourceUsed[cluster.source.source_file] || 0) + 1; used[cluster.boardName] = (used[cluster.boardName] || 0) + 1; if (familyKey) familyUsed[familyKey] = (familyUsed[familyKey] || 0) + 1; plan.push({ sourceType: 'wechat_group', sourceRef: cluster.source.source_file, title: cluster.title, itemName: cluster.itemName, city: cluster.city, eventDate: cluster.eventDate, specOrTier: cluster.specOrTier, quantity: cluster.quantity || '', marketKey: identityKey, keywords: clip(cluster.keywords.join(','), 198), price: Number(cluster.normalizedPrice), tradeType: cluster.intent === 'buy' ? 1 : 2, intent: cluster.intent, extraInfo: cluster.extraInfo, categoryId: categoryMap[cluster.categoryName], categoryName: cluster.categoryName, expireHours: 24 * 7, viewLimit: 100, originConfidence: cluster.confidenceScore, dedupeKey: cluster.dedupeKey, rawSnapshot: clip(cluster.source.raw_text, 480), signalCount: cluster.signalCount, groupCount: cluster.groupCount }) }; for (const boardName of seedBoards) { const seed = ordered.find((cluster) => cluster.boardName === boardName && canUse(cluster)); if (seed) addCluster(seed) } for (const cluster of ordered) { if (!canUse(cluster)) continue; addCluster(cluster); if (plan.length >= PUBLISH_LIMIT) break } return plan }
-function boardSummary(name, clusters, plan) { const planRows = plan.filter((row) => row.categoryName === name); const rows = planRows.length ? planRows.map((row) => ({ itemName: row.itemName, intent: row.intent, signalCount: row.signalCount || 1, groupCount: row.groupCount || 1, priceLow: row.price, priceHigh: row.price })) : clusters.filter((row) => row.boardName === name && row.kind !== 'noise'); if (!rows.length) return { name, hot: [], bands: [], supply: '相对平衡', trend: '震荡', observe: '当日有效样本偏少。', forecast: '短线先看横盘，等更多连续报价。' }; const itemMap = new Map(); for (const row of rows) { if (!itemMap.has(row.itemName)) itemMap.set(row.itemName, { item: row.itemName, signals: 0, groups: 0, prices: [], buys: 0, sells: 0 }); const item = itemMap.get(row.itemName); item.signals += row.signalCount || 1; item.groups += row.groupCount || 1; item.prices.push(row.priceLow || row.normalizedPrice || 0); if (row.intent === 'buy') item.buys += 1; else item.sells += 1 }
- const top = [...itemMap.values()].sort((a,b) => b.signals - a.signals || b.groups - a.groups).slice(0,3).map((row) => ({ ...row, low: Math.min(...row.prices.filter(Boolean)), high: Math.max(...row.prices.filter(Boolean)) })); const buyCount = rows.filter((row) => row.intent === 'buy').length; const sellCount = rows.filter((row) => row.intent === 'sell').length; const wide = top.some((row) => row.high > row.low * 1.35); const supply = sellCount >= buyCount * 2 && sellCount >= 2 ? '供给强' : buyCount >= sellCount * 1.5 && buyCount >= 2 ? '需求强' : '相对平衡'; const trend = wide ? '分化' : buyCount > sellCount ? '偏强' : sellCount > buyCount ? '偏弱' : '震荡'; let observe = `${name}里${top.map((row) => row.item).join('、') || '头部标的'}的报价最集中。`; let forecast = '短线优先看主流价带是否守住。'; if (name === '演唱会') { observe = `票务里${top.map((row) => row.item).join('、') || '头部艺人'}热度最高，当前可发站样本集中在主流看台档和少量前排位。`; forecast = trend === '分化' ? '高价档仍会分化，主流看台档更适合拿来做冷启动成交池。' : supply === '需求强' ? '需求强势标的短线仍偏硬，主流档位更容易先被接走。' : '供给偏多的标的更容易先松动，优先观察主流档位是否回落。' } else if (name === '数码和茅台') { observe = `数码和茅台样本虽少，但${top.map((row) => row.item).join('、') || '核心标的'}的回收价已经有清晰锚点。`; forecast = supply === '需求强' ? '高频回收机型和茅台订单短线仍有抬价空间。' : '以库存消化为主，短线偏稳或略弱。' } else if (name === '贵金属') { observe = '贵金属可用样本偏少，当前更像是小规模现货流转。'; forecast = '先看窄幅整理，后续需要继续补连续报价群。' } else if (name === '纪念币/钞') { observe = `纪念币钞以${top.map((row) => row.item).join('、') || '封装货'}为主，买盘和出货盘都能看到明确挂价。`; forecast = supply === '需求强' ? '如果买盘继续上抬，热门封装货仍有继续走强空间。' : '主流价带已比较集中，短线大概率围绕当前区间成交。' } return { name, hot: top.map((row) => row.item), bands: top.map((row) => `${row.item} 主流 ${row.low === row.high ? row.low : `${row.low}-${row.high}`}`), supply, trend, observe, forecast } }
-function buildReport(messages, clusters, plan) { const sections = ['演唱会','数码和茅台','贵金属','纪念币/钞'].map((name) => boardSummary(name, clusters, plan)); const groupCount = new Set(messages.map((row) => row.groupName)).size; const publishable = clusters.filter((row) => row.kind === 'publishable').length; const reportOnly = clusters.filter((row) => row.kind === 'report_only').length; const topConcert = sections[0].hot.slice(0,2).join('、') || '票务头部标的'; const topDigital = sections[1].hot[0] || '数码回收盘'; const topCollect = sections[3].hot[0] || '纪念币钞头部标的'; const topMetal = sections[2].hot[0] || '贵金属现货'; const lines = [`# 牛牛日报 | ${DATE_KEY}`,'','## 今日结论','',`今天的微信群样本仍然以 ${topConcert} 为核心，但四个板块都已经能抽出可直接上站的高置信交易信号。非票务里 ${topDigital}、${topCollect} 和 ${topMetal} 更适合做冷启动内容补充。`,'',`本次共扫描 ${groupCount} 个群、${messages.length} 条文本消息，整理出 ${publishable} 条高置信可发站信号，另有 ${reportOnly} 条只适合做行情参考。`,'']; for (const section of sections) { lines.push(`## ${section.name}`,'',`- 热门标的：${section.hot.join('、') || '样本较少'}`,`- 主流价带：${section.bands.join('；') || '样本不足'}`,`- 供需判断：${section.supply}`,`- 今日观察：${section.observe}`,`- 明日预判：${section.forecast}`,'') } lines.push('## 明日观察清单','',...(plan.slice(0,6).map((row) => `- ${row.title}`) || ['- 暂无足够高置信样本'])); return { markdown: `${lines.join('\n')}\n`, sections } }
-function writeOutputs(rawCandidates, clusters, plan, report) { const outputDir = path.join(GENERATED_ROOT, DATE_KEY); ensureDir(outputDir); ensureDir(REPORTS_ROOT); ensureDir(HISTORY_ROOT); fs.writeFileSync(path.join(outputDir, 'raw-candidates.json'), JSON.stringify(rawCandidates, null, 2), 'utf8'); fs.writeFileSync(path.join(outputDir, 'deduped-clusters.json'), JSON.stringify(clusters, null, 2), 'utf8'); fs.writeFileSync(path.join(outputDir, 'publish-plan.json'), JSON.stringify(plan, null, 2), 'utf8'); fs.writeFileSync(path.join(REPORTS_ROOT, `${DATE_KEY}-牛牛日报.md`), report.markdown, 'utf8'); fs.writeFileSync(path.join(HISTORY_ROOT, `${DATE_KEY}-自动处理.md`), `# ${DATE_KEY} 自动处理\n\n- 原始候选：${rawCandidates.length}\n- 去重后信号簇：${clusters.length}\n- 准备发站：${plan.length}\n`, 'utf8'); if (fs.existsSync(LEARNING_FILE) && !fs.readFileSync(LEARNING_FILE, 'utf8').includes(`## ${DATE_KEY} 自动处理回放`)) { fs.appendFileSync(LEARNING_FILE, `\n## ${DATE_KEY} 自动处理回放\n\n- 本次扫描 ${new Set(rawCandidates.map((row) => row.source.source_group)).size} 个群、${rawCandidates.length} 条候选，去重后保留 ${clusters.length} 个信号簇\n- 票务重复刷屏依然最重，6 小时内同发送人重复文案去重必须保留\n- 非票务板块里，i茅台账号服务类消息噪音高，订单和原箱收货更适合直接进站\n- 纪念币钞目前以封装龙类买盘最清楚，贵金属仍需要继续补真实报价群\n`, 'utf8') } }
+function rowsForBoard(name, clusters, plan) {
+  const planRows = plan
+    .filter((row) => row.categoryName === name)
+    .map((row) => ({
+      itemName: row.itemName,
+      title: row.title,
+      intent: row.intent,
+      signalCount: row.signalCount || 1,
+      groupCount: row.groupCount || 1,
+      priceLow: row.price,
+      priceHigh: row.price,
+      referencePrice: row.price,
+      confidenceScore: row.originConfidence || 0,
+      marketKey: row.marketKey
+    }))
+  if (planRows.length) return planRows
+  return clusters
+    .filter((row) => row.boardName === name && row.kind !== 'noise')
+    .map((row) => ({
+      itemName: row.itemName,
+      title: row.title,
+      intent: row.intent,
+      signalCount: row.signalCount || 1,
+      groupCount: row.groupCount || 1,
+      priceLow: row.priceLow || row.normalizedPrice,
+      priceHigh: row.priceHigh || row.normalizedPrice,
+      referencePrice: average([row.priceLow || row.normalizedPrice, row.priceHigh || row.normalizedPrice].filter(Boolean)),
+      confidenceScore: row.confidenceScore || 0,
+      marketKey: marketKeyForCluster(row)
+    }))
+}
+
+function buildItemStats(rows) {
+  const itemMap = new Map()
+  for (const row of rows) {
+    if (!itemMap.has(row.itemName)) {
+      itemMap.set(row.itemName, {
+        item: row.itemName,
+        titles: [],
+        signals: 0,
+        groups: 0,
+        buys: 0,
+        sells: 0,
+        low: Infinity,
+        high: 0,
+        referencePrices: [],
+        confidence: [],
+        marketKeys: new Set()
+      })
+    }
+    const item = itemMap.get(row.itemName)
+    item.signals += Number(row.signalCount || 0)
+    item.groups += Number(row.groupCount || 0)
+    if (row.intent === 'buy') item.buys += 1
+    if (row.intent === 'sell') item.sells += 1
+    item.low = Math.min(item.low, Number(row.priceLow || row.referencePrice || 0) || Infinity)
+    item.high = Math.max(item.high, Number(row.priceHigh || row.referencePrice || 0) || 0)
+    item.referencePrices.push(Number(row.referencePrice || row.priceLow || row.priceHigh || 0) || 0)
+    item.confidence.push(Number(row.confidenceScore || 0))
+    if (row.title) item.titles.push(row.title)
+    if (row.marketKey) item.marketKeys.add(row.marketKey)
+  }
+
+  return [...itemMap.values()]
+    .map((item) => {
+      const low = Number.isFinite(item.low) ? item.low : 0
+      const high = Number.isFinite(item.high) ? item.high : 0
+      const referencePrice = average(item.referencePrices)
+      const supportScore = item.signals * 2 + item.groups + average(item.confidence) / 25
+      const demandScore = item.buys * 2 + item.groups + item.signals / 2
+      const supplyScore = item.sells * 2 + item.groups + item.signals / 2
+      return {
+        item: item.item,
+        titles: item.titles.slice(0, 3),
+        signals: item.signals,
+        groups: item.groups,
+        buys: item.buys,
+        sells: item.sells,
+        low,
+        high,
+        referencePrice,
+        confidence: average(item.confidence),
+        supportScore,
+        demandScore,
+        supplyScore,
+        marketKeys: [...item.marketKeys]
+      }
+    })
+    .sort((a, b) => b.supportScore - a.supportScore || b.groups - a.groups || b.signals - a.signals)
+}
+
+function classifySupplyDemand(buyCount, sellCount) {
+  if (sellCount >= buyCount * 2 && sellCount >= 2) return '供给强'
+  if (buyCount >= sellCount * 1.5 && buyCount >= 2) return '需求强'
+  return '相对平衡'
+}
+
+function classifyTrend(itemStats, buyCount, sellCount) {
+  const wide = itemStats.some((row) => row.low > 0 && row.high > row.low * 1.35)
+  if (wide) return '分化'
+  if (buyCount > sellCount) return '偏强'
+  if (sellCount > buyCount) return '偏弱'
+  return '震荡'
+}
+
+function boardObserve(name, topItems, supply, trend) {
+  const labels = topItems.map((row) => row.item).join('、') || '头部标的'
+  if (name === '演唱会') {
+    return `票务里 ${labels} 最活跃，当前挂站信号仍以主流看台档和少量高溢价档位为主。`
+  }
+  if (name === '数码和茅台') {
+    return `数码和茅台虽然样本量不大，但 ${labels} 的回收价已经形成清晰锚点，适合直接做回收看板。`
+  }
+  if (name === '纪念币/钞') {
+    return `纪念币钞里 ${labels} 的报价最规整，买盘和卖盘都能看到明确挂价。`
+  }
+  if (name === '贵金属') {
+    return '贵金属样本仍偏少，目前更像是小规模现货流转，价值在于补齐板块存在感。'
+  }
+  return `${name} 里 ${labels} 的报价最集中，当前供需表现为 ${supply}、盘面节奏为 ${trend}。`
+}
+
+function boardForecast(name, supply, trend) {
+  if (name === '演唱会') {
+    if (trend === '分化') return '高价档继续分化，主流看台档更适合挂站养成交。'
+    if (supply === '需求强') return '强势买盘短线仍可能抬价，核心档位更容易先被接走。'
+    return '供给偏多的票务盘更容易先松动，优先观察主流档位是否回落。'
+  }
+  if (name === '数码和茅台') {
+    return supply === '需求强' ? '高频回收机型和原箱茅台短线仍有抬价空间。' : '先以库存消化为主，短线偏稳或略弱。'
+  }
+  if (name === '纪念币/钞') {
+    return supply === '需求强' ? '热门封装货若继续有买盘抬价，板块情绪会继续偏强。' : '主流价带已比较集中，短线大概率围绕当前区间成交。'
+  }
+  if (name === '贵金属') {
+    return '先看窄幅整理，后续要继续补连续报价群，才能判断是否会从展示盘变成实用盘。'
+  }
+  return '短线先看主流价带是否守住，等待更多连续报价确认方向。'
+}
+
+function loadPreviousReportState(currentDateKey) {
+  if (!fs.existsSync(GENERATED_ROOT)) return null
+  const candidates = fs
+    .readdirSync(GENERATED_ROOT, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(entry.name) && entry.name < currentDateKey)
+    .map((entry) => entry.name)
+    .sort()
+  const previousDateKey = candidates[candidates.length - 1]
+  if (!previousDateKey) return null
+  const reportFile = path.join(GENERATED_ROOT, previousDateKey, 'report-v2.json')
+  if (!fs.existsSync(reportFile)) return null
+  try {
+    return JSON.parse(fs.readFileSync(reportFile, 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+function describeRiseMove(item, previousItem) {
+  if (!item) return '主升暂不明显，今天更像存量盘延续。'
+  const band = formatBand(item.low, item.high)
+  if (!previousItem) {
+    return `${item.item} 是今天的新强势项，当前主流价带 ${band}，需求和曝光都在前排。`
+  }
+  const priceDeltaPct = previousItem.referencePrice > 0 ? ((item.referencePrice - previousItem.referencePrice) / previousItem.referencePrice) * 100 : 0
+  const signalDelta = item.signals - previousItem.signals
+  return `${item.item} 偏强，主流 ${band}，较上一轮 ${signalDelta >= 0 ? '信号增量' : '热度略回落'} ${Math.abs(signalDelta)}，价格变化 ${percentText(priceDeltaPct)}。`
+}
+
+function describeFallMove(item, previousItem) {
+  if (!item) return '主跌暂不明显，盘面整体还算稳定。'
+  const band = formatBand(item.low, item.high)
+  if (!previousItem) {
+    return `${item.item} 当前卖盘更重，主流 ${band}，但更像新出现的偏弱盘，不是持续阴跌。`
+  }
+  const priceDeltaPct = previousItem.referencePrice > 0 ? ((item.referencePrice - previousItem.referencePrice) / previousItem.referencePrice) * 100 : 0
+  const signalDelta = item.signals - previousItem.signals
+  return `${item.item} 偏弱，主流 ${band}，较上一轮 ${signalDelta >= 0 ? '热度未放大' : '热度回落'} ${Math.abs(signalDelta)}，价格变化 ${percentText(priceDeltaPct)}。`
+}
+
+function pickMover(itemStats, previousSection, direction) {
+  const previousMap = new Map((previousSection?.itemStats || []).map((row) => [row.item, row]))
+  const scored = itemStats.map((row) => {
+    const previous = previousMap.get(row.item) || null
+    const priceDeltaPct = previous?.referencePrice > 0 ? ((row.referencePrice - previous.referencePrice) / previous.referencePrice) * 100 : 0
+    const signalDelta = row.signals - Number(previous?.signals || 0)
+    const score =
+      direction === 'up'
+        ? (previous ? priceDeltaPct : 6) + signalDelta * 1.5 + (row.buys - row.sells) * 2 + row.groups
+        : (previous ? -priceDeltaPct : 4) + (Number(previous?.signals || 0) - row.signals) * 1.2 + (row.sells - row.buys) * 2 + (row.groups <= 1 ? 1 : 0)
+    return { ...row, previous, score, priceDeltaPct, signalDelta }
+  })
+  const filtered = scored.filter((row) =>
+    direction === 'up'
+      ? row.buys >= row.sells || row.priceDeltaPct > 3 || row.signalDelta > 0 || (!row.previous && row.supportScore >= 20)
+      : row.sells > row.buys || row.priceDeltaPct < -3 || row.signalDelta < 0
+  )
+  return filtered.sort((a, b) => b.score - a.score)[0] || null
+}
+
+function boardSummary(name, clusters, plan, previousState) {
+  const rows = rowsForBoard(name, clusters, plan)
+  if (!rows.length) {
+    return {
+      name,
+      hot: [],
+      bands: [],
+      supply: '相对平衡',
+      trend: '震荡',
+      observe: '当日有效样本偏少。',
+      forecast: '短线先看横盘，等更多连续报价。',
+      mainRise: '主升暂不明显，今天样本仍不足。',
+      mainFall: '主跌暂不明显，今天样本仍不足。',
+      itemStats: [],
+      buyCount: 0,
+      sellCount: 0,
+      demandStrength: 0,
+      supplyStrength: 0
+    }
+  }
+
+  const itemStats = buildItemStats(rows)
+  const buyCount = sum(rows.map((row) => (row.intent === 'buy' ? 1 : 0)))
+  const sellCount = sum(rows.map((row) => (row.intent === 'sell' ? 1 : 0)))
+  const supply = classifySupplyDemand(buyCount, sellCount)
+  const trend = classifyTrend(itemStats, buyCount, sellCount)
+  const top = itemStats.slice(0, 3)
+  const riseItem = pickMover(itemStats, previousState?.sections?.find((section) => section.name === name), 'up')
+  const fallItem = pickMover(itemStats, previousState?.sections?.find((section) => section.name === name), 'down')
+
+  return {
+    name,
+    hot: top.map((row) => row.item),
+    bands: top.map((row) => `${row.item} 主流 ${formatBand(row.low, row.high)}`),
+    supply,
+    trend,
+    observe: boardObserve(name, top, supply, trend),
+    forecast: boardForecast(name, supply, trend),
+    mainRise: describeRiseMove(riseItem, riseItem?.previous),
+    mainFall: describeFallMove(fallItem, fallItem?.previous),
+    itemStats,
+    buyCount,
+    sellCount,
+    demandStrength: sum(itemStats.map((row) => row.demandScore)),
+    supplyStrength: sum(itemStats.map((row) => row.supplyScore))
+  }
+}
+
+function buildGlobalPulse(sections) {
+  const strongestDemand = [...sections].sort((a, b) => ((b.buyCount + 1) / (b.sellCount + 1)) * Math.sqrt(Math.max(1, sum(b.itemStats.map((row) => row.signals)))) - ((a.buyCount + 1) / (a.sellCount + 1)) * Math.sqrt(Math.max(1, sum(a.itemStats.map((row) => row.signals)))))[0]
+  const strongestSupply = [...sections].sort((a, b) => ((b.sellCount + 1) / (b.buyCount + 1)) * Math.sqrt(Math.max(1, sum(b.itemStats.map((row) => row.signals)))) - ((a.sellCount + 1) / (a.buyCount + 1)) * Math.sqrt(Math.max(1, sum(a.itemStats.map((row) => row.signals)))))[0]
+  const hottestBoard = [...sections].sort((a, b) => sum(b.itemStats.map((row) => row.signals)) - sum(a.itemStats.map((row) => row.signals)))[0]
+  const riseLeads = sections.map((section) => section.mainRise).filter(Boolean).slice(0, 2)
+  const fallLeads = sections.map((section) => section.mainFall).filter(Boolean).slice(0, 2)
+  return {
+    strongestDemand: strongestDemand?.name || '暂无',
+    strongestSupply: strongestSupply?.name || '暂无',
+    hottestBoard: hottestBoard?.name || '暂无',
+    riseLeads,
+    fallLeads
+  }
+}
+
+function buildPromoVariants(sections, pulse, meta) {
+  const concert = sections.find((section) => section.name === '演唱会')
+  const digital = sections.find((section) => section.name === '数码和茅台')
+  const collect = sections.find((section) => section.name === '纪念币/钞')
+  const metal = sections.find((section) => section.name === '贵金属')
+  const leadConcert = concert?.hot[0] || '票务头部盘'
+  const leadDigital = digital?.hot[0] || '数码回收盘'
+  const leadCollect = collect?.hot[0] || '纪念币钞主流盘'
+  const leadMetal = metal?.hot[0] || '贵金属现货盘'
+
+  return {
+    titles: [
+      `牛牛日报：${leadConcert}领跑，${leadDigital}接力，四板块都能出活盘`,
+      `今天哪些还在强，哪些开始松：${leadConcert}、${leadDigital}、${leadCollect} 实盘速览`,
+      `四板块并重的实盘日报：票务热、数码稳、纪念币清晰、贵金属补位`
+    ],
+    friendCircle: `今天的盘面不再只有票务。${leadConcert} 继续活跃，${leadDigital} 给出清晰回收锚价，${leadCollect} 和 ${leadMetal} 也能抽出可挂站信号。今天共扫 ${meta.groupCount} 个群、${meta.messageCount} 条文本，精选 ${meta.planCount} 条活盘，四板块都能讲出完整逻辑。`,
+    groupFlash: `【牛牛日报快讯】1. 最热板块是 ${pulse.hottestBoard}；2. 需求最强的是 ${pulse.strongestDemand}，供给最强的是 ${pulse.strongestSupply}；3. 今天站内精选 ${meta.planCount} 条，四板块都能挂活盘。`,
+    siteLead: `今天的微信群行情已经可以支撑四板块并重的日报结构。票务继续带流量，数码和茅台给出回收锚点，纪念币钞最适合做高质量补位，贵金属负责补齐品类存在感。`,
+    shortAlert: `四板块都有活盘，不再只是票务独撑。`
+  }
+}
+
+function buildReport(messages, clusters, plan) {
+  const previousState = loadPreviousReportState(DATE_KEY)
+  const sections = ['演唱会', '数码和茅台', '贵金属', '纪念币/钞'].map((name) => boardSummary(name, clusters, plan, previousState))
+  const groupCount = new Set(messages.map((row) => row.groupName)).size
+  const publishable = clusters.filter((row) => row.kind === 'publishable').length
+  const reportOnly = clusters.filter((row) => row.kind === 'report_only').length
+  const pulse = buildGlobalPulse(sections)
+  const promo = buildPromoVariants(sections, pulse, {
+    groupCount,
+    messageCount: messages.length,
+    planCount: plan.length
+  })
+
+  const overview = `今天的盘面不再只是票务独走。${sections[0].hot.slice(0, 2).join('、') || '票务头部盘'} 继续扛流量，${sections[1].hot[0] || '数码回收盘'} 给出清晰回收锚价，${sections[3].hot[0] || '纪念币钞主流盘'} 和 ${sections[2].hot[0] || '贵金属盘口'} 也都能支撑内容补位。`
+  const lines = [
+    `# 牛牛日报 | ${DATE_KEY}`,
+    '',
+    '## 今日结论',
+    '',
+    overview,
+    '',
+    `本次共扫描 ${groupCount} 个群、${messages.length} 条文本消息，整理出 ${publishable} 条高置信可发站信号，另有 ${reportOnly} 条只适合做行情参考。今日最终精选 ${plan.length} 条托管盘口，适合直接挂站和对外宣发。`,
+    '',
+    '## 主升主跌',
+    '',
+    `- 今日主升观察：${sections.map((section) => `${section.name}：${section.mainRise}`).join('；')}`,
+    `- 今日主跌观察：${sections.map((section) => `${section.name}：${section.mainFall}`).join('；')}`,
+    '',
+    '## 供需强弱',
+    '',
+    `- 最强需求板块：${pulse.strongestDemand}`,
+    `- 最强供给板块：${pulse.strongestSupply}`,
+    `- 今日最热板块：${pulse.hottestBoard}`,
+    '',
+  ]
+
+  for (const section of sections) {
+    lines.push(
+      `## ${section.name}`,
+      '',
+      `- 热门标的：${section.hot.join('、') || '样本较少'}`,
+      `- 主流价带：${section.bands.join('；') || '样本不足'}`,
+      `- 供需判断：${section.supply}`,
+      `- 主升：${section.mainRise}`,
+      `- 主跌：${section.mainFall}`,
+      `- 今日观察：${section.observe}`,
+      `- 明日预判：${section.forecast}`,
+      ''
+    )
+  }
+
+  lines.push(
+    '## 宣传短文案',
+    '',
+    `- 朋友圈版：${promo.friendCircle}`,
+    `- 社群快讯版：${promo.groupFlash}`,
+    `- 站内导语版：${promo.siteLead}`,
+    `- 一句话提醒：${promo.shortAlert}`,
+    '',
+    '## 标题备选',
+    '',
+    ...promo.titles.map((title) => `- ${title}`),
+    '',
+    '## 明日观察清单',
+    '',
+    ...(plan.slice(0, 6).map((row) => `- ${row.title}`) || ['- 暂无足够高置信样本'])
+  )
+
+  return {
+    markdown: `${lines.join('\n')}\n`,
+    meta: {
+      date: DATE_KEY,
+      groupCount,
+      messageCount: messages.length,
+      publishableSignalCount: publishable,
+      reportOnlySignalCount: reportOnly,
+      planCount: plan.length,
+      previousDate: previousState?.meta?.date || null
+    },
+    pulse,
+    sections,
+    promo
+  }
+}
+
+function writeOutputs(rawCandidates, clusters, plan, report) {
+  const outputDir = path.join(GENERATED_ROOT, DATE_KEY)
+  ensureDir(outputDir)
+  ensureDir(REPORTS_ROOT)
+  ensureDir(FINAL_REPORTS_ROOT)
+  ensureDir(HISTORY_ROOT)
+
+  fs.writeFileSync(path.join(outputDir, 'raw-candidates.json'), JSON.stringify(rawCandidates, null, 2), 'utf8')
+  fs.writeFileSync(path.join(outputDir, 'deduped-clusters.json'), JSON.stringify(clusters, null, 2), 'utf8')
+  fs.writeFileSync(path.join(outputDir, 'publish-plan.json'), JSON.stringify(plan, null, 2), 'utf8')
+  fs.writeFileSync(path.join(outputDir, 'report-v2.json'), JSON.stringify(report, null, 2), 'utf8')
+  fs.writeFileSync(path.join(REPORTS_ROOT, `${DATE_KEY}-牛牛日报.md`), report.markdown, 'utf8')
+  fs.writeFileSync(path.join(REPORTS_ROOT, `${DATE_KEY}-牛牛日报-V2.md`), report.markdown, 'utf8')
+  fs.writeFileSync(path.join(FINAL_REPORTS_ROOT, `${DATE_KEY}-牛牛日报-正式版.md`), report.markdown, 'utf8')
+  fs.writeFileSync(
+    path.join(HISTORY_ROOT, `${DATE_KEY}-自动处理.md`),
+    `# ${DATE_KEY} 自动处理\n\n- 原始候选：${rawCandidates.length}\n- 去重后信号簇：${clusters.length}\n- 准备发站：${plan.length}\n- 最强需求板块：${report.pulse.strongestDemand}\n- 最强供给板块：${report.pulse.strongestSupply}\n- 今日最热板块：${report.pulse.hottestBoard}\n`,
+    'utf8'
+  )
+
+  if (fs.existsSync(LEARNING_FILE) && !fs.readFileSync(LEARNING_FILE, 'utf8').includes(`## ${DATE_KEY} 自动处理回放`)) {
+    fs.appendFileSync(
+      LEARNING_FILE,
+      `\n## ${DATE_KEY} 自动处理回放\n\n- 本次扫描 ${new Set(rawCandidates.map((row) => row.source.source_group)).size} 个群、${rawCandidates.length} 条候选，去重后保留 ${clusters.length} 个信号簇\n- 日报 V2 已补上主升主跌、供需强弱和多版本宣传短文案\n- 票务重复刷屏依然最重，6 小时内同发送人重复文案去重必须保留\n- 非票务板块里，i茅台账号服务类消息噪音高，订单和原箱收货更适合直接进站\n- 纪念币钞目前以封装龙类买盘最清楚，贵金属仍需要继续补真实报价群\n`,
+      'utf8'
+    )
+  }
+}
 async function publishBatch(plan, adminId, options = {}) { const res = await fetch(`${SITE_ORIGIN.replace(/\/$/, '')}/api/admin/wechat-auto-publish`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-user-id': adminId }, body: JSON.stringify({ syncMode: 'managed_market', deactivateMissing: options.deactivateMissing === true, activeMarketKeys: options.activeMarketKeys || [], runDate: DATE_KEY, posts: plan }) }); const text = await res.text(); let data = null; try { data = text ? JSON.parse(text) : null } catch { data = text } if (!res.ok || !data?.success) throw new Error(data?.error?.message || text || 'Failed to publish auto posts'); return data.data }
 async function publishPlan(plan, adminId) { if (!plan.length) return { publishedCount: 0, failedCount: 0, posts: [] }; const batches = []; for (let index = 0; index < plan.length; index += Math.max(1, PUBLISH_BATCH_SIZE)) batches.push(plan.slice(index, index + Math.max(1, PUBLISH_BATCH_SIZE))); const activeMarketKeys = [...new Set(plan.map((row) => row.marketKey).filter(Boolean))]; const aggregate = { operatorUserId: adminId, operatorWechatId: DEFAULT_OPERATOR_WECHAT, publishedCount: 0, updatedCount: 0, refreshedCount: 0, deactivatedCount: 0, failedCount: 0, posts: [], createdPosts: [], updatedPosts: [], refreshedPosts: [], deactivatedPosts: [], failures: [] }; for (const batch of batches) { const result = await publishBatch(batch, adminId, { deactivateMissing: false }); aggregate.operatorUserId = result.operatorUserId || aggregate.operatorUserId; aggregate.operatorWechatId = result.operatorWechatId || aggregate.operatorWechatId; aggregate.publishedCount += Number(result.publishedCount || 0); aggregate.updatedCount += Number(result.updatedCount || 0); aggregate.refreshedCount += Number(result.refreshedCount || 0); aggregate.failedCount += Number(result.failedCount || 0); aggregate.posts.push(...(result.posts || [])); aggregate.createdPosts.push(...(result.createdPosts || [])); aggregate.updatedPosts.push(...(result.updatedPosts || [])); aggregate.refreshedPosts.push(...(result.refreshedPosts || [])); aggregate.failures.push(...(result.failures || [])); } const finalize = await publishBatch([], adminId, { deactivateMissing: true, activeMarketKeys }); aggregate.operatorUserId = finalize.operatorUserId || aggregate.operatorUserId; aggregate.operatorWechatId = finalize.operatorWechatId || aggregate.operatorWechatId; aggregate.deactivatedCount = Number(finalize.deactivatedCount || 0); aggregate.deactivatedPosts = finalize.deactivatedPosts || []; aggregate.failedCount += Number(finalize.failedCount || 0); aggregate.failures.push(...(finalize.failures || [])); return aggregate }
 
