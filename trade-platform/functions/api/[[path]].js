@@ -1,4 +1,4 @@
-// EdgeOne Pages Function: proxy Supabase requests and handle privileged app mutations.
+﻿// EdgeOne Pages Function: proxy Supabase requests and handle privileged app mutations.
 
 const DEFAULT_SUPABASE_URL = 'https://hntiihuxqlklpiyqmlob.supabase.co'
 const DEFAULT_SUPABASE_ANON_KEY =
@@ -72,6 +72,12 @@ const POINT_CHANGE_TYPES = {
   dailyPostReward: 9,
   registrationTopUp: 10,
   dailyCheckIn: 11
+}
+
+const AUTO_MARKET_INFO_PREFIX = '自动整理自微信群行情'
+const AUTO_MARKET_SETTING_CATEGORIES = {
+  state: 'wechat_market_state',
+  history: 'wechat_market_history'
 }
 
 const json = (payload, status = 200) =>
@@ -235,7 +241,7 @@ const buildGrowthSettings = (settingsMap = {}) => ({
 })
 
 const maskPhone = (phone = '') => {
-  if (typeof phone !== 'string' || phone.length < 7) return '??????'
+  if (typeof phone !== 'string' || phone.length < 7) return '鍖垮悕鐢ㄦ埛'
   return `${phone.slice(0, 3)}****${phone.slice(-4)}`
 }
 
@@ -691,10 +697,20 @@ const normalizeWechatAutoPost = (rawPost) => {
   const keywords = String(rawPost.keywords || '').trim()
   const extraInfo = rawPost.extraInfo == null ? null : String(rawPost.extraInfo).trim()
   const categoryId = String(rawPost.categoryId || '').trim()
+  const categoryName = String(rawPost.categoryName || '').trim()
   const tradeType = Number(rawPost.tradeType)
   const price = Number(rawPost.price)
   const expireHours = Math.max(1, Math.min(24 * 30, Number(rawPost.expireHours || 24 * 7)))
   const viewLimit = Math.max(1, Math.min(1000, Number(rawPost.viewLimit || 100)))
+  const itemName = String(rawPost.itemName || '').trim()
+  const city = String(rawPost.city || '').trim() || '全国'
+  const eventDate = String(rawPost.eventDate || '').trim()
+  const specOrTier = String(rawPost.specOrTier || '').trim()
+  const quantity = String(rawPost.quantity || '').trim()
+  const sourceRef = String(rawPost.sourceRef || '').trim()
+  const marketKey = String(rawPost.marketKey || '').trim()
+  const signalCount = Math.max(0, Number(rawPost.signalCount || 0))
+  const groupCount = Math.max(0, Number(rawPost.groupCount || 0))
 
   if (!title) {
     return { ok: false, message: 'Post title is required.' }
@@ -723,12 +739,122 @@ const normalizeWechatAutoPost = (rawPost) => {
       keywords: keywords.slice(0, 200),
       extraInfo: extraInfo ? extraInfo.slice(0, 100) : null,
       categoryId,
+      categoryName,
       tradeType,
       price,
       expireHours,
-      viewLimit
+      viewLimit,
+      itemName: itemName.slice(0, 100),
+      city: city.slice(0, 32),
+      eventDate: eventDate.slice(0, 32),
+      specOrTier: specOrTier.slice(0, 64),
+      quantity: quantity.slice(0, 32),
+      sourceRef: sourceRef.slice(0, 200),
+      marketKey: marketKey.slice(0, 200),
+      signalCount,
+      groupCount
     }
   }
+}
+
+const normalizeManagedMarketKeyPart = (value) =>
+  String(value || '')
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[【】\[\]()（）{}<>《》:：,，。；;'"`|\\/]/gu, '')
+    .trim()
+
+const hashText = (input = '') => {
+  let h1 = 0x811c9dc5
+  let h2 = 5381
+  for (const char of String(input)) {
+    const code = char.codePointAt(0) || 0
+    h1 ^= code
+    h1 = Math.imul(h1, 16777619) >>> 0
+    h2 = Math.imul(h2, 33) ^ code
+    h2 >>>= 0
+  }
+  return `${h1.toString(16).padStart(8, '0')}${h2.toString(16).padStart(8, '0')}`
+}
+
+const parseJsonValue = (value, fallback = null) => {
+  if (value == null || value === '') return fallback
+
+  try {
+    return typeof value === 'string' ? JSON.parse(value) : value
+  } catch {
+    return fallback
+  }
+}
+
+const buildManagedMarketKey = (post) => {
+  if (post.marketKey) {
+    return post.marketKey
+  }
+
+  const specKey = post.categoryName === '演唱会' ? post.specOrTier : ''
+
+  return [
+    post.categoryId,
+    post.tradeType,
+    post.itemName || post.title,
+    post.city || '全国',
+    post.eventDate || '',
+    specKey || ''
+  ]
+    .map((value) => normalizeManagedMarketKeyPart(value))
+    .filter(Boolean)
+    .join('|')
+}
+
+const buildManagedStateSettingKey = (marketKey) => `${AUTO_MARKET_SETTING_CATEGORIES.state}:${hashText(marketKey)}`
+
+const buildManagedHistorySettingKey = (marketKey, action) =>
+  `${AUTO_MARKET_SETTING_CATEGORIES.history}:${getShanghaiDateKey(new Date())}:${hashText(marketKey)}:${action}:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+
+const loadSystemSettingRowsByKeys = async (config, keys) => {
+  if (!Array.isArray(keys) || keys.length === 0) return {}
+
+  const uniqueKeys = [...new Set(keys.filter(Boolean))]
+  const settingsRes = await restRequest({
+    config,
+    resource: 'system_settings',
+    query:
+      `key=in.(${uniqueKeys.map((key) => `"${key}"`).join(',')})` +
+      '&select=id,key,value,category,created_at,updated_at',
+    useServiceRole: true
+  })
+
+  if (!settingsRes.ok) {
+    throw new Error(settingsRes.text || 'Failed to load managed market settings')
+  }
+
+  return (Array.isArray(settingsRes.data) ? settingsRes.data : []).reduce((accumulator, row) => {
+    if (row?.key) {
+      accumulator[row.key] = row
+    }
+    return accumulator
+  }, {})
+}
+
+const loadPostById = async (config, postId) => {
+  if (!UUID_RE.test(postId)) return null
+
+  const postRes = await restRequest({
+    config,
+    resource: 'posts',
+    query:
+      `id=eq.${encodeURIComponent(postId)}` +
+      '&select=id,user_id,title,keywords,price,trade_type,category_id,extra_info,view_limit,status,expire_at,created_at,updated_at' +
+      '&limit=1',
+    useServiceRole: true
+  })
+
+  if (!postRes.ok) {
+    throw new Error(postRes.text || 'Failed to load managed market post')
+  }
+
+  return Array.isArray(postRes.data) ? postRes.data[0] || null : null
 }
 
 const findRecentAutoPublishedPost = async ({ config, operatorId, post }) => {
@@ -756,6 +882,245 @@ const findRecentAutoPublishedPost = async ({ config, operatorId, post }) => {
   return Array.isArray(existingRes.data) ? existingRes.data[0] || null : null
 }
 
+const findExistingAutoMarketPost = async ({ config, operatorId, post }) => {
+  const since = new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString()
+  const existingRes = await restRequest({
+    config,
+    resource: 'posts',
+    query:
+      `user_id=eq.${encodeURIComponent(operatorId)}` +
+      `&category_id=eq.${encodeURIComponent(post.categoryId)}` +
+      `&trade_type=eq.${post.tradeType}` +
+      `&title=eq.${encodeURIComponent(post.title)}` +
+      `&created_at=gte.${encodeURIComponent(since)}` +
+      '&select=id,user_id,title,keywords,price,trade_type,category_id,extra_info,view_limit,status,expire_at,created_at,updated_at' +
+      '&order=created_at.desc' +
+      '&limit=5',
+    useServiceRole: true
+  })
+
+  if (!existingRes.ok) {
+    throw new Error(existingRes.text || 'Failed to locate existing auto market post')
+  }
+
+  return Array.isArray(existingRes.data) ? existingRes.data.find((row) => isManagedAutoMarketPost(row)) || null : null
+}
+
+const insertManagedMarketPost = async ({ config, operatorId, post, expireAt }) => {
+  const insertRes = await restRequest({
+    config,
+    resource: 'posts',
+    query:
+      'select=id,user_id,title,keywords,price,trade_type,category_id,extra_info,view_limit,status,expire_at,created_at,updated_at',
+    method: 'POST',
+    body: [
+      {
+        user_id: operatorId,
+        title: post.title,
+        keywords: post.keywords,
+        price: post.price,
+        trade_type: post.tradeType,
+        delivery_date: null,
+        extra_info: post.extraInfo,
+        view_limit: post.viewLimit,
+        view_count: 0,
+        deal_count: 0,
+        status: 1,
+        expire_at: expireAt,
+        category_id: post.categoryId
+      }
+    ],
+    useServiceRole: true,
+    extraHeaders: {
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation'
+    }
+  })
+
+  if (!insertRes.ok || !Array.isArray(insertRes.data) || !insertRes.data[0]) {
+    throw new Error(insertRes.text || 'Failed to create managed market post')
+  }
+
+  return insertRes.data[0]
+}
+
+const updateManagedMarketPost = async ({ config, postId, payload }) => {
+  const updateRes = await restRequest({
+    config,
+    resource: 'posts',
+    query:
+      `id=eq.${encodeURIComponent(postId)}` +
+      '&select=id,user_id,title,keywords,price,trade_type,category_id,extra_info,view_limit,status,expire_at,created_at,updated_at',
+    method: 'PATCH',
+    body: payload,
+    useServiceRole: true,
+    extraHeaders: {
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation'
+    }
+  })
+
+  if (!updateRes.ok || !Array.isArray(updateRes.data) || !updateRes.data[0]) {
+    throw new Error(updateRes.text || 'Failed to update managed market post')
+  }
+
+  return updateRes.data[0]
+}
+
+const buildManagedPostUpdatePayload = ({ currentPost, post, expireAt }) => {
+  const payload = {
+    expire_at: expireAt,
+    status: 1,
+    updated_at: new Date().toISOString()
+  }
+  const changedFields = []
+
+  if (currentPost.title !== post.title) {
+    payload.title = post.title
+    changedFields.push('title')
+  }
+
+  if ((currentPost.keywords || '') !== post.keywords) {
+    payload.keywords = post.keywords
+    changedFields.push('keywords')
+  }
+
+  if (Number(currentPost.price || 0) !== post.price) {
+    payload.price = post.price
+    changedFields.push('price')
+  }
+
+  if (Number(currentPost.trade_type || 0) !== post.tradeType) {
+    payload.trade_type = post.tradeType
+    changedFields.push('tradeType')
+  }
+
+  if (String(currentPost.category_id || '') !== post.categoryId) {
+    payload.category_id = post.categoryId
+    changedFields.push('categoryId')
+  }
+
+  if ((currentPost.extra_info || null) !== (post.extraInfo || null)) {
+    payload.extra_info = post.extraInfo
+    changedFields.push('extraInfo')
+  }
+
+  if (Number(currentPost.view_limit || 0) !== post.viewLimit) {
+    payload.view_limit = post.viewLimit
+    changedFields.push('viewLimit')
+  }
+
+  if (Number(currentPost.status || 0) !== 1) {
+    changedFields.push('status')
+  }
+
+  return { payload, changedFields }
+}
+
+const buildManagedMarketStateRow = ({ marketKey, stateKey, post, postRow, runDate }) => ({
+  key: stateKey,
+  category: AUTO_MARKET_SETTING_CATEGORIES.state,
+  value: JSON.stringify({
+    marketKey,
+    postId: postRow.id,
+    categoryId: post.categoryId,
+    categoryName: post.categoryName || '',
+    tradeType: post.tradeType,
+    title: post.title,
+    itemName: post.itemName || '',
+    city: post.city || '全国',
+    eventDate: post.eventDate || '',
+    specOrTier: post.specOrTier || '',
+    quantity: post.quantity || '',
+    price: post.price,
+    sourceRef: post.sourceRef || '',
+    signalCount: Number(post.signalCount || 0),
+    groupCount: Number(post.groupCount || 0),
+    lastSeenAt: new Date().toISOString(),
+    lastRunDate: runDate
+  })
+})
+
+const buildManagedHistoryRow = ({ marketKey, action, payload }) => ({
+  key: buildManagedHistorySettingKey(marketKey, action),
+  category: AUTO_MARKET_SETTING_CATEGORIES.history,
+  value: JSON.stringify({
+    action,
+    marketKey,
+    at: new Date().toISOString(),
+    ...payload
+  })
+})
+
+const summarizeManagedPost = (post) => ({
+  id: post.id,
+  title: post.title,
+  price: Number(post.price || 0),
+  tradeType: Number(post.trade_type || 0),
+  categoryId: post.category_id || null,
+  expireAt: post.expire_at || null,
+  status: Number(post.status || 0)
+})
+
+const isManagedAutoMarketPost = (post) =>
+  Boolean(post) &&
+  typeof post.extra_info === 'string' &&
+  post.extra_info.startsWith(AUTO_MARKET_INFO_PREFIX)
+
+const loadRecentOperatorMarketPosts = async ({ config, operatorId, categoryIds }) => {
+  if (!Array.isArray(categoryIds) || categoryIds.length === 0) return []
+
+  const since = new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString()
+  const postsRes = await restRequest({
+    config,
+    resource: 'posts',
+    query:
+      `user_id=eq.${encodeURIComponent(operatorId)}` +
+      `&category_id=in.(${categoryIds.map((id) => `"${id}"`).join(',')})` +
+      '&status=eq.1' +
+      `&created_at=gte.${encodeURIComponent(since)}` +
+      '&select=id,title,price,trade_type,category_id,extra_info,status,expire_at,created_at,updated_at' +
+      '&order=created_at.desc' +
+      '&limit=200',
+    useServiceRole: true
+  })
+
+  if (!postsRes.ok) {
+    throw new Error(postsRes.text || 'Failed to load recent operator market posts')
+  }
+
+  return Array.isArray(postsRes.data) ? postsRes.data : []
+}
+
+const deactivateManagedMarketPosts = async ({ config, postIds }) => {
+  if (!Array.isArray(postIds) || postIds.length === 0) return []
+
+  const updateRes = await restRequest({
+    config,
+    resource: 'posts',
+    query:
+      `id=in.(${postIds.map((id) => `"${id}"`).join(',')})` +
+      '&select=id,title,price,trade_type,category_id,extra_info,status,expire_at,created_at,updated_at',
+    method: 'PATCH',
+    body: {
+      status: 0,
+      expire_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    },
+    useServiceRole: true,
+    extraHeaders: {
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation'
+    }
+  })
+
+  if (!updateRes.ok) {
+    throw new Error(updateRes.text || 'Failed to deactivate stale managed market posts')
+  }
+
+  return Array.isArray(updateRes.data) ? updateRes.data : []
+}
+
 const handleAdminWechatAutoPublish = async ({ request, config }) => {
   const missingServiceRoleResponse = requireServiceRole(config)
   if (missingServiceRoleResponse) return missingServiceRoleResponse
@@ -766,6 +1131,12 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
 
     const payload = await readJsonBody(request)
     const posts = Array.isArray(payload?.posts) ? payload.posts : []
+    const syncMode = payload?.syncMode === 'managed_market'
+    const deactivateMissing = syncMode && payload?.deactivateMissing !== false
+    const runDate = /^\d{4}-\d{2}-\d{2}$/.test(String(payload?.runDate || ''))
+      ? String(payload.runDate)
+      : getShanghaiDateKey(new Date())
+
     if (!posts.length) {
       return json({ success: false, error: { code: 'EMPTY_POSTS', message: 'No posts provided.' } }, 400)
     }
@@ -788,14 +1159,19 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
 
     const activeCategoryIds = new Set((Array.isArray(categoriesRes.data) ? categoriesRes.data : []).map((row) => row.id))
     const failures = []
-    const skippedPosts = []
     const createdPosts = []
+    const updatedPosts = []
+    const refreshedPosts = []
+    const deactivatedPosts = []
+    const stateRows = []
+    const historyRows = []
+    const normalizedPosts = []
 
     for (const rawPost of posts) {
       const normalized = normalizeWechatAutoPost(rawPost)
       if (!normalized.ok) {
         failures.push({
-          title: String(rawPost?.title || '?????'),
+          title: String(rawPost?.title || '未命名帖子'),
           message: normalized.message
         })
         continue
@@ -810,64 +1186,204 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
         continue
       }
 
-      const existingPost = await findRecentAutoPublishedPost({
-        config,
-        operatorId: operator.id,
-        post
-      })
+      normalizedPosts.push(post)
+    }
 
-      if (existingPost?.id) {
-        skippedPosts.push({
-          id: existingPost.id,
-          title: existingPost.title,
-          price: Number(existingPost.price || 0),
-          tradeType: Number(existingPost.trade_type || 0),
-          categoryId: existingPost.category_id || null,
-          expireAt: existingPost.expire_at || null,
-          createdAt: existingPost.created_at || null
-        })
-        continue
+    if (!syncMode) {
+      const skippedPosts = []
+
+      for (const post of normalizedPosts) {
+        try {
+          const existingPost = await findRecentAutoPublishedPost({
+            config,
+            operatorId: operator.id,
+            post
+          })
+
+          if (existingPost?.id) {
+            skippedPosts.push({
+              id: existingPost.id,
+              title: existingPost.title,
+              price: Number(existingPost.price || 0),
+              tradeType: Number(existingPost.trade_type || 0),
+              categoryId: existingPost.category_id || null,
+              expireAt: existingPost.expire_at || null,
+              createdAt: existingPost.created_at || null
+            })
+            continue
+          }
+
+          const expireAt = new Date(Date.now() + post.expireHours * 60 * 60 * 1000).toISOString()
+          const createdPost = await insertManagedMarketPost({
+            config,
+            operatorId: operator.id,
+            post,
+            expireAt
+          })
+
+          createdPosts.push(createdPost)
+        } catch (error) {
+          failures.push({
+            title: post.title,
+            message: error?.message || 'Failed to create post.'
+          })
+        }
       }
 
-      const expireAt = new Date(Date.now() + post.expireHours * 60 * 60 * 1000).toISOString()
-      const insertRes = await restRequest({
-        config,
-        resource: 'posts',
-        query: 'select=id,title,price,trade_type,category_id,expire_at',
-        method: 'POST',
-        body: [
-          {
-            user_id: operator.id,
-            title: post.title,
-            keywords: post.keywords,
-            price: post.price,
-            trade_type: post.tradeType,
-            delivery_date: null,
-            extra_info: post.extraInfo,
-            view_limit: post.viewLimit,
-            view_count: 0,
-            deal_count: 0,
-            status: 1,
-            expire_at: expireAt,
-            category_id: post.categoryId
-          }
-        ],
-        useServiceRole: true,
-        extraHeaders: {
-          'Content-Type': 'application/json',
-          Prefer: 'return=representation'
+      return json({
+        success: true,
+        data: {
+          operatorUserId: operator.id,
+          operatorWechatId: operator.wechat_id || '',
+          publishedCount: createdPosts.length,
+          skippedCount: skippedPosts.length,
+          failedCount: failures.length,
+          posts: createdPosts.map((post) => summarizeManagedPost(post)),
+          skippedPosts,
+          failures
         }
       })
+    }
 
-      if (!insertRes.ok || !Array.isArray(insertRes.data) || !insertRes.data[0]) {
-        failures.push({
-          title: post.title,
-          message: insertRes.text || 'Failed to create post.'
+    const stateKeys = normalizedPosts.map((post) => buildManagedStateSettingKey(buildManagedMarketKey(post)))
+    const existingStateRows = await loadSystemSettingRowsByKeys(config, stateKeys)
+    const touchedPostIds = new Set()
+
+    for (const post of normalizedPosts) {
+      const marketKey = buildManagedMarketKey(post)
+      const stateKey = buildManagedStateSettingKey(marketKey)
+      const existingState = parseJsonValue(existingStateRows[stateKey]?.value, {})
+      const expireAt = new Date(Date.now() + post.expireHours * 60 * 60 * 1000).toISOString()
+
+      let currentPost = UUID_RE.test(existingState?.postId || '') ? await loadPostById(config, existingState.postId) : null
+
+      if (!currentPost) {
+        currentPost = await findExistingAutoMarketPost({
+          config,
+          operatorId: operator.id,
+          post
         })
-        continue
       }
 
-      createdPosts.push(insertRes.data[0])
+      try {
+        if (!currentPost?.id) {
+          const createdPost = await insertManagedMarketPost({
+            config,
+            operatorId: operator.id,
+            post,
+            expireAt
+          })
+
+          createdPosts.push(createdPost)
+          touchedPostIds.add(createdPost.id)
+          stateRows.push(buildManagedMarketStateRow({ marketKey, stateKey, post, postRow: createdPost, runDate }))
+          historyRows.push(
+            buildManagedHistoryRow({
+              marketKey,
+              action: 'created',
+              payload: {
+                postId: createdPost.id,
+                title: createdPost.title,
+                price: Number(createdPost.price || 0),
+                categoryId: createdPost.category_id || null,
+                tradeType: Number(createdPost.trade_type || 0),
+                runDate
+              }
+            })
+          )
+          continue
+        }
+
+        const previousSummary = summarizeManagedPost(currentPost)
+        const { payload: updatePayload, changedFields } = buildManagedPostUpdatePayload({
+          currentPost,
+          post,
+          expireAt
+        })
+
+        const updatedPost = await updateManagedMarketPost({
+          config,
+          postId: currentPost.id,
+          payload: updatePayload
+        })
+
+        touchedPostIds.add(updatedPost.id)
+        stateRows.push(buildManagedMarketStateRow({ marketKey, stateKey, post, postRow: updatedPost, runDate }))
+
+        if (changedFields.length) {
+          updatedPosts.push(updatedPost)
+          historyRows.push(
+            buildManagedHistoryRow({
+              marketKey,
+              action: changedFields.includes('price') ? 'repriced' : 'updated',
+              payload: {
+                postId: updatedPost.id,
+                previousPrice: previousSummary.price,
+                price: Number(updatedPost.price || 0),
+                previousTitle: previousSummary.title,
+                title: updatedPost.title,
+                changedFields,
+                runDate
+              }
+            })
+          )
+        } else {
+          refreshedPosts.push(updatedPost)
+        }
+      } catch (error) {
+        failures.push({
+          title: post.title,
+          message: error?.message || 'Failed to sync managed market post.'
+        })
+      }
+    }
+
+    if (stateRows.length) {
+      await upsertSystemSettings(config, stateRows)
+    }
+
+    if (historyRows.length) {
+      await upsertSystemSettings(config, historyRows)
+    }
+
+    if (deactivateMissing && normalizedPosts.length && failures.length === 0) {
+      const recentPosts = await loadRecentOperatorMarketPosts({
+        config,
+        operatorId: operator.id,
+        categoryIds: [...new Set(normalizedPosts.map((post) => post.categoryId))]
+      })
+
+      const staleIds = recentPosts
+        .filter((row) => isManagedAutoMarketPost(row) && !touchedPostIds.has(row.id))
+        .map((row) => row.id)
+
+      const removed = await deactivateManagedMarketPosts({
+        config,
+        postIds: staleIds
+      })
+
+      deactivatedPosts.push(...removed)
+
+      if (removed.length) {
+        await upsertSystemSettings(
+          config,
+          removed.map((row) =>
+            buildManagedHistoryRow({
+              marketKey: `deactivated:${row.id}`,
+              action: 'deactivated',
+              payload: {
+                postId: row.id,
+                title: row.title,
+                price: Number(row.price || 0),
+                categoryId: row.category_id || null,
+                tradeType: Number(row.trade_type || 0),
+                reason: 'missing_from_latest_managed_run',
+                runDate
+              }
+            })
+          )
+        )
+      }
     }
 
     return json({
@@ -876,17 +1392,15 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
         operatorUserId: operator.id,
         operatorWechatId: operator.wechat_id || '',
         publishedCount: createdPosts.length,
-        skippedCount: skippedPosts.length,
+        updatedCount: updatedPosts.length,
+        refreshedCount: refreshedPosts.length,
+        deactivatedCount: deactivatedPosts.length,
         failedCount: failures.length,
-        posts: createdPosts.map((post) => ({
-          id: post.id,
-          title: post.title,
-          price: Number(post.price || 0),
-          tradeType: Number(post.trade_type || 0),
-          categoryId: post.category_id || null,
-          expireAt: post.expire_at
-        })),
-        skippedPosts,
+        posts: [...createdPosts, ...updatedPosts, ...refreshedPosts].map((post) => summarizeManagedPost(post)),
+        createdPosts: createdPosts.map((post) => summarizeManagedPost(post)),
+        updatedPosts: updatedPosts.map((post) => summarizeManagedPost(post)),
+        refreshedPosts: refreshedPosts.map((post) => summarizeManagedPost(post)),
+        deactivatedPosts: deactivatedPosts.map((post) => summarizeManagedPost(post)),
         failures
       }
     })
@@ -1165,29 +1679,29 @@ const handlePasswordLogin = async ({ request, config }) => {
   const password = typeof payload?.password === 'string' ? payload.password : ''
 
   if (!phone || !password) {
-    return json({ success: false, error: { code: 'INVALID_PAYLOAD', message: '??????????' } }, 400)
+    return json({ success: false, error: { code: 'INVALID_PAYLOAD', message: '请输入手机号和密码。' } }, 400)
   }
 
   try {
     const user = await loadUserByPhone({ config, phone, includePassword: true })
     if (!user) {
-      return json({ success: false, error: { code: 'INVALID_CREDENTIALS', message: '?????????' } }, 401)
+      return json({ success: false, error: { code: 'INVALID_CREDENTIALS', message: '手机号或密码错误。' } }, 401)
     }
 
     if (Number(user.status ?? 1) === 0) {
-      return json({ success: false, error: { code: 'ACCOUNT_DISABLED', message: '??????,???????' } }, 403)
+      return json({ success: false, error: { code: 'ACCOUNT_DISABLED', message: '账号已被禁用，请联系管理员。' } }, 403)
     }
 
     const isPasswordValid = await verifyStoredPassword(password, user.password)
     if (!isPasswordValid) {
-      return json({ success: false, error: { code: 'INVALID_CREDENTIALS', message: '?????????' } }, 401)
+      return json({ success: false, error: { code: 'INVALID_CREDENTIALS', message: '手机号或密码错误。' } }, 401)
     }
 
     return json({
       success: true,
       data: {
         user: sanitizeUserForClient(user),
-        message: '????'
+        message: '登录成功'
       }
     })
   } catch (error) {
@@ -1196,7 +1710,7 @@ const handlePasswordLogin = async ({ request, config }) => {
         success: false,
         error: {
           code: 'PASSWORD_LOGIN_ERROR',
-          message: error?.message || '???????'
+          message: error?.message || '密码登录失败。'
         }
       },
       500
@@ -1215,11 +1729,11 @@ const handlePasswordRegistration = async ({ request, config }) => {
   const inviteCode = typeof payload?.invite_code === 'string' ? payload.invite_code.trim().toUpperCase() : ''
 
   if (!phone || !password || !wechatId) {
-    return json({ success: false, error: { code: 'INVALID_PAYLOAD', message: '???????????' } }, 400)
+    return json({ success: false, error: { code: 'INVALID_PAYLOAD', message: '请填写完整的注册信息。' } }, 400)
   }
 
   if (!PHONE_RE.test(phone)) {
-    return json({ success: false, error: { code: 'INVALID_PHONE', message: '??????????' } }, 400)
+    return json({ success: false, error: { code: 'INVALID_PHONE', message: '请输入正确的手机号。' } }, 400)
   }
 
   if (password.length < 6 || !/\d/.test(password) || !/[a-zA-Z]/.test(password)) {
@@ -1228,7 +1742,7 @@ const handlePasswordRegistration = async ({ request, config }) => {
         success: false,
         error: {
           code: 'INVALID_PASSWORD',
-          message: '???? 6 ?,?????????????'
+          message: '密码至少 6 位，且必须同时包含数字和字母。'
         }
       },
       400
@@ -1236,7 +1750,7 @@ const handlePasswordRegistration = async ({ request, config }) => {
   }
 
   if (inviteCode && !INVITE_CODE_RE.test(inviteCode)) {
-    return json({ success: false, error: { code: 'INVALID_INVITE_CODE', message: '?????????' } }, 400)
+    return json({ success: false, error: { code: 'INVALID_INVITE_CODE', message: '邀请码格式不正确。' } }, 400)
   }
 
   let createdUserId = ''
@@ -1244,14 +1758,14 @@ const handlePasswordRegistration = async ({ request, config }) => {
   try {
     const existingUser = await loadUserByPhone({ config, phone, includePassword: false })
     if (existingUser) {
-      return json({ success: false, error: { code: 'PHONE_ALREADY_EXISTS', message: '????????' } }, 409)
+      return json({ success: false, error: { code: 'PHONE_ALREADY_EXISTS', message: '该手机号已注册。' } }, 409)
     }
 
     let inviter = null
     if (inviteCode) {
       inviter = await loadUserByInviteCode({ config, inviteCode })
       if (!inviter) {
-        return json({ success: false, error: { code: 'INVALID_INVITE_CODE', message: '??????' } }, 400)
+        return json({ success: false, error: { code: 'INVALID_INVITE_CODE', message: '邀请码无效。' } }, 400)
       }
     }
 
@@ -1282,7 +1796,7 @@ const handlePasswordRegistration = async ({ request, config }) => {
       change_amount: INITIAL_REGISTRATION_POINTS,
       balance_after: INITIAL_REGISTRATION_POINTS,
       related_id: createdUser.id,
-      description: '????',
+      description: '注册奖励',
       created_at: new Date().toISOString()
     })
 
@@ -1314,7 +1828,7 @@ const handlePasswordRegistration = async ({ request, config }) => {
       success: true,
       data: {
         user: sanitizeUserForClient(createdUser),
-        message: '????'
+        message: '注册成功'
       }
     })
   } catch (error) {
@@ -1327,7 +1841,7 @@ const handlePasswordRegistration = async ({ request, config }) => {
         success: false,
         error: {
           code: 'PASSWORD_REGISTRATION_ERROR',
-          message: error?.message || '?????'
+          message: error?.message || '注册失败。'
         }
       },
       500
@@ -1416,7 +1930,7 @@ const handleRegistrationBonus = async ({ request, config }) => {
         change_amount: pointsAdded,
         balance_after: updatedUser?.points ?? Number(user.points || 0) + pointsAdded,
         related_id: userId,
-        description: `????????${growthSettings.registrationPoints}`,
+        description: `注册送积分补齐至${growthSettings.registrationPoints}`,
         created_at: new Date().toISOString()
       })
     } catch (error) {
@@ -1448,33 +1962,33 @@ const handleRegistrationBonus = async ({ request, config }) => {
 const buildGrowthTasks = ({ growthSettings, checkedInToday, rewardedCount, successfulInvites }) => [
   {
     key: 'daily_checkin',
-    title: '????',
-    description: '???????,?????',
+    title: '每日签到',
+    description: '每天来站里打卡，维持活跃度',
     rewardPoints: growthSettings.dailyCheckinReward,
     completed: checkedInToday,
     progress: checkedInToday ? 1 : 0,
     target: 1,
-    actionLabel: checkedInToday ? '???' : '???'
+    actionLabel: checkedInToday ? '已完成' : '去签到'
   },
   {
     key: 'daily_publish',
-    title: '??????',
-    description: '???????????????',
+    title: '每日发帖任务',
+    description: '当天前几条发帖可拿额外积分奖励',
     rewardPoints: growthSettings.dailyPostReward,
     completed: rewardedCount >= growthSettings.dailyPostRewardLimit,
     progress: rewardedCount,
     target: growthSettings.dailyPostRewardLimit,
-    actionLabel: rewardedCount >= growthSettings.dailyPostRewardLimit ? '???' : '???'
+    actionLabel: rewardedCount >= growthSettings.dailyPostRewardLimit ? '已完成' : '去发帖'
   },
   {
     key: 'invite_reward',
-    title: '??????',
-    description: '???????????,??????',
+    title: '邀请好友首发',
+    description: '邀请好友注册并完成首发，双方都有奖励',
     rewardPoints: growthSettings.inviterRewardPoints,
     completed: successfulInvites > 0,
     progress: successfulInvites,
     target: 1,
-    actionLabel: successfulInvites > 0 ? '????' : '???'
+    actionLabel: successfulInvites > 0 ? '继续邀请' : '去邀请'
   }
 ]
 
@@ -1741,7 +2255,7 @@ const handleDailyCheckIn = async ({ request, config }) => {
       change_type: POINT_CHANGE_TYPES.dailyCheckIn,
       change_amount: growthSettings.dailyCheckinReward,
       balance_after: updatedUser?.points ?? Number(user.points || 0) + growthSettings.dailyCheckinReward,
-      description: '??????',
+      description: '每日签到奖励',
       created_at: checkedInAt
     })
 
@@ -1887,7 +2401,7 @@ const handlePublishLeaderboard = async ({ request, config }) => {
       success: true,
       data: {
         window,
-        windowLabel: window === '7d' ? '?7????' : '????',
+        windowLabel: window === '7d' ? '近7天发帖榜' : '总发帖榜',
         entries: rankedEntries,
         currentUserRank
       }
@@ -2072,7 +2586,7 @@ const handleDailyPostReward = async ({ request, config }) => {
         change_amount: growthSettings.dailyPostReward,
         balance_after: updatedUser?.points ?? Number(user.points || 0) + growthSettings.dailyPostReward,
         related_id: postId,
-        description: `???${growthSettings.dailyPostRewardLimit}?????`,
+        description: `每日前${growthSettings.dailyPostRewardLimit}条发帖奖励`,
         created_at: new Date().toISOString()
       })
     } catch (error) {
