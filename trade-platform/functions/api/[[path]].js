@@ -1143,7 +1143,6 @@ const loadRecentOperatorMarketPosts = async ({ config, operatorId, categoryIds }
     query:
       `user_id=eq.${encodeURIComponent(operatorId)}` +
       `&category_id=in.(${categoryIds.map((id) => `"${id}"`).join(',')})` +
-      '&status=eq.1' +
       `&created_at=gte.${encodeURIComponent(since)}` +
       '&select=id,title,price,trade_type,category_id,extra_info,status,expire_at,created_at,updated_at' +
       '&order=created_at.desc' +
@@ -1199,11 +1198,12 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
     const posts = Array.isArray(payload?.posts) ? payload.posts : []
     const syncMode = payload?.syncMode === 'managed_market'
     const deactivateMissing = syncMode && payload?.deactivateMissing !== false
+    const activeMarketKeys = [...new Set((Array.isArray(payload?.activeMarketKeys) ? payload.activeMarketKeys : []).map((value) => String(value || '').trim()).filter(Boolean))]
     const runDate = /^\d{4}-\d{2}-\d{2}$/.test(String(payload?.runDate || ''))
       ? String(payload.runDate)
       : getShanghaiDateKey(new Date())
 
-    if (!posts.length) {
+    if (!posts.length && !(syncMode && deactivateMissing && activeMarketKeys.length)) {
       return json({ success: false, error: { code: 'EMPTY_POSTS', message: 'No posts provided.' } }, 400)
     }
 
@@ -1316,11 +1316,14 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
       .map((row) => parseJsonValue(row?.value, {})?.postId)
       .filter((postId) => UUID_RE.test(postId || ''))
     const existingStatePostMap = await loadPostsByIds(config, existingStatePostIds)
-    const recentManagedPosts = await loadRecentOperatorMarketPosts({
-      config,
-      operatorId: operator.id,
-      categoryIds: [...new Set(normalizedPosts.map((post) => post.categoryId))]
-    })
+    const recentCategoryIds = [...new Set(normalizedPosts.map((post) => post.categoryId))]
+    const recentManagedPosts = recentCategoryIds.length
+      ? await loadRecentOperatorMarketPosts({
+          config,
+          operatorId: operator.id,
+          categoryIds: recentCategoryIds
+        })
+      : []
     const recentManagedPostIndex = indexManagedRecentPosts(recentManagedPosts)
     const claimedRecentPostIds = new Set()
     const touchedPostIds = new Set()
@@ -1400,9 +1403,31 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
       await upsertSystemSettings(config, stateRows)
     }
 
-    if (deactivateMissing && normalizedPosts.length && failures.length === 0) {
-      const staleIds = recentManagedPosts
-        .filter((row) => isManagedAutoMarketPost(row) && !touchedPostIds.has(row.id))
+    if (deactivateMissing && (normalizedPosts.length || activeMarketKeys.length) && failures.length === 0) {
+      const deactivationStateKeys = (activeMarketKeys.length ? activeMarketKeys : normalizedPosts.map((post) => buildManagedMarketKey(post))).map((marketKey) =>
+        buildManagedStateSettingKey(marketKey)
+      )
+      const deactivationStateRows = await loadSystemSettingRowsByKeys(config, deactivationStateKeys)
+      const activePostIds = new Set(
+        [
+          ...touchedPostIds,
+          ...Object.values(deactivationStateRows)
+            .map((row) => parseJsonValue(row?.value, {})?.postId)
+            .filter((postId) => UUID_RE.test(postId || ''))
+        ].filter(Boolean)
+      )
+      const activePostMap = await loadPostsByIds(config, [...activePostIds])
+      const categoryIdsForDeactivation = [...new Set(Object.values(activePostMap).map((row) => row?.category_id).filter(Boolean))]
+      const recentPool =
+        recentManagedPosts.length || categoryIdsForDeactivation.length === 0
+          ? recentManagedPosts
+          : await loadRecentOperatorMarketPosts({
+              config,
+              operatorId: operator.id,
+              categoryIds: categoryIdsForDeactivation
+            })
+      const staleIds = recentPool
+        .filter((row) => Number(row.status || 0) === 1 && isManagedAutoMarketPost(row) && !activePostIds.has(row.id))
         .map((row) => row.id)
 
       const removed = await deactivateManagedMarketPosts({
