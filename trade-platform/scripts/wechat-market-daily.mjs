@@ -24,12 +24,13 @@ const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/.test(DATE_OVERRIDE) ? DATE_OVERRIDE : get
 const DEFAULT_OPERATOR_WECHAT = 'niuniubase'
 const MANAGED_SYNC_KIND = 'niuniubase.managed-market-sync'
 const MANAGED_SYNC_PROTOCOL_VERSION = 1
+const INTERNAL_MANAGED_MARKET_PREFIX = '__managed_market__'
 
 const CITIES = ['北京','上海','广州','深圳','杭州','南宁','武汉','天津','郑州','重庆','成都','长沙','青岛','绍兴','厦门','佛山','烟台','泉州','贵阳','大连','香港','澳门','首尔','仁川','全国']
 const ARTISTS = ['周杰伦','谢霆锋','陶喆','蔡依林','凤凰传奇','张杰','李宗盛','梁静茹','薛之谦','单依纯','张震岳','黄丽玲','胡彦斌','潘玮柏','李荣浩','杨千嬅','张天赋','伍佰','周传雄','郑润泽','余佳运','陈嘉桦','顽童','ONER','BTS','SVT','CNBLUE','NEXZ','孙燕姿','刘德华']
-const DIGITAL = ['i茅台','茅台','iPhone','苹果','iPad','华为','荣耀','小米','红米','OPPO','vivo','PS5','Switch','XBOX','ROG','监管机']
+const DIGITAL = ['i茅台','茅台','iPhone','苹果','iPad','华为','荣耀','小米','红米','OPPO','vivo','PS5','Switch','XBOX','ROG','监管机','Mate','Pura','折叠屏']
 const COLLECT = ['纪念币','纪念钞','蛇钞','马钞','龙钞','龙币','云商封装龙','中国龙封装','生日钞','金银币','闷包']
-const METALS = ['黄金','白金','金条','银条','粤鹏金']
+const METALS = ['黄金','白金','金条','银条','粤鹏金','粤鹏银','金银条','牛头']
 const OTHER = ['影城','电影票','通兑票','年卡','爱奇艺','芒果','优酷','百丽宫','百老汇','耀莱成龙','成龙']
 const NOISE = [/验证码/,/查单/,/缓存/,/机器人/,/http/i,/链接/,/卖群/,/换群/]
 
@@ -37,20 +38,24 @@ const TICKET_PATTERNS = [
   /(?<spec>\d{3,4}|前(?:二十|十五|十|八|五|三|一)?排|前区随机|包厢|看台|内场|随机包厢|一层两侧|首层两侧|两侧\/正对(?:包厢)?|两侧|正对|CD区)\s*(?:的|[-—–]{1,2})\s*(?<prices>(?:\d{3,5}|🈚|空|售磬|\?\?)(?:\/(?:\d{3,5}|🈚|空|售磬|\?\?))*)/gu
 ]
 const DIGITAL_PATTERNS = [
-  /(?<price>\d{2,5})\s*(?<intent>收|出)\s*(?<qty>\d+(?:台|个|瓶|件|套|箱|张)?)?\s*(?<item>(?:i茅台|茅台|iPhone|苹果|iPad|华为|荣耀|小米|红米|OPPO|vivo|PS5|Switch|XBOX|ROG|监管机)[^ ，。；;、\n]{0,24})/giu,
+  /(?<price>\d{2,5})\s*(?<intent>收|出)\s*(?<qty>\d+(?:台|个|瓶|件|套|箱|张)?)?\s*(?<item>(?:i茅台|茅台|iPhone|苹果|iPad|华为|荣耀|小米|红米|OPPO|vivo|PS5|Switch|XBOX|ROG|监管机|Mate\s*XT|Mate\s*X\d{1,2}|Pura\s*X|Mate\s*70\s*RS|(?:iPhone\s*)?(?:16|17)(?:\s*(?:Pro(?:\s*Max)?|Plus))?)[^ ，。；;、\n]{0,24})/giu,
   /(?<price>\d{2,5})\s*(?<intent>收|出)\s*(?<qty>\d+(?:台|个|瓶|件|套|箱|张)?)?\s*(?<item>(?:7p\/7|8p|6s(?:\s*6sp)?|se2(?:\.64)?|se3代|xR组屏机|X组屏机|11组屏机|12组屏机|13组屏机|14组屏机|p9|p10|p20(?:pro)?)[^ ，。；;、\n]{0,12})/giu,
-  /(?<item>(?:iPad|PS5|Switch|iPhone|苹果|华为|荣耀|小米|红米|OPPO|vivo|监管机|7p\/7|8p|se2(?:\.64)?|se3代|xR组屏机|X组屏机|11组屏机|12组屏机|13组屏机|14组屏机|p9|p10|p20(?:pro)?)[^ ，。；;、\n]{0,20})\s*(?<price>\d{2,5})元/giu
+  /(?<item>(?:iPad|PS5|Switch|iPhone|苹果|华为|荣耀|小米|红米|OPPO|vivo|监管机|Mate\s*XT|Mate\s*X\d{1,2}|Pura\s*X|Mate\s*70\s*RS|(?:iPhone\s*)?(?:16|17)(?:\s*(?:Pro(?:\s*Max)?|Plus))?|7p\/7|8p|se2(?:\.64)?|se3代|xR组屏机|X组屏机|11组屏机|12组屏机|13组屏机|14组屏机|p9|p10|p20(?:pro)?)[^ ，。；;、\n]{0,20})\s*(?<price>\d{2,5})元/giu
 ]
 const COLLECT_PATTERNS = [
   /(?<price>\d{2,5})(?<intent>收|出)(?<qty>\d+(?:个|套|包|张|件)?)?(?<item>(?:云商封装龙[^ ，。；;、\n]{0,18}|中国龙封装|智能卡银行|生日钞[^ ，。；;、\n]{0,16}|蛇钞[^ ，。；;、\n]{0,16}|马钞[^ ，。；;、\n]{0,16}|龙钞[^ ，。；;、\n]{0,16}|龙币[^ ，。；;、\n]{0,16}|纪念币[^ ，。；;、\n]{0,16}|纪念钞[^ ，。；;、\n]{0,16}))/gu
 ]
 const METAL_PATTERNS = [
-  /(?<intent>出|收)\s*(?<item>[^0-9，。；;、\n]{0,24}?(?:黄金|白金|金条|银条|粤鹏金)[^0-9，。；;、\n]{0,24})\s*(?<price>\d{2,6})/gu,
-  /(?<item>[^0-9，。；;、\n]{0,24}?(?:黄金|白金|金条|银条|粤鹏金)[^0-9，。；;、\n]{0,24})\s*(?<price>\d{2,6})\s*(?<intent>出|收)/gu
+  /(?<intent>出|收)\s*(?<item>[^0-9，。；;、\n]{0,24}?(?:黄金|白金|金条|银条|粤鹏金|粤鹏银|金银条|牛头)[^0-9，。；;、\n]{0,24})\s*(?<price>\d{2,6})/gu,
+  /(?<item>[^0-9，。；;、\n]{0,24}?(?:黄金|白金|金条|银条|粤鹏金|粤鹏银|金银条|牛头)[^0-9，。；;、\n]{0,24})\s*(?<price>\d{2,6})\s*(?<intent>出|收)/gu
 ]
 const OTHER_PATTERNS = [
   /(?<intent>出|收)?\s*(?<item>(?:影城通兑票|通兑票|电影票|年卡|爱奇艺|芒果|优酷|百丽宫|百老汇|耀莱成龙|成龙)[^ ，。；;、\n]{0,24})\s*(?<price>\d{1,5}(?:\.\d+)?)/gu
 ]
+const DIGITAL_JUNK_PATTERN = /(工作机|脱坑机|二手机|组屏机|卡贴机|监管机|小花|大花|下半截|拆机|改码|无码|有锁|无限量|国外订单|低价扣费|安卓工作机)/u
+const STALE_DIGITAL_PATTERN = /(7p\/7|iphone\s*7|iphone7|iphone8|8p|6s|6sp|se2|se3|iphonexr|iphonex|苹果x|苹果xr|x组屏机|xr组屏机|11组屏机|12组屏机|13组屏机|14组屏机|红米\d|redmi\d|oppo\s*r\d+|vivox\d+|荣耀\d+|p9|p10|p20)/iu
+const MODERN_IPHONE_PATTERN = /(?:iphone\s*)?(?:16|17)(?:\s*(?:pro(?:\s*max)?|plus))?/iu
+const MODERN_HUAWEI_PATTERN = /(mate\s*xt|mate\s*x\d{1,2}|pura\s*x|mate\s*70\s*rs|折叠屏)/iu
 
 function getShanghaiDateKey(dateInput) {
   const local = new Date(dateInput.getTime() + 8 * 60 * 60 * 1000)
@@ -97,11 +102,93 @@ function normalizeDigitalItemName(item) {
   if (/^oppo/iu.test(value)) return value.replace(/^oppo/iu, 'OPPO')
   if (/^vivox/iu.test(value)) return value.replace(/^vivox/iu, 'vivoX')
   if (/^vivo/iu.test(value)) return value.replace(/^vivo/iu, 'vivo')
+  if (/^matext$/iu.test(value)) return '华为Mate XT'
+  if (/^matex(\d{1,2})$/iu.test(value)) return `华为Mate X${value.match(/^matex(\d{1,2})$/iu)?.[1] || ''}`
+  if (/^purax$/iu.test(value)) return '华为Pura X'
+  if (/^mate70rs$/iu.test(value)) return '华为Mate 70 RS'
   return value
 }
+function normalizeManagedExtraInfo() {
+  return INTERNAL_MANAGED_MARKET_PREFIX
+}
+function normalizeDigitalPublishItemName(item, rawText = '') {
+  const base = normalizeDigitalItemName(item)
+  const combined = normalize(`${item} ${rawText}`).replace(/\s+/g, '')
+  if (/(?:iphone)?17promax/iu.test(combined)) return 'iPhone17 Pro Max'
+  if (/(?:iphone)?17pro/iu.test(combined)) return 'iPhone17 Pro'
+  if (/(?:iphone)?17plus/iu.test(combined)) return 'iPhone17 Plus'
+  if (/(?:iphone)?17/iu.test(combined)) return 'iPhone17'
+  if (/(?:iphone)?16promax/iu.test(combined)) return 'iPhone16 Pro Max'
+  if (/(?:iphone)?16pro/iu.test(combined)) return 'iPhone16 Pro'
+  if (/(?:iphone)?16plus/iu.test(combined)) return 'iPhone16 Plus'
+  if (/(?:iphone)?16/iu.test(combined)) return 'iPhone16'
+  if (/matext/iu.test(combined)) return '华为Mate XT'
+  if (/matex6/iu.test(combined)) return '华为Mate X6'
+  if (/matex5/iu.test(combined)) return '华为Mate X5'
+  if (/mate70rs/iu.test(combined)) return '华为Mate 70 RS'
+  if (/purax/iu.test(combined)) return '华为Pura X'
+  if (/i茅台|茅台/u.test(combined)) {
+    if (/原箱/u.test(combined)) return 'i茅台原箱'
+    if (/散订单/u.test(combined) && /改地址/u.test(combined)) return '茅台散订单改地址'
+    if (/原件闷包/u.test(combined)) return '茅台原件闷包'
+    if (/散闷包/u.test(combined)) return '茅台散闷包'
+    if (/订单/u.test(combined)) return 'i茅台订单'
+    if (/闷包/u.test(combined)) return 'i茅台闷包'
+    return base || 'i茅台'
+  }
+  return base
+}
+function shouldDirectPublishDigital(item, rawText = '') {
+  const combined = normalize(`${item} ${rawText}`).replace(/\s+/g, '')
+  if (!combined) return false
+  if (/i茅台|茅台/u.test(combined)) {
+    return /(原箱|订单|闷包|散订单|改地址|原件)/u.test(combined)
+  }
+  if (DIGITAL_JUNK_PATTERN.test(combined)) return false
+  if (STALE_DIGITAL_PATTERN.test(combined)) return false
+  return MODERN_IPHONE_PATTERN.test(combined) || MODERN_HUAWEI_PATTERN.test(combined)
+}
+function normalizeMetalSignal(item, price, rawText = '') {
+  const normalizedItem = normalize(item).replace(/\s+/g, '')
+  const combined = normalize(`${item} ${rawText}`).replace(/\s+/g, '')
+  const numericPrice = Number(price || 0)
+  const isSilverLike = /(银条|白银|粤鹏银|牛头|悦朋|金银条)/u.test(combined) && numericPrice >= 8 && numericPrice <= 60
+  const isGoldLike = /(黄金|金条|足金|金回收|回收金|粤鹏金)/u.test(combined) && numericPrice >= 700 && numericPrice <= 1500
+  const isPlatinumLike = /(白金|铂金)/u.test(combined) && numericPrice >= 150 && numericPrice <= 500
+
+  if (isSilverLike) {
+    return {
+      itemName: /(粤鹏|悦朋|牛头)/u.test(combined) ? '粤鹏银条' : '银条',
+      spec: `${numericPrice}元/克`,
+      publishable: true
+    }
+  }
+
+  if (isGoldLike) {
+    return {
+      itemName: /(金条|粤鹏金)/u.test(combined) ? '金条' : '黄金',
+      spec: `${numericPrice}元/克`,
+      publishable: true
+    }
+  }
+
+  if (isPlatinumLike) {
+    return {
+      itemName: '白金',
+      spec: `${numericPrice}元/克`,
+      publishable: true
+    }
+  }
+
+  return {
+    itemName: normalizedItem,
+    spec: '',
+    publishable: false
+  }
+}
 function hasStructuredDigitalSignal(item, rawText, qty) {
-  const value = normalizeDigitalItemName(item)
-  return Boolean(qty) || /\d/.test(value) || /(原箱|订单|组屏机|卡贴机|监管机)/u.test(`${value} ${rawText || ''}`)
+  const value = normalizeDigitalPublishItemName(item, rawText)
+  return Boolean(qty) || /\d/.test(value) || /(原箱|订单|闷包|改地址|组屏机|卡贴机|监管机)/u.test(`${value} ${rawText || ''}`)
 }
 function digitalFamilyKey(item) {
   const value = normalizeDigitalItemName(item).toLowerCase()
@@ -146,7 +233,93 @@ function marketKeyForCluster(cluster) {
 function intentOf(text, board) { const buy = ['收','求','接','蹲','要'].filter((k) => text.includes(k)).length; const sell = ['出','卖','转','甩','有货','可出'].filter((k) => text.includes(k)).length; if (buy > sell) return { intent: 'buy', explicit: true }; if (sell > buy) return { intent: 'sell', explicit: true }; return { intent: board === '演唱会' ? 'sell' : '', explicit: false } }
 function boardOf(text, group) { const content = `${group} ${text}`; if (COLLECT.some((k) => content.includes(k))) return '纪念币/钞'; if (METALS.some((k) => content.includes(k))) return '贵金属'; if (DIGITAL.some((k) => content.includes(k))) return '数码和茅台'; if (OTHER.some((k) => content.includes(k))) return '其他分类'; if (ARTISTS.some((k) => content.includes(k)) || ['录入','包厢','前排','看台','内场','出票','邀请函','实名','连坐'].filter((k) => content.includes(k)).length >= 2) return '演唱会'; return '' }
 function choosePrices(raw, intent) { const values = String(raw || '').split('/').map((s) => s.trim()).filter((s) => /^\d{2,6}$/.test(s)).map(Number); if (!values.length) return null; return { price: intent === 'buy' ? Math.max(...values) : Math.min(...values), low: Math.min(...values), high: Math.max(...values) } }
-function candidateBase(message, parsed) { const itemName = parsed.board === '数码和茅台' ? normalizeDigitalItemName(parsed.item) : parsed.item; const rounded = Math.round(parsed.price / 10) * 10; const specLabel = displaySpec(parsed.board, parsed.spec); const dedupeKey = [parsed.board, parsed.intent, parsed.city, itemName, parsed.date, specLabel, rounded].map((x) => String(x || '').toLowerCase()).join('|'); let score = 0; if (parsed.intent) score += parsed.explicitIntent ? 20 : 12; if (itemName) score += 20; if (parsed.price > 0) score += 20; if (parsed.city && parsed.city !== '全国') score += 8; if (parsed.date) score += 7; if (specLabel) score += 8; if (parsed.qty) score += 10; if (parsed.board !== '演唱会') score += 10; if (parsed.board === '数码和茅台' && hasStructuredDigitalSignal(itemName, message.text, parsed.qty)) score += 10; if (parsed.board === '数码和茅台' && /(订单|原箱)/u.test(itemName)) score += 4; if (parsed.board === '贵金属') score += 14; if (parsed.board === '贵金属' && /(黄金|白金|金条|银条|粤鹏金)/u.test(itemName)) score += 4; if (compact(message.text).length >= 18) score += 8; if (parsed.board === '其他分类') score -= 15; if (NOISE.some((pattern) => pattern.test(message.text))) score -= 30; const title = clip(`[${parsed.city}] ${itemName}${parsed.date ? ` ${parsed.date}` : ''}${specLabel ? ` ${specLabel}` : ''} ${parsed.intent === 'buy' ? '收' : '出'}`.replace(/\s+/g, ' ').trim(), 96); const extraInfo = clip(`自动整理自微信群行情${parsed.date ? `｜日期:${parsed.date}` : ''}${specLabel ? `｜规格:${specLabel}` : ''}${parsed.low !== parsed.high ? `｜价带:${parsed.low}-${parsed.high}` : ''}`, 96); const kind = score >= 80 && parsed.intent && itemName && parsed.price > 0 ? 'publishable' : score >= 60 && parsed.intent && itemName && parsed.price > 0 ? 'report_only' : 'noise'; return { candidateId: sha1(`${message.messageId}|${dedupeKey}|${parsed.price}`), source: { source_file: message.sourceFile, source_group: message.groupName, source_message_id: message.messageId, source_time: message.time, source_sender_name: message.sender, raw_text: message.text, raw_full_text: message.rawText || message.text }, boardName: parsed.board, categoryName: parsed.board, intent: parsed.intent, itemName, city: parsed.city, eventDate: parsed.date, specOrTier: specLabel, quantity: parsed.qty || '', priceText: parsed.priceText || '', normalizedPrice: parsed.price, priceLow: parsed.low || parsed.price, priceHigh: parsed.high || parsed.price, confidenceScore: Math.max(0, Math.min(100, score)), kind, directPublish: kind === 'publishable', keywords: [itemName, parsed.board, parsed.city, parsed.date, specLabel, parsed.intent === 'buy' ? '收' : '出'].filter(Boolean), title, extraInfo, dedupeKey } }
+function candidateBase(message, parsed) {
+  let itemName = parsed.board === '数码和茅台'
+    ? normalizeDigitalPublishItemName(parsed.item, message.text)
+    : normalize(parsed.item).replace(/\s+/g, '')
+  let specLabel = displaySpec(parsed.board, parsed.spec)
+  let publishableOverride = true
+
+  if (parsed.board === '贵金属') {
+    const metal = normalizeMetalSignal(parsed.item, parsed.price, message.text)
+    itemName = metal.itemName
+    specLabel = metal.spec || specLabel
+    publishableOverride = metal.publishable
+  }
+
+  if (parsed.board === '数码和茅台') {
+    publishableOverride = shouldDirectPublishDigital(itemName, message.text)
+  }
+
+  const rounded = Math.round(parsed.price / 10) * 10
+  const dedupeKey = [parsed.board, parsed.intent, parsed.city, itemName, parsed.date, specLabel, rounded]
+    .map((x) => String(x || '').toLowerCase())
+    .join('|')
+
+  let score = 0
+  if (parsed.intent) score += parsed.explicitIntent ? 20 : 12
+  if (itemName) score += 20
+  if (parsed.price > 0) score += 20
+  if (parsed.city && parsed.city !== '全国') score += 8
+  if (parsed.date) score += 7
+  if (specLabel) score += 8
+  if (parsed.qty) score += 10
+  if (parsed.board !== '演唱会') score += 10
+  if (parsed.board === '数码和茅台' && hasStructuredDigitalSignal(itemName, message.text, parsed.qty)) score += 10
+  if (parsed.board === '数码和茅台' && /(订单|原箱|闷包|改地址)/u.test(`${itemName} ${message.text}`)) score += 4
+  if (parsed.board === '贵金属') score += 14
+  if (parsed.board === '贵金属' && /(黄金|白金|金条|银条|粤鹏)/u.test(itemName)) score += 6
+  if (compact(message.text).length >= 18) score += 8
+  if (parsed.board === '其他分类') score -= 15
+  if (NOISE.some((pattern) => pattern.test(message.text))) score -= 30
+  if (!publishableOverride) score = Math.min(score, 68)
+
+  const title = clip(
+    `[${parsed.city}] ${itemName}${parsed.date ? ` ${parsed.date}` : ''}${specLabel ? ` ${specLabel}` : ''} ${parsed.intent === 'buy' ? '收' : '出'}`
+      .replace(/\s+/g, ' ')
+      .trim(),
+    96
+  )
+  const extraInfo = normalizeManagedExtraInfo()
+  const kind =
+    publishableOverride && score >= 80 && parsed.intent && itemName && parsed.price > 0
+      ? 'publishable'
+      : score >= 60 && parsed.intent && itemName && parsed.price > 0
+        ? 'report_only'
+        : 'noise'
+
+  return {
+    candidateId: sha1(`${message.messageId}|${dedupeKey}|${parsed.price}`),
+    source: {
+      source_file: message.sourceFile,
+      source_group: message.groupName,
+      source_message_id: message.messageId,
+      source_time: message.time,
+      source_sender_name: message.sender,
+      raw_text: message.text,
+      raw_full_text: message.rawText || message.text
+    },
+    boardName: parsed.board,
+    categoryName: parsed.board,
+    intent: parsed.intent,
+    itemName,
+    city: parsed.city,
+    eventDate: parsed.date,
+    specOrTier: specLabel,
+    quantity: parsed.qty || '',
+    priceText: parsed.priceText || '',
+    normalizedPrice: parsed.price,
+    priceLow: parsed.low || parsed.price,
+    priceHigh: parsed.high || parsed.price,
+    confidenceScore: Math.max(0, Math.min(100, score)),
+    kind,
+    directPublish: kind === 'publishable',
+    keywords: [itemName, parsed.board, parsed.city, parsed.date, specLabel, parsed.intent === 'buy' ? '收' : '出'].filter(Boolean),
+    title,
+    extraInfo,
+    dedupeKey
+  }
+}
 function parseTicket(message, board) { const cleanedText = sanitizeTicketText(message.text); const { intent, explicit } = intentOf(cleanedText, board); const item = itemFromTicket(cleanedText); const city = cityOf(cleanedText); const date = ticketDateLabel(cleanedText); const candidates = []; const seen = new Set(); for (const pattern of TICKET_PATTERNS) { pattern.lastIndex = 0; for (const match of cleanedText.matchAll(pattern)) { const spec = normalize(match.groups?.spec || ''); const prices = choosePrices(match.groups?.prices || '', intent || 'sell'); if (!item || !spec || !prices) continue; if (/^\d+$/.test(spec) && Number(spec) > 2400) continue; if (prices.price < 300 || prices.price > 20000) continue; const key = `${spec}|${prices.price}`; if (seen.has(key)) continue; seen.add(key); candidates.push(candidateBase({ ...message, text: cleanedText }, { board, intent: intent || 'sell', explicitIntent: explicit, item, city, date, spec, priceText: `${spec} ${match.groups?.prices || ''}`, price: prices.price, low: prices.low, high: prices.high })) } } const regular = candidates.find((c) => !/(前|包厢|内场|VIP|CD区)/.test(c.specOrTier || '')); const premium = candidates.find((c) => /(前|包厢|内场|VIP|CD区)/.test(c.specOrTier || '')); return [regular, premium].filter(Boolean).filter((c, i, arr) => arr.findIndex((x) => x.candidateId === c.candidateId) === i) }
 function parseWithPatterns(message, board, patterns) { const candidates = []; const seen = new Set(); for (const segment of splitTradeSegments(message.text)) { const segmentMessage = { ...message, rawText: message.text, text: segment }; const { intent: inferred, explicit } = intentOf(segment, board); for (const pattern of patterns) { pattern.lastIndex = 0; for (const match of segment.matchAll(pattern)) { const price = Number(match.groups?.price || 0); if (!Number.isFinite(price) || price <= 0) continue; if (board === '其他分类' && price < 5) continue; const item = normalize(match.groups?.item || '').replace(/^[出收求卖接转\s]+/u, '').replace(/\s+/g, ''); if (!item) continue; const qty = normalize(match.groups?.qty || ''); const intentToken = match.groups?.intent || ''; const intent = intentToken === '收' ? 'buy' : intentToken === '出' ? 'sell' : inferred; if (!intent) continue; const key = `${item}|${price}|${qty}|${intent}`; if (seen.has(key)) continue; seen.add(key); candidates.push(candidateBase(segmentMessage, { board, intent, explicitIntent: Boolean(intentToken) || explicit, item, city: cityOf(segment), date: '', spec: qty, qty, priceText: `${price}${intent === 'buy' ? '收' : '出'}`, price, low: price, high: price })) } } } return candidates.slice(0, board === '数码和茅台' ? 12 : 4) }
 function parseMessage(message) { const board = boardOf(message.text, message.groupName); if (!board || message.text.length < 6) return []; if (board === '演唱会') return parseTicket(message, board); if (board === '数码和茅台') return parseWithPatterns(message, board, DIGITAL_PATTERNS); if (board === '纪念币/钞') return parseWithPatterns(message, board, COLLECT_PATTERNS); if (board === '贵金属') return parseWithPatterns(message, board, METAL_PATTERNS); if (board === '其他分类') return parseWithPatterns(message, board, OTHER_PATTERNS); return [] }
@@ -438,9 +611,9 @@ function buildPromoVariants(sections, pulse, meta) {
       `今天哪些还在强，哪些开始松：${leadConcert}、${leadDigital}、${leadCollect} 实盘速览`,
       `四板块并重的实盘日报：票务热、数码稳、纪念币清晰、贵金属补位`
     ],
-    friendCircle: `今天的盘面不再只有票务。${leadConcert} 继续活跃，${leadDigital} 给出清晰回收锚价，${leadCollect} 和 ${leadMetal} 也能抽出可挂站信号。今天共扫 ${meta.groupCount} 个群、${meta.messageCount} 条文本，精选 ${meta.planCount} 条活盘，四板块都能讲出完整逻辑。`,
-    groupFlash: `【牛牛日报快讯】1. 最热板块是 ${pulse.hottestBoard}；2. 需求最强的是 ${pulse.strongestDemand}，供给最强的是 ${pulse.strongestSupply}；3. 今天站内精选 ${meta.planCount} 条，四板块都能挂活盘。`,
-    siteLead: `今天的微信群行情已经可以支撑四板块并重的日报结构。票务继续带流量，数码和茅台给出回收锚点，纪念币钞最适合做高质量补位，贵金属负责补齐品类存在感。`,
+    friendCircle: `今天的盘面不再只有票务。${leadConcert} 继续活跃，${leadDigital} 给出清晰回收锚价，${leadCollect} 和 ${leadMetal} 也都能讲清楚。今天站内精选 ${meta.planCount} 条活盘，四个板块都能拿出有参考价值的实盘判断。`,
+    groupFlash: `【牛牛日报快讯】1. 最热板块是 ${pulse.hottestBoard}；2. 需求最强的是 ${pulse.strongestDemand}，供给最强的是 ${pulse.strongestSupply}；3. 今天站内精选 ${meta.planCount} 条，四板块都有可看盘。`,
+    siteLead: `今天四个板块都能整理出有参考价值的实盘信号。票务继续带流量，数码和茅台只保留能真正成交的目标，纪念币钞最适合做高质量补位，贵金属负责补齐品类存在感。`,
     shortAlert: `四板块都有活盘，不再只是票务独撑。`
   }
 }
@@ -458,7 +631,7 @@ function buildReport(messages, clusters, plan) {
     planCount: plan.length
   })
 
-  const overview = `今天的盘面不再只是票务独走。${sections[0].hot.slice(0, 2).join('、') || '票务头部盘'} 继续扛流量，${sections[1].hot[0] || '数码回收盘'} 给出清晰回收锚价，${sections[3].hot[0] || '纪念币钞主流盘'} 和 ${sections[2].hot[0] || '贵金属盘口'} 也都能支撑内容补位。`
+  const overview = `今天的盘面不再只是票务独走。${sections[0].hot.slice(0, 2).join('、') || '票务头部盘'} 继续扛流量，${sections[1].hot[0] || '数码和茅台盘'} 只保留还能真正成交的目标，${sections[3].hot[0] || '纪念币钞主流盘'} 和 ${sections[2].hot[0] || '贵金属盘口'} 也都能支撑内容补位。`
   const lines = [
     `# 牛牛日报 | ${DATE_KEY}`,
     '',
@@ -466,7 +639,7 @@ function buildReport(messages, clusters, plan) {
     '',
     overview,
     '',
-    `本次共扫描 ${groupCount} 个群、${messages.length} 条文本消息，整理出 ${publishable} 条高置信可发站信号，另有 ${reportOnly} 条只适合做行情参考。今日最终精选 ${plan.length} 条托管盘口，适合直接挂站和对外宣发。`,
+    `今天整理出 ${publishable} 条高置信可发站信号，另有 ${reportOnly} 条只适合做行情参考。最终精选 ${plan.length} 条有效盘口，适合直接挂站和对外宣发。`,
     '',
     '## 主升主跌',
     '',

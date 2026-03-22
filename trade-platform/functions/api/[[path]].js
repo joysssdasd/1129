@@ -74,7 +74,8 @@ const POINT_CHANGE_TYPES = {
   dailyCheckIn: 11
 }
 
-const AUTO_MARKET_INFO_PREFIX = '自动整理自微信群行情'
+const AUTO_MARKET_INFO_PREFIX = '__managed_market__'
+const LEGACY_AUTO_MARKET_INFO_PREFIX = '自动整理自微信群行情'
 const MANAGED_SYNC_KIND = 'niuniubase.managed-market-sync'
 const MANAGED_SYNC_PROTOCOL_VERSION = 1
 const AUTO_MARKET_SETTING_CATEGORIES = {
@@ -1266,7 +1267,8 @@ const indexManagedRecentPosts = (rows = []) => {
 const isManagedAutoMarketPost = (post) =>
   Boolean(post) &&
   typeof post.extra_info === 'string' &&
-  post.extra_info.startsWith(AUTO_MARKET_INFO_PREFIX)
+  (post.extra_info.startsWith(AUTO_MARKET_INFO_PREFIX) ||
+    post.extra_info.startsWith(LEGACY_AUTO_MARKET_INFO_PREFIX))
 
 const loadRecentOperatorMarketPosts = async ({ config, operatorId, categoryIds }) => {
   if (!Array.isArray(categoryIds) || categoryIds.length === 0) return []

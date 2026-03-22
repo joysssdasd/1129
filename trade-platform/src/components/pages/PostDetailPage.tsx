@@ -4,6 +4,7 @@ import { useUser } from '../../contexts/UserContext'
 import { supabase } from '../../services/supabase'
 import { ArrowLeft, Eye, Calendar, Tag, AlertTriangle, Flag } from 'lucide-react'
 import { log } from '../../utils/logger'
+import { getPublicExtraInfo } from '../../utils/managedMarket'
 
 export default function PostDetailPage() {
   const { id } = useParams()
@@ -158,6 +159,8 @@ export default function PostDetailPage() {
 
   if (!post) return null
 
+  const publicExtraInfo = getPublicExtraInfo(post.extra_info)
+
   const tradeTypeMap: any = {
     1: { label: '求购', color: 'bg-green-100 text-green-700' },
     2: { label: '出售', color: 'bg-blue-100 text-blue-700' },
@@ -200,9 +203,9 @@ export default function PostDetailPage() {
               </div>
             )}
 
-            {post.extra_info && (
+            {publicExtraInfo && (
               <div className="text-gray-600">
-                补充信息：{post.extra_info}
+                补充信息：{publicExtraInfo}
               </div>
             )}
 
