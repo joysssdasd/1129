@@ -54,8 +54,20 @@ const OTHER_PATTERNS = [
 ]
 const DIGITAL_JUNK_PATTERN = /(工作机|脱坑机|二手机|组屏机|卡贴机|监管机|小花|大花|下半截|拆机|改码|无码|有锁|无限量|国外订单|低价扣费|安卓工作机)/u
 const STALE_DIGITAL_PATTERN = /(7p\/7|iphone\s*7|iphone7|iphone8|8p|6s|6sp|se2|se3|iphonexr|iphonex|苹果x|苹果xr|x组屏机|xr组屏机|11组屏机|12组屏机|13组屏机|14组屏机|红米\d|redmi\d|oppo\s*r\d+|vivox\d+|荣耀\d+|p9|p10|p20)/iu
-const MODERN_IPHONE_PATTERN = /(?:iphone\s*)?(?:16|17)(?:\s*(?:pro(?:\s*max)?|plus))?/iu
-const MODERN_HUAWEI_PATTERN = /(mate\s*xt|mate\s*x\d{1,2}|pura\s*x|mate\s*70\s*rs|折叠屏)/iu
+const DIRECT_PUBLISH_HARDWARE_DIGITAL_RULES = [
+  { canonical: 'iPhone17 Pro Max', regex: /(?:iphone|苹果)?17promax/iu },
+  { canonical: 'iPhone17 Pro', regex: /(?:iphone|苹果)?17pro/iu },
+  { canonical: 'iPhone17', regex: /(?:iphone|苹果)?17/iu },
+  { canonical: 'iPhone16 Pro Max', regex: /(?:iphone|苹果)?16promax/iu },
+  { canonical: 'iPhone16 Pro', regex: /(?:iphone|苹果)?16pro/iu },
+  { canonical: 'iPhone16 Plus', regex: /(?:iphone|苹果)?16plus/iu },
+  { canonical: 'iPhone16', regex: /(?:iphone|苹果)?16/iu },
+  { canonical: '华为Mate XT', regex: /(?:华为)?matext(?:非凡大师)?|三折叠/iu },
+  { canonical: '华为Mate X6', regex: /(?:华为)?matex6/iu },
+  { canonical: '华为Pura X', regex: /(?:华为)?purax/iu }
+]
+const DIRECT_PUBLISH_HARDWARE_DIGITAL_LABELS = 'iPhone 16/16 Plus/16 Pro/16 Pro Max、iPhone 17/17 Pro/17 Pro Max、华为 Mate XT/Mate X6/Pura X'
+const MAOTAI_DIRECT_PUBLISH_PATTERN = /(原箱|订单|闷包|散订单|改地址|原件|整箱)/u
 
 function getShanghaiDateKey(dateInput) {
   const local = new Date(dateInput.getTime() + 8 * 60 * 60 * 1000)
@@ -108,25 +120,30 @@ function normalizeDigitalItemName(item) {
   if (/^mate70rs$/iu.test(value)) return '华为Mate 70 RS'
   return value
 }
+function matchDirectPublishHardwareDigitalRule(text = '') {
+  const combined = normalize(text).replace(/\s+/g, '')
+  if (!combined) return null
+  return DIRECT_PUBLISH_HARDWARE_DIGITAL_RULES.find((rule) => rule.regex.test(combined)) || null
+}
+function isMaotaiDirectPublishSignal(text = '') {
+  const combined = normalize(text).replace(/\s+/g, '')
+  if (!/i茅台|茅台/u.test(combined)) return false
+  return MAOTAI_DIRECT_PUBLISH_PATTERN.test(combined)
+}
+function isWhitelistedHardwareDigitalItem(itemName = '') {
+  return Boolean(matchDirectPublishHardwareDigitalRule(itemName))
+}
+function hasWhitelistedHardwareDigitalItems(itemStats = []) {
+  return itemStats.some((row) => isWhitelistedHardwareDigitalItem(row.item))
+}
 function normalizeManagedExtraInfo() {
   return INTERNAL_MANAGED_MARKET_PREFIX
 }
 function normalizeDigitalPublishItemName(item, rawText = '') {
   const base = normalizeDigitalItemName(item)
   const combined = normalize(`${item} ${rawText}`).replace(/\s+/g, '')
-  if (/(?:iphone)?17promax/iu.test(combined)) return 'iPhone17 Pro Max'
-  if (/(?:iphone)?17pro/iu.test(combined)) return 'iPhone17 Pro'
-  if (/(?:iphone)?17plus/iu.test(combined)) return 'iPhone17 Plus'
-  if (/(?:iphone)?17/iu.test(combined)) return 'iPhone17'
-  if (/(?:iphone)?16promax/iu.test(combined)) return 'iPhone16 Pro Max'
-  if (/(?:iphone)?16pro/iu.test(combined)) return 'iPhone16 Pro'
-  if (/(?:iphone)?16plus/iu.test(combined)) return 'iPhone16 Plus'
-  if (/(?:iphone)?16/iu.test(combined)) return 'iPhone16'
-  if (/matext/iu.test(combined)) return '华为Mate XT'
-  if (/matex6/iu.test(combined)) return '华为Mate X6'
-  if (/matex5/iu.test(combined)) return '华为Mate X5'
-  if (/mate70rs/iu.test(combined)) return '华为Mate 70 RS'
-  if (/purax/iu.test(combined)) return '华为Pura X'
+  const hardwareMatch = matchDirectPublishHardwareDigitalRule(combined)
+  if (hardwareMatch) return hardwareMatch.canonical
   if (/i茅台|茅台/u.test(combined)) {
     if (/原箱/u.test(combined)) return 'i茅台原箱'
     if (/散订单/u.test(combined) && /改地址/u.test(combined)) return '茅台散订单改地址'
@@ -141,12 +158,10 @@ function normalizeDigitalPublishItemName(item, rawText = '') {
 function shouldDirectPublishDigital(item, rawText = '') {
   const combined = normalize(`${item} ${rawText}`).replace(/\s+/g, '')
   if (!combined) return false
-  if (/i茅台|茅台/u.test(combined)) {
-    return /(原箱|订单|闷包|散订单|改地址|原件)/u.test(combined)
-  }
   if (DIGITAL_JUNK_PATTERN.test(combined)) return false
   if (STALE_DIGITAL_PATTERN.test(combined)) return false
-  return MODERN_IPHONE_PATTERN.test(combined) || MODERN_HUAWEI_PATTERN.test(combined)
+  if (isMaotaiDirectPublishSignal(combined)) return true
+  return Boolean(matchDirectPublishHardwareDigitalRule(combined))
 }
 function normalizeMetalSignal(item, price, rawText = '') {
   const normalizedItem = normalize(item).replace(/\s+/g, '')
@@ -437,13 +452,21 @@ function classifyTrend(itemStats, buyCount, sellCount) {
   return '震荡'
 }
 
-function boardObserve(name, topItems, supply, trend) {
+function boardObserve(name, topItems, supply, trend, itemStats = []) {
   const labels = topItems.map((row) => row.item).join('、') || '头部标的'
   if (name === '演唱会') {
     return `票务里 ${labels} 最活跃，当前挂站信号仍以主流看台档和少量高溢价档位为主。`
   }
   if (name === '数码和茅台') {
-    return `数码和茅台虽然样本量不大，但 ${labels} 的回收价已经形成清晰锚点，适合直接做回收看板。`
+    const hardwareRows = itemStats.filter((row) => isWhitelistedHardwareDigitalItem(row.item))
+    const maotaiRows = itemStats.filter((row) => /i茅台|茅台/u.test(row.item))
+    if (!hardwareRows.length && maotaiRows.length) {
+      return `今天数码板块只保留 ${labels} 这类高流动性茅台盘，旗舰手机回收价还不够连续，宁可空着也不挂旧机。`
+    }
+    if (!hardwareRows.length) {
+      return `今天没有足够高质量的旗舰机回收盘进站，当前继续坚持白名单，只等 ${DIRECT_PUBLISH_HARDWARE_DIGITAL_LABELS} 这类标的。`
+    }
+    return `数码板块只保留 ${hardwareRows.map((row) => row.item).join('、')} 这类白名单标的，${maotaiRows.length ? `茅台盘用 ${maotaiRows.map((row) => row.item).join('、')} 做成交锚点。` : '旧机和废料盘继续拦在站外。'}`
   }
   if (name === '纪念币/钞') {
     return `纪念币钞里 ${labels} 的报价最规整，买盘和卖盘都能看到明确挂价。`
@@ -454,13 +477,16 @@ function boardObserve(name, topItems, supply, trend) {
   return `${name} 里 ${labels} 的报价最集中，当前供需表现为 ${supply}、盘面节奏为 ${trend}。`
 }
 
-function boardForecast(name, supply, trend) {
+function boardForecast(name, supply, trend, itemStats = []) {
   if (name === '演唱会') {
     if (trend === '分化') return '高价档继续分化，主流看台档更适合挂站养成交。'
     if (supply === '需求强') return '强势买盘短线仍可能抬价，核心档位更容易先被接走。'
     return '供给偏多的票务盘更容易先松动，优先观察主流档位是否回落。'
   }
   if (name === '数码和茅台') {
+    if (!hasWhitelistedHardwareDigitalItems(itemStats)) {
+      return `继续等 ${DIRECT_PUBLISH_HARDWARE_DIGITAL_LABELS} 这类白名单机型出现连续回收价，当前宁缺毋滥。`
+    }
     return supply === '需求强' ? '高频回收机型和原箱茅台短线仍有抬价空间。' : '先以库存消化为主，短线偏稳或略弱。'
   }
   if (name === '纪念币/钞') {
@@ -568,8 +594,8 @@ function boardSummary(name, clusters, plan, previousState) {
     bands: top.map((row) => `${row.item} 主流 ${formatBand(row.low, row.high)}`),
     supply,
     trend,
-    observe: boardObserve(name, top, supply, trend),
-    forecast: boardForecast(name, supply, trend),
+    observe: boardObserve(name, top, supply, trend, itemStats),
+    forecast: boardForecast(name, supply, trend, itemStats),
     mainRise: describeRiseMove(riseItem, riseItem?.previous),
     mainFall: describeFallMove(fallItem, fallItem?.previous),
     itemStats,
@@ -601,19 +627,24 @@ function buildPromoVariants(sections, pulse, meta) {
   const collect = sections.find((section) => section.name === '纪念币/钞')
   const metal = sections.find((section) => section.name === '贵金属')
   const leadConcert = concert?.hot[0] || '票务头部盘'
+  const digitalHasHardware = hasWhitelistedHardwareDigitalItems(digital?.itemStats || [])
   const leadDigital = digital?.hot[0] || '数码回收盘'
+  const digitalNarrative = digitalHasHardware
+    ? `${leadDigital} 给出清晰回收锚价`
+    : `${leadDigital} 托住数码板块，但旗舰机回收盘今天继续宁缺毋滥`
   const leadCollect = collect?.hot[0] || '纪念币钞主流盘'
   const leadMetal = metal?.hot[0] || '贵金属现货盘'
 
   return {
     titles: [
-      `牛牛日报：${leadConcert}领跑，${leadDigital}接力，四板块都能出活盘`,
+      `牛牛日报：${leadConcert}领跑，${digitalHasHardware ? `${leadDigital}接力` : '数码宁缺毋滥'}，四板块都有实盘`,
       `今天哪些还在强，哪些开始松：${leadConcert}、${leadDigital}、${leadCollect} 实盘速览`,
-      `四板块并重的实盘日报：票务热、数码稳、纪念币清晰、贵金属补位`
+      `四板块并重的实盘日报：票务热、数码严选、纪念币清晰、贵金属补位`
     ],
-    friendCircle: `今天的盘面不再只有票务。${leadConcert} 继续活跃，${leadDigital} 给出清晰回收锚价，${leadCollect} 和 ${leadMetal} 也都能讲清楚。今天站内精选 ${meta.planCount} 条活盘，四个板块都能拿出有参考价值的实盘判断。`,
+    friendCircle: `今天的盘面不再只有票务。${leadConcert} 继续活跃，${digitalNarrative}，${leadCollect} 和 ${leadMetal} 也都能讲清楚。今天站内精选 ${meta.planCount} 条活盘，四个板块都能拿出有参考价值的实盘判断。`,
     groupFlash: `【牛牛日报快讯】1. 最热板块是 ${pulse.hottestBoard}；2. 需求最强的是 ${pulse.strongestDemand}，供给最强的是 ${pulse.strongestSupply}；3. 今天站内精选 ${meta.planCount} 条，四板块都有可看盘。`,
-    siteLead: `今天四个板块都能整理出有参考价值的实盘信号。票务继续带流量，数码和茅台只保留能真正成交的目标，纪念币钞最适合做高质量补位，贵金属负责补齐品类存在感。`,
+    siteLead: `今天四个板块都能整理出有参考价值的实盘信号。票务继续带流量，数码和茅台只保留能真正成交的目标，纪念币钞最适合做高质量补位，贵金属负责补齐品类存在感。${digitalHasHardware ? '' : '旗舰旧机一律不硬挂，宁可少也不污染站内盘面。'}`
+      .trim(),
     shortAlert: `四板块都有活盘，不再只是票务独撑。`
   }
 }
@@ -631,7 +662,8 @@ function buildReport(messages, clusters, plan) {
     planCount: plan.length
   })
 
-  const overview = `今天的盘面不再只是票务独走。${sections[0].hot.slice(0, 2).join('、') || '票务头部盘'} 继续扛流量，${sections[1].hot[0] || '数码和茅台盘'} 只保留还能真正成交的目标，${sections[3].hot[0] || '纪念币钞主流盘'} 和 ${sections[2].hot[0] || '贵金属盘口'} 也都能支撑内容补位。`
+  const digitalHasHardware = hasWhitelistedHardwareDigitalItems(sections[1]?.itemStats || [])
+  const overview = `今天的盘面不再只是票务独走。${sections[0].hot.slice(0, 2).join('、') || '票务头部盘'} 继续扛流量，${sections[1].hot[0] || '数码和茅台盘'} 只保留还能真正成交的目标${digitalHasHardware ? '' : '，手机回收盘继续坚持白名单、宁缺毋滥'}，${sections[3].hot[0] || '纪念币钞主流盘'} 和 ${sections[2].hot[0] || '贵金属盘口'} 也都能支撑内容补位。`
   const lines = [
     `# 牛牛日报 | ${DATE_KEY}`,
     '',
