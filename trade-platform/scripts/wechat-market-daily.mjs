@@ -26,6 +26,8 @@ const DEFAULT_OPERATOR_WECHAT = 'niuniubase'
 const MANAGED_SYNC_KIND = 'niuniubase.managed-market-sync'
 const MANAGED_SYNC_PROTOCOL_VERSION = 1
 const INTERNAL_MANAGED_MARKET_PREFIX = '__managed_market__'
+const PROCESSING_BATCH_KIND = 'niuniubase.wechat-processing-batch'
+const PROCESSING_BATCH_PROTOCOL_VERSION = 1
 
 const CITIES = ['北京','上海','广州','深圳','杭州','南宁','武汉','天津','郑州','重庆','成都','长沙','青岛','绍兴','厦门','佛山','烟台','泉州','贵阳','大连','香港','澳门','首尔','仁川','全国']
 const ARTISTS = ['周杰伦','谢霆锋','陶喆','蔡依林','凤凰传奇','张杰','李宗盛','梁静茹','薛之谦','单依纯','张震岳','黄丽玲','胡彦斌','潘玮柏','李荣浩','杨千嬅','张天赋','伍佰','周传雄','郑润泽','余佳运','陈嘉桦','顽童','ONER','BTS','SVT','CNBLUE','NEXZ','孙燕姿','刘德华']
@@ -82,6 +84,7 @@ function normalize(text) { return String(text || '').replace(/[—–]/g, '-').r
 function normalizeMessageBody(text) { return String(text || '').replace(/[—–]/g, '-').replace(/\r\n?/g, '\n').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim() }
 function compact(text) { return normalize(text).replace(/[\s🔥💥‼️❗️🈶🈚️🍉🎫⚠️]/gu, '') }
 function uniqueSorted(values) { return [...new Set((values || []).filter(Boolean))].sort() }
+function readJsonFile(file) { return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/u, '')) }
 function sum(values) { return values.filter((value) => Number.isFinite(value)).reduce((total, value) => total + value, 0) }
 function average(values) { const filtered = values.filter((value) => Number.isFinite(value)); return filtered.length ? sum(filtered) / filtered.length : 0 }
 function formatBand(low, high) { if (!Number.isFinite(low) && !Number.isFinite(high)) return '样本不足'; if (!Number.isFinite(low)) return `${Math.round(high)}`; if (!Number.isFinite(high)) return `${Math.round(low)}`; return Math.round(low) === Math.round(high) ? `${Math.round(low)}` : `${Math.round(low)}-${Math.round(high)}` }
@@ -140,6 +143,9 @@ function hasWhitelistedHardwareDigitalItems(itemStats = []) {
 }
 function normalizeManagedExtraInfo() {
   return INTERNAL_MANAGED_MARKET_PREFIX
+}
+function relativeWorkspacePath(fullPath) {
+  return path.relative(WORKSPACE_ROOT, fullPath).replace(/\\/g, '/')
 }
 function normalizeDigitalPublishItemName(item, rawText = '') {
   const base = normalizeDigitalItemName(item)
@@ -350,7 +356,7 @@ function loadMessages() {
       if (!file.endsWith('.json')) continue
       const fullFile = path.join(fullDir, file)
       sourceFiles.push(fullFile)
-      const payload = JSON.parse(fs.readFileSync(fullFile, 'utf8'))
+      const payload = readJsonFile(fullFile)
       const groupName = payload?.session?.name || payload?.session?.displayName || path.basename(file, '.json')
       for (const row of (payload.messages || [])) {
         const text = normalizeMessageBody(typeof row?.content === 'string' ? row.content : '')
@@ -887,6 +893,55 @@ function buildBatchManifest(manifest, posts, options = {}) {
   }
 }
 
+function coreOutputPaths(dateKey = DATE_KEY) {
+  const outputDir = path.join(GENERATED_ROOT, dateKey)
+  return [
+    path.join(outputDir, 'processing-manifest.json'),
+    path.join(outputDir, 'raw-candidates.json'),
+    path.join(outputDir, 'deduped-clusters.json'),
+    path.join(outputDir, 'publish-plan.json'),
+    path.join(outputDir, 'managed-sync-manifest.json'),
+    path.join(outputDir, 'report-v2.json'),
+    path.join(REPORTS_ROOT, `${dateKey}-牛牛日报.md`),
+    path.join(REPORTS_ROOT, `${dateKey}-牛牛日报-V2.md`),
+    path.join(FINAL_REPORTS_ROOT, `${dateKey}-牛牛日报-正式版.md`),
+    path.join(HISTORY_ROOT, `${dateKey}-自动处理.md`)
+  ]
+}
+
+function buildProcessingManifest(sourceFiles = []) {
+  const relativeFiles = uniqueSorted(sourceFiles.map((file) => relativeWorkspacePath(file)))
+  return {
+    kind: PROCESSING_BATCH_KIND,
+    protocolVersion: PROCESSING_BATCH_PROTOCOL_VERSION,
+    batchId: sha1(JSON.stringify({ date: DATE_KEY, files: relativeFiles })),
+    date: DATE_KEY,
+    generatedAt: new Date().toISOString(),
+    sourceFileCount: relativeFiles.length,
+    sourceFiles: relativeFiles,
+    cleanupPolicy: {
+      deleteProcessedWechatFiles: SHOULD_DELETE_PROCESSED_WECHAT,
+      requiredOutputs: coreOutputPaths(DATE_KEY).map((file) => relativeWorkspacePath(file))
+    }
+  }
+}
+
+function writeProcessingManifest(processingManifest) {
+  const outputDir = path.join(GENERATED_ROOT, DATE_KEY)
+  ensureDir(outputDir)
+  fs.writeFileSync(path.join(outputDir, 'processing-manifest.json'), JSON.stringify(processingManifest, null, 2), 'utf8')
+}
+
+function verifyCoreOutputs(dateKey = DATE_KEY) {
+  const requiredFiles = coreOutputPaths(dateKey)
+  const missingFiles = requiredFiles.filter((file) => !fs.existsSync(file))
+  return {
+    ok: missingFiles.length === 0,
+    requiredFiles: requiredFiles.map((file) => relativeWorkspacePath(file)),
+    missingFiles: missingFiles.map((file) => relativeWorkspacePath(file))
+  }
+}
+
 function writeOutputs(rawCandidates, clusters, plan, report, manifest) {
   const outputDir = path.join(GENERATED_ROOT, DATE_KEY)
   ensureDir(outputDir)
@@ -904,7 +959,7 @@ function writeOutputs(rawCandidates, clusters, plan, report, manifest) {
   fs.writeFileSync(path.join(FINAL_REPORTS_ROOT, `${DATE_KEY}-牛牛日报-正式版.md`), report.markdown, 'utf8')
   fs.writeFileSync(
     path.join(HISTORY_ROOT, `${DATE_KEY}-自动处理.md`),
-    `# ${DATE_KEY} 自动处理\n\n- 原始候选：${rawCandidates.length}\n- 去重后信号簇：${clusters.length}\n- 准备发站：${plan.length}\n- 原始文件：${uniqueSorted(rawCandidates.map((row) => row.source.source_file)).length}\n- 最强需求板块：${report.pulse.strongestDemand}\n- 最强供给板块：${report.pulse.strongestSupply}\n- 今日最热板块：${report.pulse.hottestBoard}\n`,
+    `# ${DATE_KEY} 自动处理\n\n- 原始候选：${rawCandidates.length}\n- 去重后信号簇：${clusters.length}\n- 准备发站：${plan.length}\n- 原始文件：${uniqueSorted(rawCandidates.map((row) => row.source.source_file)).length}\n- 最强需求板块：${report.pulse.strongestDemand}\n- 最强供给板块：${report.pulse.strongestSupply}\n- 今日最热板块：${report.pulse.hottestBoard}\n- 核心输出校验：待写入完成后执行\n`,
     'utf8'
   )
 
@@ -963,14 +1018,18 @@ function deleteProcessedWechatFiles(sourceFiles = []) {
     removedDirs: removedDirs.map((dir) => path.relative(WORKSPACE_ROOT, dir).replace(/\\/g, '/'))
   }
 }
-function writeProcessedWechatCleanup(cleanupResult) {
+function writeProcessedWechatCleanup(cleanupResult, outputVerification = null) {
   if (!cleanupResult) return
   const outputDir = path.join(GENERATED_ROOT, DATE_KEY)
   ensureDir(outputDir)
-  fs.writeFileSync(path.join(outputDir, 'processed-wechat-cleanup.json'), JSON.stringify(cleanupResult, null, 2), 'utf8')
+  const payload = {
+    ...cleanupResult,
+    outputVerification
+  }
+  fs.writeFileSync(path.join(outputDir, 'processed-wechat-cleanup.json'), JSON.stringify(payload, null, 2), 'utf8')
   fs.appendFileSync(
     path.join(HISTORY_ROOT, `${DATE_KEY}-自动处理.md`),
-    `\n## 原始聊天文件清理\n\n- 删除文件：${cleanupResult.deletedCount}\n- 缺失文件：${cleanupResult.missingCount}\n- 删除失败：${cleanupResult.failedCount}\n`,
+    `\n## 原始聊天文件清理\n\n- 删除文件：${cleanupResult.deletedCount}\n- 缺失文件：${cleanupResult.missingCount}\n- 删除失败：${cleanupResult.failedCount}\n- 核心输出校验：${outputVerification?.ok ? '通过' : '未通过'}\n`,
     'utf8'
   )
 }
@@ -1081,6 +1140,8 @@ async function publishPlan(manifest, adminId) {
 }
 
 const loaded = loadMessages()
+const processingManifest = buildProcessingManifest(loaded.sourceFiles)
+writeProcessingManifest(processingManifest)
 const messages = loaded.messages
 const rawCandidates = messages.flatMap((message) => parseMessage(message)).filter((row) => row.itemName && row.normalizedPrice > 0)
 const clusters = dedupeCandidates(rawCandidates)
@@ -1096,6 +1157,21 @@ if (SHOULD_PUBLISH && Number(previewResult?.failedCount || 0) > 0) {
 }
 const publishResult = SHOULD_PUBLISH ? await publishPlan(manifest, operator.id) : null
 writeExecutionOutputs(previewResult, publishResult)
-const cleanupResult = SHOULD_DELETE_PROCESSED_WECHAT ? deleteProcessedWechatFiles(loaded.sourceFiles) : null
-writeProcessedWechatCleanup(cleanupResult)
-console.log(JSON.stringify({ date: DATE_KEY, sourceMessages: messages.length, rawCandidates: rawCandidates.length, clusters: clusters.length, publishPlanCount: plan.length, operatorUserId: operator.id, previewResult, publishResult, cleanupResult }, null, 2))
+const outputVerification = verifyCoreOutputs(DATE_KEY)
+const cleanupResult = SHOULD_DELETE_PROCESSED_WECHAT
+  ? outputVerification.ok
+    ? deleteProcessedWechatFiles(loaded.sourceFiles)
+    : {
+        deletedCount: 0,
+        missingCount: 0,
+        failedCount: 0,
+        deletedFiles: [],
+        missingFiles: [],
+        failedFiles: [],
+        removedDirs: [],
+        skipped: true,
+        reason: 'core outputs missing; processed source files were kept'
+      }
+  : null
+writeProcessedWechatCleanup(cleanupResult, outputVerification)
+console.log(JSON.stringify({ date: DATE_KEY, sourceMessages: messages.length, rawCandidates: rawCandidates.length, clusters: clusters.length, publishPlanCount: plan.length, operatorUserId: operator.id, previewResult, publishResult, outputVerification, cleanupResult }, null, 2))
