@@ -17,6 +17,7 @@ const LEARNING_FILE = path.join(CC_ROOT, 'learning', '日报学习记录.md')
 const SITE_ORIGIN = process.argv.find((arg) => arg.startsWith('--site='))?.split('=')[1] || 'https://www.niuniubase.top'
 const SHOULD_PUBLISH = process.argv.includes('--publish')
 const SHOULD_PREVIEW_SYNC = process.argv.includes('--preview-sync') || SHOULD_PUBLISH
+const SHOULD_DELETE_PROCESSED_WECHAT = !process.argv.includes('--keep-wechat')
 const PUBLISH_LIMIT = Number(process.argv.find((arg) => arg.startsWith('--limit='))?.split('=')[1] || 24)
 const PUBLISH_BATCH_SIZE = Number(process.argv.find((arg) => arg.startsWith('--batch='))?.split('=')[1] || 4)
 const DATE_OVERRIDE = process.argv.find((arg) => arg.startsWith('--date='))?.split('=')[1] || ''
@@ -80,6 +81,7 @@ function sha1(text) { return crypto.createHash('sha1').update(text).digest('hex'
 function normalize(text) { return String(text || '').replace(/[—–]/g, '-').replace(/\s+/g, ' ').trim() }
 function normalizeMessageBody(text) { return String(text || '').replace(/[—–]/g, '-').replace(/\r\n?/g, '\n').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim() }
 function compact(text) { return normalize(text).replace(/[\s🔥💥‼️❗️🈶🈚️🍉🎫⚠️]/gu, '') }
+function uniqueSorted(values) { return [...new Set((values || []).filter(Boolean))].sort() }
 function sum(values) { return values.filter((value) => Number.isFinite(value)).reduce((total, value) => total + value, 0) }
 function average(values) { const filtered = values.filter((value) => Number.isFinite(value)); return filtered.length ? sum(filtered) / filtered.length : 0 }
 function formatBand(low, high) { if (!Number.isFinite(low) && !Number.isFinite(high)) return '样本不足'; if (!Number.isFinite(low)) return `${Math.round(high)}`; if (!Number.isFinite(high)) return `${Math.round(low)}`; return Math.round(low) === Math.round(high) ? `${Math.round(low)}` : `${Math.round(low)}-${Math.round(high)}` }
@@ -338,7 +340,46 @@ function candidateBase(message, parsed) {
 function parseTicket(message, board) { const cleanedText = sanitizeTicketText(message.text); const { intent, explicit } = intentOf(cleanedText, board); const item = itemFromTicket(cleanedText); const city = cityOf(cleanedText); const date = ticketDateLabel(cleanedText); const candidates = []; const seen = new Set(); for (const pattern of TICKET_PATTERNS) { pattern.lastIndex = 0; for (const match of cleanedText.matchAll(pattern)) { const spec = normalize(match.groups?.spec || ''); const prices = choosePrices(match.groups?.prices || '', intent || 'sell'); if (!item || !spec || !prices) continue; if (/^\d+$/.test(spec) && Number(spec) > 2400) continue; if (prices.price < 300 || prices.price > 20000) continue; const key = `${spec}|${prices.price}`; if (seen.has(key)) continue; seen.add(key); candidates.push(candidateBase({ ...message, text: cleanedText }, { board, intent: intent || 'sell', explicitIntent: explicit, item, city, date, spec, priceText: `${spec} ${match.groups?.prices || ''}`, price: prices.price, low: prices.low, high: prices.high })) } } const regular = candidates.find((c) => !/(前|包厢|内场|VIP|CD区)/.test(c.specOrTier || '')); const premium = candidates.find((c) => /(前|包厢|内场|VIP|CD区)/.test(c.specOrTier || '')); return [regular, premium].filter(Boolean).filter((c, i, arr) => arr.findIndex((x) => x.candidateId === c.candidateId) === i) }
 function parseWithPatterns(message, board, patterns) { const candidates = []; const seen = new Set(); for (const segment of splitTradeSegments(message.text)) { const segmentMessage = { ...message, rawText: message.text, text: segment }; const { intent: inferred, explicit } = intentOf(segment, board); for (const pattern of patterns) { pattern.lastIndex = 0; for (const match of segment.matchAll(pattern)) { const price = Number(match.groups?.price || 0); if (!Number.isFinite(price) || price <= 0) continue; if (board === '其他分类' && price < 5) continue; const item = normalize(match.groups?.item || '').replace(/^[出收求卖接转\s]+/u, '').replace(/\s+/g, ''); if (!item) continue; const qty = normalize(match.groups?.qty || ''); const intentToken = match.groups?.intent || ''; const intent = intentToken === '收' ? 'buy' : intentToken === '出' ? 'sell' : inferred; if (!intent) continue; const key = `${item}|${price}|${qty}|${intent}`; if (seen.has(key)) continue; seen.add(key); candidates.push(candidateBase(segmentMessage, { board, intent, explicitIntent: Boolean(intentToken) || explicit, item, city: cityOf(segment), date: '', spec: qty, qty, priceText: `${price}${intent === 'buy' ? '收' : '出'}`, price, low: price, high: price })) } } } return candidates.slice(0, board === '数码和茅台' ? 12 : 4) }
 function parseMessage(message) { const board = boardOf(message.text, message.groupName); if (!board || message.text.length < 6) return []; if (board === '演唱会') return parseTicket(message, board); if (board === '数码和茅台') return parseWithPatterns(message, board, DIGITAL_PATTERNS); if (board === '纪念币/钞') return parseWithPatterns(message, board, COLLECT_PATTERNS); if (board === '贵金属') return parseWithPatterns(message, board, METAL_PATTERNS); if (board === '其他分类') return parseWithPatterns(message, board, OTHER_PATTERNS); return [] }
-function loadMessages() { const rows = []; for (const dir of fs.readdirSync(WECHAT_ROOT, { withFileTypes: true })) { if (!dir.isDirectory() || dir.name === 'EchoTrace') continue; const fullDir = path.join(WECHAT_ROOT, dir.name); for (const file of fs.readdirSync(fullDir)) { if (!file.endsWith('.json')) continue; const fullFile = path.join(fullDir, file); const payload = JSON.parse(fs.readFileSync(fullFile, 'utf8')); const groupName = payload?.session?.name || payload?.session?.displayName || path.basename(file, '.json'); for (const row of (payload.messages || [])) { const text = normalizeMessageBody(typeof row?.content === 'string' ? row.content : ''); if (!text || row?.type !== '文本消息') continue; rows.push({ sourceFile: path.relative(WORKSPACE_ROOT, fullFile).replace(/\\/g, '/'), groupName, messageId: row?.localId || sha1(`${fullFile}|${row?.formattedTime}|${text}`), time: row?.formattedTime || row?.createTime || '', sender: row?.senderDisplayName || row?.senderUsername || '未知发送人', text }) } } } const seen = new Map(); return rows.filter((message) => { const key = `${message.sender}|${compact(message.text)}`; const currentTime = new Date(message.time || Date.now()); const lastTime = seen.get(key); if (lastTime && Math.abs(currentTime - lastTime) <= 6 * 60 * 60 * 1000) return false; seen.set(key, currentTime); return true }) }
+function loadMessages() {
+  const rows = []
+  const sourceFiles = []
+  for (const dir of fs.readdirSync(WECHAT_ROOT, { withFileTypes: true })) {
+    if (!dir.isDirectory() || dir.name === 'EchoTrace') continue
+    const fullDir = path.join(WECHAT_ROOT, dir.name)
+    for (const file of fs.readdirSync(fullDir)) {
+      if (!file.endsWith('.json')) continue
+      const fullFile = path.join(fullDir, file)
+      sourceFiles.push(fullFile)
+      const payload = JSON.parse(fs.readFileSync(fullFile, 'utf8'))
+      const groupName = payload?.session?.name || payload?.session?.displayName || path.basename(file, '.json')
+      for (const row of (payload.messages || [])) {
+        const text = normalizeMessageBody(typeof row?.content === 'string' ? row.content : '')
+        if (!text || row?.type !== '文本消息') continue
+        rows.push({
+          sourceFile: path.relative(WORKSPACE_ROOT, fullFile).replace(/\\/g, '/'),
+          groupName,
+          messageId: row?.localId || sha1(`${fullFile}|${row?.formattedTime}|${text}`),
+          time: row?.formattedTime || row?.createTime || '',
+          sender: row?.senderDisplayName || row?.senderUsername || '未知发送人',
+          text
+        })
+      }
+    }
+  }
+  const seen = new Map()
+  const messages = rows.filter((message) => {
+    const key = `${message.sender}|${compact(message.text)}`
+    const currentTime = new Date(message.time || Date.now())
+    const lastTime = seen.get(key)
+    if (lastTime && Math.abs(currentTime - lastTime) <= 6 * 60 * 60 * 1000) return false
+    seen.set(key, currentTime)
+    return true
+  })
+  return {
+    messages,
+    sourceFiles: uniqueSorted(sourceFiles)
+  }
+}
 function dedupeCandidates(candidates) { const map = new Map(); for (const candidate of candidates) { if (!map.has(candidate.dedupeKey)) { map.set(candidate.dedupeKey, { ...candidate, signalCount: 1, groupNames: new Set([candidate.source.source_group]) }) } else { const current = map.get(candidate.dedupeKey); current.signalCount += 1; current.groupNames.add(candidate.source.source_group); current.priceLow = Math.min(current.priceLow, candidate.priceLow || candidate.normalizedPrice); current.priceHigh = Math.max(current.priceHigh, candidate.priceHigh || candidate.normalizedPrice); if (candidate.confidenceScore > current.confidenceScore) { current.confidenceScore = candidate.confidenceScore; current.title = candidate.title; current.extraInfo = candidate.extraInfo; current.keywords = candidate.keywords } } } return [...map.values()].map((cluster) => { cluster.groupCount = cluster.groupNames.size; cluster.groupNames = [...cluster.groupNames]; if (cluster.groupCount >= 2) cluster.confidenceScore = Math.min(100, cluster.confidenceScore + 6); if (cluster.signalCount >= 3) cluster.confidenceScore = Math.min(100, cluster.confidenceScore + 6); if (cluster.confidenceScore >= 80 && cluster.kind !== 'noise') { cluster.kind = 'publishable'; cluster.directPublish = true } else if (cluster.confidenceScore >= 60 && cluster.kind !== 'noise') { cluster.kind = 'report_only'; cluster.directPublish = false } else { cluster.kind = 'noise'; cluster.directPublish = false } return cluster }).sort((a, b) => b.confidenceScore - a.confidenceScore) }
 async function loadPublishingContext(config) { const categories = await jsonRequest(`${config.url}/rest/v1/categories?select=id,name,is_active&is_active=eq.true&order=sort_order.asc`, config.serviceKey); const admins = await jsonRequest(`${config.url}/rest/v1/users?select=id,wechat_id,is_admin&is_admin=eq.true&limit=20`, config.serviceKey); const settings = await jsonRequest(`${config.url}/rest/v1/system_settings?select=key,value&category=eq.service`, config.serviceKey); const customerWechat = settings.find((item) => item.key === 'customer_wechat')?.value || DEFAULT_OPERATOR_WECHAT; const operator = admins.find((item) => item.wechat_id === customerWechat) || admins[0]; return { categoryMap: Object.fromEntries(categories.map((row) => [row.name, row.id])), operator } }
 function familyKeyForCluster(cluster) {
@@ -863,7 +904,7 @@ function writeOutputs(rawCandidates, clusters, plan, report, manifest) {
   fs.writeFileSync(path.join(FINAL_REPORTS_ROOT, `${DATE_KEY}-牛牛日报-正式版.md`), report.markdown, 'utf8')
   fs.writeFileSync(
     path.join(HISTORY_ROOT, `${DATE_KEY}-自动处理.md`),
-    `# ${DATE_KEY} 自动处理\n\n- 原始候选：${rawCandidates.length}\n- 去重后信号簇：${clusters.length}\n- 准备发站：${plan.length}\n- 最强需求板块：${report.pulse.strongestDemand}\n- 最强供给板块：${report.pulse.strongestSupply}\n- 今日最热板块：${report.pulse.hottestBoard}\n`,
+    `# ${DATE_KEY} 自动处理\n\n- 原始候选：${rawCandidates.length}\n- 去重后信号簇：${clusters.length}\n- 准备发站：${plan.length}\n- 原始文件：${uniqueSorted(rawCandidates.map((row) => row.source.source_file)).length}\n- 最强需求板块：${report.pulse.strongestDemand}\n- 最强供给板块：${report.pulse.strongestSupply}\n- 今日最热板块：${report.pulse.hottestBoard}\n`,
     'utf8'
   )
 
@@ -874,6 +915,64 @@ function writeOutputs(rawCandidates, clusters, plan, report, manifest) {
       'utf8'
     )
   }
+}
+function deleteProcessedWechatFiles(sourceFiles = []) {
+  const deletedFiles = []
+  const missingFiles = []
+  const failedFiles = []
+  const touchedDirs = new Set()
+
+  for (const fullFile of uniqueSorted(sourceFiles)) {
+    try {
+      if (!fs.existsSync(fullFile)) {
+        missingFiles.push(fullFile)
+        continue
+      }
+      fs.unlinkSync(fullFile)
+      deletedFiles.push(fullFile)
+      touchedDirs.add(path.dirname(fullFile))
+    } catch (error) {
+      failedFiles.push({
+        file: fullFile,
+        message: error instanceof Error ? error.message : String(error)
+      })
+    }
+  }
+
+  const removedDirs = []
+  for (const dir of [...touchedDirs].sort((a, b) => b.length - a.length)) {
+    try {
+      if (!fs.existsSync(dir)) continue
+      if (fs.readdirSync(dir).length === 0) {
+        fs.rmdirSync(dir)
+        removedDirs.push(dir)
+      }
+    } catch {}
+  }
+
+  return {
+    deletedCount: deletedFiles.length,
+    missingCount: missingFiles.length,
+    failedCount: failedFiles.length,
+    deletedFiles: deletedFiles.map((file) => path.relative(WORKSPACE_ROOT, file).replace(/\\/g, '/')),
+    missingFiles: missingFiles.map((file) => path.relative(WORKSPACE_ROOT, file).replace(/\\/g, '/')),
+    failedFiles: failedFiles.map((row) => ({
+      ...row,
+      file: path.relative(WORKSPACE_ROOT, row.file).replace(/\\/g, '/')
+    })),
+    removedDirs: removedDirs.map((dir) => path.relative(WORKSPACE_ROOT, dir).replace(/\\/g, '/'))
+  }
+}
+function writeProcessedWechatCleanup(cleanupResult) {
+  if (!cleanupResult) return
+  const outputDir = path.join(GENERATED_ROOT, DATE_KEY)
+  ensureDir(outputDir)
+  fs.writeFileSync(path.join(outputDir, 'processed-wechat-cleanup.json'), JSON.stringify(cleanupResult, null, 2), 'utf8')
+  fs.appendFileSync(
+    path.join(HISTORY_ROOT, `${DATE_KEY}-自动处理.md`),
+    `\n## 原始聊天文件清理\n\n- 删除文件：${cleanupResult.deletedCount}\n- 缺失文件：${cleanupResult.missingCount}\n- 删除失败：${cleanupResult.failedCount}\n`,
+    'utf8'
+  )
 }
 function writeExecutionOutputs(previewResult, publishResult) {
   const outputDir = path.join(GENERATED_ROOT, DATE_KEY)
@@ -981,7 +1080,8 @@ async function publishPlan(manifest, adminId) {
   return aggregate
 }
 
-const messages = loadMessages()
+const loaded = loadMessages()
+const messages = loaded.messages
 const rawCandidates = messages.flatMap((message) => parseMessage(message)).filter((row) => row.itemName && row.normalizedPrice > 0)
 const clusters = dedupeCandidates(rawCandidates)
 const config = supabaseConfig()
@@ -996,4 +1096,6 @@ if (SHOULD_PUBLISH && Number(previewResult?.failedCount || 0) > 0) {
 }
 const publishResult = SHOULD_PUBLISH ? await publishPlan(manifest, operator.id) : null
 writeExecutionOutputs(previewResult, publishResult)
-console.log(JSON.stringify({ date: DATE_KEY, sourceMessages: messages.length, rawCandidates: rawCandidates.length, clusters: clusters.length, publishPlanCount: plan.length, operatorUserId: operator.id, previewResult, publishResult }, null, 2))
+const cleanupResult = SHOULD_DELETE_PROCESSED_WECHAT ? deleteProcessedWechatFiles(loaded.sourceFiles) : null
+writeProcessedWechatCleanup(cleanupResult)
+console.log(JSON.stringify({ date: DATE_KEY, sourceMessages: messages.length, rawCandidates: rawCandidates.length, clusters: clusters.length, publishPlanCount: plan.length, operatorUserId: operator.id, previewResult, publishResult, cleanupResult }, null, 2))
