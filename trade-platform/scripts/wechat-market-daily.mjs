@@ -905,6 +905,8 @@ function coreOutputPaths(dateKey = DATE_KEY) {
     path.join(REPORTS_ROOT, `${dateKey}-牛牛日报.md`),
     path.join(REPORTS_ROOT, `${dateKey}-牛牛日报-V2.md`),
     path.join(FINAL_REPORTS_ROOT, `${dateKey}-牛牛日报-正式版.md`),
+    path.join(WECHAT_ROOT, `${dateKey}-牛牛日报-正式版.md`),
+    path.join(WECHAT_ROOT, '最新-牛牛日报-正式版.md'),
     path.join(HISTORY_ROOT, `${dateKey}-自动处理.md`)
   ]
 }
@@ -948,6 +950,7 @@ function writeOutputs(rawCandidates, clusters, plan, report, manifest) {
   ensureDir(REPORTS_ROOT)
   ensureDir(FINAL_REPORTS_ROOT)
   ensureDir(HISTORY_ROOT)
+  ensureDir(WECHAT_ROOT)
 
   fs.writeFileSync(path.join(outputDir, 'raw-candidates.json'), JSON.stringify(rawCandidates, null, 2), 'utf8')
   fs.writeFileSync(path.join(outputDir, 'deduped-clusters.json'), JSON.stringify(clusters, null, 2), 'utf8')
@@ -957,6 +960,8 @@ function writeOutputs(rawCandidates, clusters, plan, report, manifest) {
   fs.writeFileSync(path.join(REPORTS_ROOT, `${DATE_KEY}-牛牛日报.md`), report.markdown, 'utf8')
   fs.writeFileSync(path.join(REPORTS_ROOT, `${DATE_KEY}-牛牛日报-V2.md`), report.markdown, 'utf8')
   fs.writeFileSync(path.join(FINAL_REPORTS_ROOT, `${DATE_KEY}-牛牛日报-正式版.md`), report.markdown, 'utf8')
+  fs.writeFileSync(path.join(WECHAT_ROOT, `${DATE_KEY}-牛牛日报-正式版.md`), report.markdown, 'utf8')
+  fs.writeFileSync(path.join(WECHAT_ROOT, '最新-牛牛日报-正式版.md'), report.markdown, 'utf8')
   fs.writeFileSync(
     path.join(HISTORY_ROOT, `${DATE_KEY}-自动处理.md`),
     `# ${DATE_KEY} 自动处理\n\n- 原始候选：${rawCandidates.length}\n- 去重后信号簇：${clusters.length}\n- 准备发站：${plan.length}\n- 原始文件：${uniqueSorted(rawCandidates.map((row) => row.source.source_file)).length}\n- 最强需求板块：${report.pulse.strongestDemand}\n- 最强供给板块：${report.pulse.strongestSupply}\n- 今日最热板块：${report.pulse.hottestBoard}\n- 核心输出校验：待写入完成后执行\n`,
@@ -975,7 +980,7 @@ function deleteProcessedWechatFiles(sourceFiles = []) {
   const deletedFiles = []
   const missingFiles = []
   const failedFiles = []
-  const touchedDirs = new Set()
+  const sourceDirs = new Set()
 
   for (const fullFile of uniqueSorted(sourceFiles)) {
     try {
@@ -983,9 +988,9 @@ function deleteProcessedWechatFiles(sourceFiles = []) {
         missingFiles.push(fullFile)
         continue
       }
+      sourceDirs.add(path.dirname(fullFile))
       fs.unlinkSync(fullFile)
       deletedFiles.push(fullFile)
-      touchedDirs.add(path.dirname(fullFile))
     } catch (error) {
       failedFiles.push({
         file: fullFile,
@@ -995,14 +1000,17 @@ function deleteProcessedWechatFiles(sourceFiles = []) {
   }
 
   const removedDirs = []
-  for (const dir of [...touchedDirs].sort((a, b) => b.length - a.length)) {
+  for (const dir of [...sourceDirs].sort((a, b) => b.length - a.length)) {
     try {
-      if (!fs.existsSync(dir)) continue
-      if (fs.readdirSync(dir).length === 0) {
-        fs.rmdirSync(dir)
-        removedDirs.push(dir)
-      }
-    } catch {}
+      if (!fs.existsSync(dir) || path.resolve(dir) === path.resolve(WECHAT_ROOT)) continue
+      fs.rmSync(dir, { recursive: true, force: true })
+      removedDirs.push(dir)
+    } catch (error) {
+      failedFiles.push({
+        file: dir,
+        message: error instanceof Error ? error.message : String(error)
+      })
+    }
   }
 
   return {
