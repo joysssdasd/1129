@@ -1032,10 +1032,9 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h1 className="text-3xl font-bold text-center mb-2 text-gray-900">
-            牛牛基地
+          <h1 className="text-3xl font-bold text-center mb-8 text-gray-900">
+            ?????????
           </h1>
-          <p className="text-center text-gray-500 mb-8">高效、可信的交易信息服务</p>
 
           {registerStep !== 3 && mode !== 'forgot' && (
             <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
