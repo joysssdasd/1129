@@ -58,16 +58,16 @@ const OTHER_PATTERNS = [
 const DIGITAL_JUNK_PATTERN = /(工作机|脱坑机|二手机|组屏机|卡贴机|监管机|小花|大花|下半截|拆机|改码|无码|有锁|无限量|国外订单|低价扣费|安卓工作机)/u
 const STALE_DIGITAL_PATTERN = /(7p\/7|iphone\s*7|iphone7|iphone8|8p|6s|6sp|se2|se3|iphonexr|iphonex|苹果x|苹果xr|x组屏机|xr组屏机|11组屏机|12组屏机|13组屏机|14组屏机|红米\d|redmi\d|oppo\s*r\d+|vivox\d+|荣耀\d+|p9|p10|p20)/iu
 const DIRECT_PUBLISH_HARDWARE_DIGITAL_RULES = [
-  { canonical: 'iPhone17 Pro Max', regex: /(?:iphone|苹果)?17promax/iu },
-  { canonical: 'iPhone17 Pro', regex: /(?:iphone|苹果)?17pro/iu },
-  { canonical: 'iPhone17', regex: /(?:iphone|苹果)?17/iu },
-  { canonical: 'iPhone16 Pro Max', regex: /(?:iphone|苹果)?16promax/iu },
-  { canonical: 'iPhone16 Pro', regex: /(?:iphone|苹果)?16pro/iu },
-  { canonical: 'iPhone16 Plus', regex: /(?:iphone|苹果)?16plus/iu },
-  { canonical: 'iPhone16', regex: /(?:iphone|苹果)?16/iu },
-  { canonical: '华为Mate XT', regex: /(?:华为)?matext(?:非凡大师)?|三折叠/iu },
-  { canonical: '华为Mate X6', regex: /(?:华为)?matex6/iu },
-  { canonical: '华为Pura X', regex: /(?:华为)?purax/iu }
+  { canonical: 'iPhone17 Pro Max', regex: /(?:(?:iphone|苹果)17promax|(?:iphone|苹果)17pm|17promax|17pm)(?!\d)/iu },
+  { canonical: 'iPhone17 Pro', regex: /(?:(?:iphone|苹果)17pro|17pro)(?!\d)/iu },
+  { canonical: 'iPhone17', regex: /(?:iphone|苹果)17(?!\d)/iu },
+  { canonical: 'iPhone16 Pro Max', regex: /(?:(?:iphone|苹果)16promax|(?:iphone|苹果)16pm|16promax|16pm)(?!\d)/iu },
+  { canonical: 'iPhone16 Pro', regex: /(?:(?:iphone|苹果)16pro|16pro)(?!\d)/iu },
+  { canonical: 'iPhone16 Plus', regex: /(?:(?:iphone|苹果)16plus|16plus)(?!\d)/iu },
+  { canonical: 'iPhone16', regex: /(?:iphone|苹果)16(?!\d)/iu },
+  { canonical: '华为Mate XT', regex: /(?:(?:华为)?matext(?:非凡大师)?|三折叠)(?!\d)/iu },
+  { canonical: '华为Mate X6', regex: /(?:华为)?matex6(?!\d)/iu },
+  { canonical: '华为Pura X', regex: /(?:华为)?purax(?!\d)/iu }
 ]
 const DIRECT_PUBLISH_HARDWARE_DIGITAL_LABELS = 'iPhone 16/16 Plus/16 Pro/16 Pro Max、iPhone 17/17 Pro/17 Pro Max、华为 Mate XT/Mate X6/Pura X'
 const MAOTAI_DIRECT_PUBLISH_PATTERN = /(原箱|订单|闷包|散订单|改地址|原件|整箱)/u
@@ -150,8 +150,6 @@ function relativeWorkspacePath(fullPath) {
 function normalizeDigitalPublishItemName(item, rawText = '') {
   const base = normalizeDigitalItemName(item)
   const combined = normalize(`${item} ${rawText}`).replace(/\s+/g, '')
-  const hardwareMatch = matchDirectPublishHardwareDigitalRule(combined)
-  if (hardwareMatch) return hardwareMatch.canonical
   if (/i茅台|茅台/u.test(combined)) {
     if (/原箱/u.test(combined)) return 'i茅台原箱'
     if (/散订单/u.test(combined) && /改地址/u.test(combined)) return '茅台散订单改地址'
@@ -161,6 +159,8 @@ function normalizeDigitalPublishItemName(item, rawText = '') {
     if (/闷包/u.test(combined)) return 'i茅台闷包'
     return base || 'i茅台'
   }
+  const hardwareMatch = matchDirectPublishHardwareDigitalRule(combined)
+  if (hardwareMatch) return hardwareMatch.canonical
   return base
 }
 function shouldDirectPublishDigital(item, rawText = '') {
@@ -349,27 +349,35 @@ function parseMessage(message) { const board = boardOf(message.text, message.gro
 function loadMessages() {
   const rows = []
   const sourceFiles = []
-  for (const dir of fs.readdirSync(WECHAT_ROOT, { withFileTypes: true })) {
-    if (!dir.isDirectory() || dir.name === 'EchoTrace') continue
-    const fullDir = path.join(WECHAT_ROOT, dir.name)
+  const candidates = []
+  for (const entry of fs.readdirSync(WECHAT_ROOT, { withFileTypes: true })) {
+    if (entry.isFile() && entry.name.endsWith('.json')) {
+      candidates.push(path.join(WECHAT_ROOT, entry.name))
+      continue
+    }
+    if (!entry.isDirectory() || entry.name === 'EchoTrace') continue
+    const fullDir = path.join(WECHAT_ROOT, entry.name)
     for (const file of fs.readdirSync(fullDir)) {
       if (!file.endsWith('.json')) continue
-      const fullFile = path.join(fullDir, file)
-      sourceFiles.push(fullFile)
-      const payload = readJsonFile(fullFile)
-      const groupName = payload?.session?.name || payload?.session?.displayName || path.basename(file, '.json')
-      for (const row of (payload.messages || [])) {
-        const text = normalizeMessageBody(typeof row?.content === 'string' ? row.content : '')
-        if (!text || row?.type !== '文本消息') continue
-        rows.push({
-          sourceFile: path.relative(WORKSPACE_ROOT, fullFile).replace(/\\/g, '/'),
-          groupName,
-          messageId: row?.localId || sha1(`${fullFile}|${row?.formattedTime}|${text}`),
-          time: row?.formattedTime || row?.createTime || '',
-          sender: row?.senderDisplayName || row?.senderUsername || '未知发送人',
-          text
-        })
-      }
+      candidates.push(path.join(fullDir, file))
+    }
+  }
+
+  for (const fullFile of uniqueSorted(candidates)) {
+    sourceFiles.push(fullFile)
+    const payload = readJsonFile(fullFile)
+    const groupName = payload?.session?.name || payload?.session?.displayName || path.basename(fullFile, '.json')
+    for (const row of (payload.messages || [])) {
+      const text = normalizeMessageBody(typeof row?.content === 'string' ? row.content : '')
+      if (!text || row?.type !== '文本消息') continue
+      rows.push({
+        sourceFile: path.relative(WORKSPACE_ROOT, fullFile).replace(/\\/g, '/'),
+        groupName,
+        messageId: row?.localId || sha1(`${fullFile}|${row?.formattedTime}|${text}`),
+        time: row?.formattedTime || row?.createTime || '',
+        sender: row?.senderDisplayName || row?.senderUsername || '未知发送人',
+        text
+      })
     }
   }
   const seen = new Map()
