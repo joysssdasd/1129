@@ -6,6 +6,12 @@ import { Home, PlusCircle, User, Search, LogOut, RefreshCw, TrendingUp, X, Megap
 import { log } from '../../utils/logger'
 import { searchAndSort, extractKeywordStats, getSearchSuggestions } from '../../utils/searchUtils'
 import { cache, CACHE_KEYS, CACHE_TTL } from '../../services/cacheService'
+import OrderDraftPrompt from '../../features/orders/OrderDraftPrompt'
+import {
+  buildOrderDraftFromPost,
+  savePendingOrderDraft,
+} from '../../features/orders/orderHelpers'
+import type { RealOrderFormValues } from '../../types/orders'
 // 热力图板块组件 - 显示交易板块热度
 import CategoryCards from '../CategoryCards'
 import HomeGrowthCard from '../../features/growth/HomeGrowthCard'
@@ -21,6 +27,8 @@ interface Post {
   user_id: string
   keywords: string
   delivery_days?: number
+  source_type?: string  // 'user' | 'wechat_market'
+  market_board?: string  // 行情板块
 }
 
 const tradeTypeMap: { [key: number]: { label: string; color: string } } = {
@@ -36,12 +44,14 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
   const [searchKeyword, setSearchKeyword] = useState('')
   const [selectedType, setSelectedType] = useState<number | null>(null)
+  const [selectedSource, setSelectedSource] = useState<'all' | 'user' | 'wechat_market'>('all')
   const [refreshing, setRefreshing] = useState(false)
   const [pullDistance, setPullDistance] = useState(0)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [hotKeywords, setHotKeywords] = useState<{ keyword: string; count: number }[]>([])
   const [announcements, setAnnouncements] = useState<{ id: string; title: string; content: string }[]>([])
   const [closedAnnouncements, setClosedAnnouncements] = useState<string[]>([])
+  const [orderPromptDraft, setOrderPromptDraft] = useState<RealOrderFormValues | null>(null)
   const { user, setUser, logout } = useUser()
   const navigate = useNavigate()
   const touchStartY = useRef(0)
@@ -51,7 +61,7 @@ export default function HomePage() {
 
   useEffect(() => {
     loadPosts()
-  }, [selectedType])
+  }, [selectedType, selectedSource])
 
   // 初次加载时并行获取数据（提升加载速度）
   useEffect(() => {
@@ -159,6 +169,13 @@ export default function HomePage() {
 
       if (selectedType) {
         query = query.eq('trade_type', selectedType)
+      }
+
+      // 来源筛选
+      if (selectedSource === 'user') {
+        query = query.eq('source_type', 'user')
+      } else if (selectedSource === 'wechat_market') {
+        query = query.eq('source_type', 'wechat_market')
       }
 
       const { data, error } = await query
@@ -274,6 +291,13 @@ export default function HomePage() {
         alert(`交易方式已复制到剪贴板：${data.data.wechat_id}`)
         
         // 更新用户积分
+        setOrderPromptDraft(
+          buildOrderDraftFromPost({
+            post,
+            contact: data.data.wechat_id,
+          })
+        )
+
         if (!data.data.already_viewed && user) {
           const { data: updatedUser } = await supabase
             .from('users')
@@ -290,6 +314,13 @@ export default function HomePage() {
   }
 
   // 下拉刷新功能
+  const handleCreateOrderDraft = () => {
+    if (!orderPromptDraft) return
+    savePendingOrderDraft(orderPromptDraft)
+    setOrderPromptDraft(null)
+    navigate('/profile?tab=orders')
+  }
+
   const handleTouchStart = (e: React.TouchEvent) => {
     if (containerRef.current && containerRef.current.scrollTop === 0) {
       touchStartY.current = e.touches[0].clientY
@@ -529,6 +560,41 @@ export default function HomePage() {
             ))}
           </div>
 
+          {/* 来源筛选 */}
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={() => setSelectedSource('all')}
+              className={`px-3 py-1 rounded-full text-xs whitespace-nowrap ${
+                selectedSource === 'all'
+                  ? 'bg-orange-600 text-white'
+                  : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              全部来源
+            </button>
+            <button
+              onClick={() => setSelectedSource('user')}
+              className={`px-3 py-1 rounded-full text-xs whitespace-nowrap ${
+                selectedSource === 'user'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              用户发布
+            </button>
+            <button
+              onClick={() => setSelectedSource('wechat_market')}
+              className={`px-3 py-1 rounded-full text-xs whitespace-nowrap flex items-center gap-1 ${
+                selectedSource === 'wechat_market'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              <span>微信行情</span>
+              <TrendingUp className="w-3 h-3" />
+            </button>
+          </div>
+
           {/* 热门关键词 - 显示交易信息数量最多的10个关键词 */}
           {hotKeywords.length > 0 && (
             <div className="mt-3">
@@ -574,6 +640,15 @@ export default function HomePage() {
                 onClick={() => navigate(`/post/${post.id}`)}
                 className="bg-white rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer relative"
               >
+                {/* 微信行情标记 */}
+                {post.source_type === 'wechat_market' && (
+                  <div className="absolute top-2 right-14 flex items-center gap-1">
+                    <TrendingUp className="w-3 h-3 text-blue-600" />
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200">
+                      {post.market_board || '行情'}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-start justify-between mb-1.5">
                   <h3 className="text-base font-semibold text-gray-900 flex-1 pr-2 line-clamp-1">
                     {post.title}
@@ -692,6 +767,14 @@ export default function HomePage() {
       </div>
 
       <div className="h-16"></div>
+
+      <OrderDraftPrompt
+        open={!!orderPromptDraft}
+        subjectTitle={orderPromptDraft?.subject_title}
+        contact={orderPromptDraft?.counterparty_contact}
+        onClose={() => setOrderPromptDraft(null)}
+        onCreateDraft={handleCreateOrderDraft}
+      />
     </div>
   )
 }

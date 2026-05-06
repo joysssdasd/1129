@@ -2,8 +2,15 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useUser } from '../../contexts/UserContext'
 import { supabase } from '../../services/supabase'
-import { ArrowLeft, Eye, Calendar, Tag, AlertTriangle, Flag } from 'lucide-react'
+import { ArrowLeft, Eye, Calendar, Tag, AlertTriangle, Flag, FilePlus2 } from 'lucide-react'
 import { log } from '../../utils/logger'
+import OrderDraftPrompt from '../../features/orders/OrderDraftPrompt'
+import {
+  buildOrderDraftFromPost,
+  savePendingOrderDraft,
+} from '../../features/orders/orderHelpers'
+import type { RealOrderFormValues } from '../../types/orders'
+import { getPublicExtraInfo } from '../../utils/managedMarket'
 
 export default function PostDetailPage() {
   const { id } = useParams()
@@ -17,6 +24,7 @@ export default function PostDetailPage() {
   const [reportType, setReportType] = useState('')
   const [reportDesc, setReportDesc] = useState('')
   const [reporting, setReporting] = useState(false)
+  const [orderPromptDraft, setOrderPromptDraft] = useState<RealOrderFormValues | null>(null)
   const { user, setUser } = useUser()
   const navigate = useNavigate()
 
@@ -106,6 +114,14 @@ export default function PostDetailPage() {
         navigator.clipboard.writeText(data.data.wechat_id)
         alert('联系方式已复制到剪贴板：' + data.data.wechat_id)
         
+        setOrderPromptDraft(
+          buildOrderDraftFromPost({
+            post,
+            postUser,
+            contact: data.data.wechat_id,
+          })
+        )
+
         if (!data.data.already_viewed) {
           setUser({ ...user!, points: user!.points - 1 })
         }
@@ -118,6 +134,18 @@ export default function PostDetailPage() {
   }
 
   // 提交举报
+  const handleCreateOrderDraft = () => {
+    const draft = buildOrderDraftFromPost({
+      post,
+      postUser,
+      contact: wechatId,
+    })
+
+    savePendingOrderDraft(draft)
+    setOrderPromptDraft(null)
+    navigate('/profile?tab=orders')
+  }
+
   const handleReport = async () => {
     if (!reportType) {
       alert('请选择举报类型')
@@ -158,6 +186,8 @@ export default function PostDetailPage() {
 
   if (!post) return null
 
+  const publicExtraInfo = getPublicExtraInfo(post.extra_info)
+
   const tradeTypeMap: any = {
     1: { label: '求购', color: 'bg-green-100 text-green-700' },
     2: { label: '出售', color: 'bg-blue-100 text-blue-700' },
@@ -180,9 +210,17 @@ export default function PostDetailPage() {
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-start justify-between mb-4">
             <h2 className="text-2xl font-bold text-gray-900 flex-1">{post.title}</h2>
-            <span className={`px-3 py-1 rounded-full text-xs font-medium ${tradeTypeMap[post.trade_type].color}`}>
-              {tradeTypeMap[post.trade_type].label}
-            </span>
+            <div className="flex flex-col items-end gap-1">
+              <span className={`px-3 py-1 rounded-full text-xs font-medium ${tradeTypeMap[post.trade_type].color}`}>
+                {tradeTypeMap[post.trade_type].label}
+              </span>
+              {/* 微信行情标记 */}
+              {post.source_type === 'wechat_market' && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200">
+                  {post.market_board || '行情'}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="text-3xl font-bold text-red-600 mb-6">¥{post.price}</div>
@@ -200,9 +238,9 @@ export default function PostDetailPage() {
               </div>
             )}
 
-            {post.extra_info && (
+            {publicExtraInfo && (
               <div className="text-gray-600">
-                补充信息：{post.extra_info}
+                补充信息：{publicExtraInfo}
               </div>
             )}
 
@@ -210,6 +248,13 @@ export default function PostDetailPage() {
               <Eye className="w-4 h-4" />
               <span>查看次数：{post.view_count}/{post.view_limit}</span>
             </div>
+
+            {/* 显示成交次数 */}
+            {(post.deal_count > 0 || post.source_type === 'wechat_market') && (
+              <div className="flex items-center gap-2 text-green-600">
+                <span className="text-sm">已成交：{post.deal_count || 0} 笔</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -248,6 +293,16 @@ export default function PostDetailPage() {
         )}
 
         {/* 免责声明 + 举报按钮 */}
+        {wechatId && (
+          <button
+            onClick={handleCreateOrderDraft}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-sm font-medium text-green-700 shadow-sm ring-1 ring-green-200 transition-colors hover:bg-green-50"
+          >
+            <FilePlus2 className="h-4 w-4" />
+            生成订单草稿
+          </button>
+        )}
+
         <div className="bg-gray-100 rounded-lg p-4">
           <div className="flex items-start justify-between gap-4">
             <p className="text-xs text-gray-500 flex-1">
@@ -387,6 +442,14 @@ export default function PostDetailPage() {
           </div>
         </div>
       )}
+
+      <OrderDraftPrompt
+        open={!!orderPromptDraft}
+        subjectTitle={orderPromptDraft?.subject_title}
+        contact={orderPromptDraft?.counterparty_contact}
+        onClose={() => setOrderPromptDraft(null)}
+        onCreateDraft={handleCreateOrderDraft}
+      />
     </div>
   )
 }

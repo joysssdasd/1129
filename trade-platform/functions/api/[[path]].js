@@ -74,7 +74,8 @@ const POINT_CHANGE_TYPES = {
   dailyCheckIn: 11
 }
 
-const AUTO_MARKET_INFO_PREFIX = '自动整理自微信群行情'
+const AUTO_MARKET_INFO_PREFIX = '__managed_market__'
+const LEGACY_AUTO_MARKET_INFO_PREFIX = '自动整理自微信群行情'
 const MANAGED_SYNC_KIND = 'niuniubase.managed-market-sync'
 const MANAGED_SYNC_PROTOCOL_VERSION = 1
 const AUTO_MARKET_SETTING_CATEGORIES = {
@@ -265,6 +266,169 @@ const computeCheckInStreak = (records = []) => {
 
   return streak
 }
+
+const ORDER_SOURCE_TYPES = new Set(['platform_post', 'manual'])
+const ORDER_SIDES = new Set(['buy', 'sell', 'other'])
+const ORDER_STATUSES = new Set(['draft', 'completed', 'cancelled'])
+const ORDER_ACTIVITY_TYPE = 'order_record'
+
+const toNullableTrimmedText = (value) => {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed || null
+}
+
+const toNullableNonNegativeNumber = (value) => {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 0) return Number.NaN
+  return parsed
+}
+
+const toRequiredNonNegativeNumber = (value) => {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 0) return Number.NaN
+  return parsed
+}
+
+const toIsoDateTime = (value) => {
+  const date = value ? new Date(value) : new Date()
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null
+}
+
+const sanitizeOrderPayload = ({ userId, rawOrder }) => {
+  const subjectTitle = typeof rawOrder?.subject_title === 'string' ? rawOrder.subject_title.trim() : ''
+  if (!subjectTitle) {
+    return { error: '请填写标的名称。' }
+  }
+
+  const totalAmount = toRequiredNonNegativeNumber(rawOrder?.total_amount)
+  if (!Number.isFinite(totalAmount)) {
+    return { error: '请填写有效的成交总额。' }
+  }
+
+  const dealAt = toIsoDateTime(rawOrder?.deal_at)
+  if (!dealAt) {
+    return { error: '请填写有效的成交时间。' }
+  }
+
+  const quantity = toNullableNonNegativeNumber(rawOrder?.quantity)
+  if (Number.isNaN(quantity)) {
+    return { error: '数量格式不正确。' }
+  }
+
+  const unitPrice = toNullableNonNegativeNumber(rawOrder?.unit_price)
+  if (Number.isNaN(unitPrice)) {
+    return { error: '单价格式不正确。' }
+  }
+
+  const sourceType = ORDER_SOURCE_TYPES.has(rawOrder?.source_type) ? rawOrder.source_type : 'manual'
+  const mySide = ORDER_SIDES.has(rawOrder?.my_side) ? rawOrder.my_side : 'other'
+  const status = ORDER_STATUSES.has(rawOrder?.status) ? rawOrder.status : 'draft'
+  const sourcePostId =
+    sourceType === 'platform_post' &&
+    typeof rawOrder?.source_post_id === 'string' &&
+    UUID_RE.test(rawOrder.source_post_id)
+      ? rawOrder.source_post_id
+      : null
+  const subjectSnapshot =
+    rawOrder?.subject_snapshot &&
+    typeof rawOrder.subject_snapshot === 'object' &&
+    !Array.isArray(rawOrder.subject_snapshot)
+      ? rawOrder.subject_snapshot
+      : null
+
+  return {
+    payload: {
+      source_type: sourceType,
+      source_post_id: sourcePostId,
+      my_side: mySide,
+      counterparty_name: toNullableTrimmedText(rawOrder?.counterparty_name),
+      counterparty_contact: toNullableTrimmedText(rawOrder?.counterparty_contact),
+      subject_title: subjectTitle,
+      category_name: toNullableTrimmedText(rawOrder?.category_name),
+      trade_type_label: toNullableTrimmedText(rawOrder?.trade_type_label),
+      quantity,
+      unit_price: unitPrice,
+      total_amount: totalAmount,
+      deal_at: dealAt,
+      delivery_method: toNullableTrimmedText(rawOrder?.delivery_method),
+      payment_method: toNullableTrimmedText(rawOrder?.payment_method),
+      status,
+      notes: toNullableTrimmedText(rawOrder?.notes),
+      subject_snapshot: subjectSnapshot
+    }
+  }
+}
+
+const mapActivityRowToOrder = (row) => {
+  if (!row || !UUID_RE.test(row.id || '') || !UUID_RE.test(row.user_id || '')) {
+    return null
+  }
+
+  const rawData =
+    row.activity_data && typeof row.activity_data === 'object' && !Array.isArray(row.activity_data)
+      ? row.activity_data
+      : {}
+
+  const createdAt = toIsoDateTime(row.created_at) || new Date().toISOString()
+  const updatedAt = toIsoDateTime(rawData.updated_at) || createdAt
+  const totalAmount = toRequiredNonNegativeNumber(rawData.total_amount)
+
+  if (!Number.isFinite(totalAmount)) {
+    return null
+  }
+
+  const quantity = toNullableNonNegativeNumber(rawData.quantity)
+  const unitPrice = toNullableNonNegativeNumber(rawData.unit_price)
+  const sourceType = ORDER_SOURCE_TYPES.has(rawData.source_type) ? rawData.source_type : 'manual'
+  const mySide = ORDER_SIDES.has(rawData.my_side) ? rawData.my_side : 'other'
+  const status = ORDER_STATUSES.has(rawData.status) ? rawData.status : 'draft'
+  const sourcePostId =
+    sourceType === 'platform_post' &&
+    typeof rawData.source_post_id === 'string' &&
+    UUID_RE.test(rawData.source_post_id)
+      ? rawData.source_post_id
+      : null
+  const subjectSnapshot =
+    rawData.subject_snapshot && typeof rawData.subject_snapshot === 'object' && !Array.isArray(rawData.subject_snapshot)
+      ? rawData.subject_snapshot
+      : null
+
+  return {
+    id: row.id,
+    created_by_user_id: row.user_id,
+    source_type: sourceType,
+    source_post_id: sourcePostId,
+    my_side: mySide,
+    counterparty_name: toNullableTrimmedText(rawData.counterparty_name),
+    counterparty_contact: toNullableTrimmedText(rawData.counterparty_contact),
+    subject_title:
+      typeof rawData.subject_title === 'string' && rawData.subject_title.trim()
+        ? rawData.subject_title.trim()
+        : '未命名订单',
+    category_name: toNullableTrimmedText(rawData.category_name),
+    trade_type_label: toNullableTrimmedText(rawData.trade_type_label),
+    quantity: Number.isNaN(quantity) ? null : quantity,
+    unit_price: Number.isNaN(unitPrice) ? null : unitPrice,
+    total_amount: totalAmount,
+    deal_at: toIsoDateTime(rawData.deal_at) || createdAt,
+    delivery_method: toNullableTrimmedText(rawData.delivery_method),
+    payment_method: toNullableTrimmedText(rawData.payment_method),
+    status,
+    notes: toNullableTrimmedText(rawData.notes),
+    subject_snapshot: subjectSnapshot,
+    created_at: createdAt,
+    updated_at: updatedAt
+  }
+}
+
+const sortOrdersDesc = (orders = []) =>
+  orders.sort((left, right) => {
+    const dealTimeDiff = new Date(right.deal_at).getTime() - new Date(left.deal_at).getTime()
+    if (dealTimeDiff !== 0) return dealTimeDiff
+    return new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
+  })
 
 const upsertSystemSettings = async (config, rows) => {
   if (!Array.isArray(rows) || rows.length === 0) return []
@@ -939,7 +1103,7 @@ const findExistingAutoMarketPost = async ({ config, operatorId, post }) => {
   return Array.isArray(existingRes.data) ? existingRes.data.find((row) => isManagedAutoMarketPost(row)) || null : null
 }
 
-const insertManagedMarketPost = async ({ config, operatorId, post, expireAt }) => {
+const insertManagedMarketPost = async ({ config, operatorId, post, expireAt, syncMeta }) => {
   const insertRes = await restRequest({
     config,
     resource: 'posts',
@@ -960,7 +1124,22 @@ const insertManagedMarketPost = async ({ config, operatorId, post, expireAt }) =
         deal_count: 0,
         status: 1,
         expire_at: expireAt,
-        category_id: post.categoryId
+        category_id: post.categoryId,
+        // 微信行情新字段
+        source_type: 'wechat_market',
+        market_key: post.marketKey || null,
+        market_board: post.categoryName || null,
+        market_data: {
+          itemName: post.itemName,
+          city: post.city,
+          eventDate: post.eventDate,
+          specOrTier: post.specOrTier,
+          quantity: post.quantity,
+          sourceRef: post.sourceRef,
+          signalCount: post.signalCount,
+          groupCount: post.groupCount
+        },
+        run_id: syncMeta?.runId || null
       }
     ],
     useServiceRole: true,
@@ -1057,6 +1236,24 @@ const buildManagedPostUpdatePayload = ({ currentPost, post, expireAt }) => {
 
   if (shouldRefreshManagedExpireAt(currentPost.expire_at, expireAt)) {
     payload.expire_at = expireAt
+  }
+
+  // 更新 market_data 快照
+  const nextMarketData = {
+    itemName: post.itemName,
+    city: post.city,
+    eventDate: post.eventDate,
+    specOrTier: post.specOrTier,
+    quantity: post.quantity,
+    sourceRef: post.sourceRef,
+    signalCount: post.signalCount,
+    groupCount: post.groupCount
+  }
+  const currentMarketDataStr = typeof currentPost.market_data === 'string' ? currentPost.market_data : JSON.stringify(currentPost.market_data || {})
+  const nextMarketDataStr = JSON.stringify(nextMarketData)
+  if (currentMarketDataStr !== nextMarketDataStr) {
+    payload.market_data = nextMarketData
+    changedFields.push('marketData')
   }
 
   if (Object.keys(payload).length > 0) {
@@ -1266,7 +1463,8 @@ const indexManagedRecentPosts = (rows = []) => {
 const isManagedAutoMarketPost = (post) =>
   Boolean(post) &&
   typeof post.extra_info === 'string' &&
-  post.extra_info.startsWith(AUTO_MARKET_INFO_PREFIX)
+  (post.extra_info.startsWith(AUTO_MARKET_INFO_PREFIX) ||
+    post.extra_info.startsWith(LEGACY_AUTO_MARKET_INFO_PREFIX))
 
 const loadRecentOperatorMarketPosts = async ({ config, operatorId, categoryIds }) => {
   if (!Array.isArray(categoryIds) || categoryIds.length === 0) return []
@@ -1474,7 +1672,8 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
               config,
               operatorId: operator.id,
               post,
-              expireAt
+              expireAt,
+              syncMeta
             })
 
             createdPosts.push(createdPost)
@@ -2292,6 +2491,255 @@ const handlePasswordRegistration = async ({ request, config }) => {
         error: {
           code: 'PASSWORD_REGISTRATION_ERROR',
           message: error?.message || '注册失败。'
+        }
+      },
+      500
+    )
+  }
+}
+
+const handleOrdersList = async ({ request, config }) => {
+  const missingServiceRoleResponse = requireServiceRole(config)
+  if (missingServiceRoleResponse) return missingServiceRoleResponse
+
+  const requestUrl = new URL(request.url)
+  const userId = requestUrl.searchParams.get('user_id')?.trim() || ''
+
+  if (!UUID_RE.test(userId)) {
+    return json({ success: false, error: { code: 'INVALID_USER_ID', message: '缺少有效的用户标识。' } }, 400)
+  }
+
+  try {
+    const ordersRes = await restRequest({
+      config,
+      resource: 'user_activity',
+      query:
+        `user_id=eq.${encodeURIComponent(userId)}` +
+        `&activity_type=eq.${encodeURIComponent(ORDER_ACTIVITY_TYPE)}` +
+        '&select=*',
+      useServiceRole: true
+    })
+
+    if (!ordersRes.ok) {
+      return json(
+        {
+          success: false,
+          error: {
+            code: 'LOAD_ORDERS_FAILED',
+            message: ordersRes.text || '加载订单失败。'
+          }
+        },
+        ordersRes.status || 500
+      )
+    }
+
+    return json({
+      success: true,
+      data: sortOrdersDesc(
+        (Array.isArray(ordersRes.data) ? ordersRes.data : [])
+          .map(mapActivityRowToOrder)
+          .filter(Boolean)
+      )
+    })
+  } catch (error) {
+    return json(
+      {
+        success: false,
+        error: {
+          code: 'LOAD_ORDERS_ERROR',
+          message: error?.message || '加载订单失败。'
+        }
+      },
+      500
+    )
+  }
+}
+
+const handleOrdersCreate = async ({ request, config }) => {
+  const missingServiceRoleResponse = requireServiceRole(config)
+  if (missingServiceRoleResponse) return missingServiceRoleResponse
+
+  const payload = await readJsonBody(request)
+  const userId = typeof payload?.user_id === 'string' ? payload.user_id.trim() : ''
+
+  if (!UUID_RE.test(userId)) {
+    return json({ success: false, error: { code: 'INVALID_USER_ID', message: '缺少有效的用户标识。' } }, 400)
+  }
+
+  const { payload: orderPayload, error: payloadError } = sanitizeOrderPayload({
+    userId,
+    rawOrder: payload?.order
+  })
+
+  if (payloadError) {
+    return json({ success: false, error: { code: 'INVALID_ORDER_PAYLOAD', message: payloadError } }, 400)
+  }
+
+  try {
+    const createRes = await restRequest({
+      config,
+      resource: 'user_activity',
+      query: 'select=*',
+      method: 'POST',
+      body: [
+        {
+          user_id: userId,
+          activity_type: ORDER_ACTIVITY_TYPE,
+          activity_data: {
+            ...orderPayload,
+            updated_at: new Date().toISOString()
+          }
+        }
+      ],
+      useServiceRole: true,
+      extraHeaders: {
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation'
+      }
+    })
+
+    const createdOrder = Array.isArray(createRes.data) ? mapActivityRowToOrder(createRes.data[0]) : null
+
+    if (!createRes.ok || !createdOrder) {
+      return json(
+        {
+          success: false,
+          error: {
+            code: 'CREATE_ORDER_FAILED',
+            message: createRes.text || '创建订单失败。'
+          }
+        },
+        createRes.status || 500
+      )
+    }
+
+    return json({
+      success: true,
+      data: createdOrder
+    })
+  } catch (error) {
+    return json(
+      {
+        success: false,
+        error: {
+          code: 'CREATE_ORDER_ERROR',
+          message: error?.message || '创建订单失败。'
+        }
+      },
+      500
+    )
+  }
+}
+
+const handleOrdersUpdate = async ({ request, config, orderId }) => {
+  const missingServiceRoleResponse = requireServiceRole(config)
+  if (missingServiceRoleResponse) return missingServiceRoleResponse
+
+  const payload = await readJsonBody(request)
+  const userId = typeof payload?.user_id === 'string' ? payload.user_id.trim() : ''
+
+  if (!UUID_RE.test(orderId || '')) {
+    return json({ success: false, error: { code: 'INVALID_ORDER_ID', message: '缺少有效的订单标识。' } }, 400)
+  }
+
+  if (!UUID_RE.test(userId)) {
+    return json({ success: false, error: { code: 'INVALID_USER_ID', message: '缺少有效的用户标识。' } }, 400)
+  }
+
+  const { payload: orderPayload, error: payloadError } = sanitizeOrderPayload({
+    userId,
+    rawOrder: payload?.order
+  })
+
+  if (payloadError) {
+    return json({ success: false, error: { code: 'INVALID_ORDER_PAYLOAD', message: payloadError } }, 400)
+  }
+
+  try {
+    const updateRes = await restRequest({
+      config,
+      resource: 'user_activity',
+      query:
+        `id=eq.${encodeURIComponent(orderId)}` +
+        `&user_id=eq.${encodeURIComponent(userId)}` +
+        `&activity_type=eq.${encodeURIComponent(ORDER_ACTIVITY_TYPE)}` +
+        '&select=*',
+      method: 'PATCH',
+      body: {
+        activity_data: {
+          ...orderPayload,
+          updated_at: new Date().toISOString()
+        }
+      },
+      useServiceRole: true,
+      extraHeaders: {
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation'
+      }
+    })
+
+    if (!updateRes.ok) {
+      return json(
+        {
+          success: false,
+          error: {
+            code: 'UPDATE_ORDER_FAILED',
+            message: updateRes.text || '更新订单失败。'
+          }
+        },
+        updateRes.status || 500
+      )
+    }
+
+    const updatedOrder = Array.isArray(updateRes.data) ? mapActivityRowToOrder(updateRes.data[0]) : null
+    if (!updatedOrder) {
+      return json({ success: false, error: { code: 'ORDER_NOT_FOUND', message: '订单不存在或无权修改。' } }, 404)
+    }
+
+    // 当订单状态变更为已完成时，增加关联帖子的成交计数
+    if (updatedOrder.status === 'completed' && updatedOrder.source_post_id) {
+      try {
+        const postId = updatedOrder.source_post_id
+        // 先获取当前 deal_count
+        const postRes = await restRequest({
+          config,
+          resource: 'posts',
+          query: `id=eq.${encodeURIComponent(postId)}&select=id,deal_count`,
+          useServiceRole: true
+        })
+
+        if (postRes.ok && Array.isArray(postRes.data) && postRes.data[0]) {
+          const currentDealCount = Number(postRes.data[0].deal_count || 0)
+          // 增加成交计数
+          await restRequest({
+            config,
+            resource: 'posts',
+            query: `id=eq.${encodeURIComponent(postId)}`,
+            method: 'PATCH',
+            body: {
+              deal_count: currentDealCount + 1,
+              updated_at: new Date().toISOString()
+            },
+            useServiceRole: true
+          })
+        }
+      } catch (postUpdateError) {
+        // 记录错误但不影响订单更新结果
+        console.error('Failed to update post deal_count:', postUpdateError)
+      }
+    }
+
+    return json({
+      success: true,
+      data: updatedOrder
+    })
+  } catch (error) {
+    return json(
+      {
+        success: false,
+        error: {
+          code: 'UPDATE_ORDER_ERROR',
+          message: error?.message || '更新订单失败。'
         }
       },
       500
@@ -3120,6 +3568,18 @@ export async function onRequest(context) {
       config,
       settingKey: decodeURIComponent(pathSegments[2])
     })
+  }
+
+  if (request.method === 'GET' && pathSegments[0] === 'orders') {
+    return handleOrdersList({ request, config })
+  }
+
+  if (request.method === 'POST' && pathSegments[0] === 'orders') {
+    return handleOrdersCreate({ request, config })
+  }
+
+  if (request.method === 'PATCH' && pathSegments[0] === 'orders' && pathSegments[1]) {
+    return handleOrdersUpdate({ request, config, orderId: pathSegments[1] })
   }
 
   if (request.method === 'POST' && pathSegments[0] === 'auth' && pathSegments[1] === 'login-with-password') {
