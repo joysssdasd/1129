@@ -10,7 +10,7 @@ import {
   buildOrderDraftFromPost,
   createEmptyOrderDraft,
 } from './orderHelpers'
-import type { RealOrder } from '@/types/orders'
+import type { RealOrder, RealOrderFormValues } from '@/types/orders'
 
 describe('calculateTotalAmount', () => {
   it('应该正确计算总价', () => {
@@ -62,12 +62,12 @@ describe('createOrderFormValues', () => {
   })
 
   it('应该合并提供的值', () => {
-    const order: Partial<RealOrder> = {
+    const order: Partial<RealOrderFormValues> = {
       source_type: 'platform_post',
       source_post_id: 'test-id',
       my_side: 'buy',
       subject_title: '测试订单',
-      total_amount: 100,
+      total_amount: '100',
     }
 
     const result = createOrderFormValues(order)
