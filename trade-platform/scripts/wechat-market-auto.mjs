@@ -379,9 +379,18 @@ async function main() {
       stderrTail: summaryResult.stderr.slice(-2000)
     }
   }
-  const autoExpireResult = result.code === 0
-    ? await autoExpirePosts(summary?.publishResult?.operatorUserId || summary?.operatorUserId || '')
-    : { skipped: true, reason: 'publish step failed' }
+  let autoExpireResult = { skipped: true, reason: 'publish step failed' }
+  if (result.code === 0) {
+    try {
+      autoExpireResult = await autoExpirePosts(summary?.publishResult?.operatorUserId || summary?.operatorUserId || '')
+    } catch (error) {
+      autoExpireResult = {
+        skipped: false,
+        failed: true,
+        error: error?.message || String(error)
+      }
+    }
+  }
   const finishedAt = new Date()
 
   const state = {
