@@ -26,7 +26,11 @@
     "wechat:query": "node scripts/wechat-market-summary.mjs --mode=manual",
     "wechat:auto": "node scripts/wechat-market-auto.mjs --mode=preview",
     "wechat:auto-publish": "node scripts/wechat-market-auto.mjs --mode=publish",
-    "wechat:install-task": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-wechat-market-task.ps1"
+    "wechat:manual-watch": "node scripts/watch-wechat-manual-export.mjs",
+    "wechat:manual-preview": "node scripts/watch-wechat-manual-export.mjs --once --mode=preview",
+    "wechat:manual-publish": "node scripts/watch-wechat-manual-export.mjs --once --mode=publish",
+    "wechat:install-task": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-wechat-market-task.ps1",
+    "wechat:install-manual-watch": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-wechat-manual-watch-task.ps1"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

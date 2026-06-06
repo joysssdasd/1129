@@ -43,6 +43,10 @@ const skipSummary = flags.has('--skip-summary')
 const offlineMode = flags.has('--offline') || process.env.WECHAT_MARKET_OFFLINE === '1'
 const dbRoot = path.resolve(args.get('db-root') || process.env.ECHOTRACE_DB_ROOT || path.join(wechatRoot, 'EchoTrace'))
 const echoTraceExe = path.resolve(args.get('echotrace-exe') || process.env.ECHOTRACE_EXE || DEFAULT_ECHOTRACE_EXE)
+const rawEchoTraceCliTimeoutMs = Number(args.get('echotrace-timeout-ms') || process.env.ECHOTRACE_CLI_TIMEOUT_MS || 120000)
+const echoTraceCliTimeoutMs = Number.isFinite(rawEchoTraceCliTimeoutMs) && rawEchoTraceCliTimeoutMs > 0
+  ? rawEchoTraceCliTimeoutMs
+  : 120000
 
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true })
@@ -129,12 +133,46 @@ function runProcess(executable, processArgs, options = {}) {
 
     let stdout = ''
     let stderr = ''
+    let settled = false
+    let timedOut = false
+    let timeout = null
+    let forceTimeout = null
+    const cleanup = () => {
+      if (timeout) clearTimeout(timeout)
+      if (forceTimeout) clearTimeout(forceTimeout)
+    }
+    const settleResolve = (payload) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      resolve(payload)
+    }
+    const settleReject = (error) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(error)
+    }
+
     child.stdout.on('data', (chunk) => { stdout += chunk.toString() })
     child.stderr.on('data', (chunk) => { stderr += chunk.toString() })
-    child.on('error', reject)
-    child.on('close', (code) => {
-      resolve({ code, stdout, stderr })
+    child.on('error', settleReject)
+    child.on('close', (code, signal) => {
+      settleResolve({ code, signal, stdout, stderr, timedOut })
     })
+
+    const timeoutMs = Number(options.timeoutMs || 0)
+    if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+      timeout = setTimeout(() => {
+        timedOut = true
+        stderr += `\nProcess timed out after ${timeoutMs} ms.`
+        try { child.kill() } catch {}
+        forceTimeout = setTimeout(() => {
+          try { child.kill('SIGKILL') } catch {}
+          settleResolve({ code: null, signal: 'timeout', stdout, stderr, timedOut })
+        }, 5000)
+      }, timeoutMs)
+    }
   })
 }
 
@@ -234,24 +272,34 @@ async function runEchoTraceCli(startedAt) {
   const cutoff = Number.isFinite(sinceHours) && sinceHours > 0
     ? new Date(Date.now() - sinceHours * 60 * 60 * 1000)
     : startedAt
+  const startDate = getShanghaiDateKey(cutoff)
+  const endDate = getShanghaiDateKey(new Date(startedAt.getTime() + 24 * 60 * 60 * 1000))
   const cliArgs = [
     '-e',
     outputDir,
     '--format',
     'json',
     '--start',
-    getShanghaiDateKey(cutoff),
+    startDate,
     '--end',
-    getShanghaiDateKey(startedAt)
+    endDate
   ]
 
-  const result = await runProcess(echoTraceExe, cliArgs, { cwd: path.dirname(echoTraceExe) })
+  const cliStartedAt = Date.now()
+  const result = await runProcess(echoTraceExe, cliArgs, {
+    cwd: path.dirname(echoTraceExe),
+    timeoutMs: echoTraceCliTimeoutMs
+  })
   return {
     echoTraceExe,
     outputDir,
-    startDate: getShanghaiDateKey(cutoff),
-    endDate: getShanghaiDateKey(startedAt),
+    startDate,
+    endDate,
+    timeoutMs: echoTraceCliTimeoutMs,
+    durationMs: Date.now() - cliStartedAt,
     exitCode: result.code,
+    signal: result.signal || null,
+    timedOut: Boolean(result.timedOut),
     stdoutTail: result.stdout.slice(-2000),
     stderrTail: result.stderr.slice(-2000)
   }
