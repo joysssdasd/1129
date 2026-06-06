@@ -1607,30 +1607,34 @@ const handleAdminAutoExpirePosts = async ({ request, config }) => {
 
     let updatedPosts = []
     if (!dryRun && expiredIds.length) {
-      const updateRes = await restRequest({
-        config,
-        resource: 'posts',
-        query:
-          `id=in.(${expiredIds.map((id) => `"${id}"`).join(',')})` +
-          `&select=${selectFields},updated_at`,
-        method: 'PATCH',
-        body: {
-          status: 0,
-          expire_at: nowIso,
-          updated_at: nowIso
-        },
-        useServiceRole: true,
-        extraHeaders: {
-          'Content-Type': 'application/json',
-          Prefer: 'return=representation'
+      const batchSize = 50
+      for (let i = 0; i < expiredIds.length; i += batchSize) {
+        const batchIds = expiredIds.slice(i, i + batchSize)
+        const updateRes = await restRequest({
+          config,
+          resource: 'posts',
+          query:
+            `id=in.(${batchIds.join(',')})` +
+            `&select=${selectFields},updated_at`,
+          method: 'PATCH',
+          body: {
+            status: 0,
+            expire_at: nowIso,
+            updated_at: nowIso
+          },
+          useServiceRole: true,
+          extraHeaders: {
+            'Content-Type': 'application/json',
+            Prefer: 'return=representation'
+          }
+        })
+
+        if (!updateRes.ok) {
+          throw new Error(updateRes.text || 'Failed to update expired posts')
         }
-      })
 
-      if (!updateRes.ok) {
-        throw new Error(updateRes.text || 'Failed to update expired posts')
+        if (Array.isArray(updateRes.data)) updatedPosts.push(...updateRes.data)
       }
-
-      updatedPosts = Array.isArray(updateRes.data) ? updateRes.data : []
     }
 
     return json({
