@@ -33,6 +33,7 @@ const sinceHours = Number(args.get('since-hours') || process.env.WECHAT_MARKET_S
 const sourceDir = path.resolve(args.get('source-dir') || process.env.WECHAT_MARKET_EXPORT_DIR || DEFAULT_WECHAT_ROOT)
 const wechatRoot = path.resolve(args.get('wechat-root') || process.env.WECHAT_MARKET_SOURCE_DIR || DEFAULT_WECHAT_ROOT)
 const siteOrigin = args.get('site') || process.env.WECHAT_MARKET_SITE || ''
+const autoExpireOrigin = args.get('auto-expire-site') || process.env.WECHAT_MARKET_AUTO_EXPIRE_SITE || siteOrigin || 'https://www.niuniubase.top'
 const limit = args.get('limit') || process.env.WECHAT_MARKET_LIMIT || ''
 const batch = args.get('batch') || process.env.WECHAT_MARKET_BATCH || ''
 const skipImport = flags.has('--skip-import')
@@ -151,6 +152,38 @@ function parseSummary(stdout) {
     return JSON.parse(jsonText)
   } catch {
     return null
+  }
+}
+
+async function autoExpirePosts(adminId) {
+  if (!shouldPublish) return { skipped: true, reason: 'not in publish mode' }
+  if (offlineMode) return { skipped: true, reason: 'offline mode' }
+  if (!adminId) return { skipped: true, reason: 'missing admin user id' }
+
+  const endpoint = `${autoExpireOrigin.replace(/\/$/, '')}/api/admin/auto-expire-posts`
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-admin-user-id': adminId
+    },
+    body: JSON.stringify({ expireDays: 3 })
+  })
+  const text = await res.text()
+  let data = null
+  try { data = text ? JSON.parse(text) : null } catch { data = { raw: text } }
+
+  if (!res.ok || data?.success === false) {
+    throw new Error(data?.error?.message || text || `Auto-expire request failed: ${res.status}`)
+  }
+
+  return {
+    skipped: false,
+    endpoint,
+    status: res.status,
+    total: Number(data?.data?.total || 0),
+    expiredCount: Number(data?.data?.expiredCount || 0),
+    sourceCounts: data?.data?.sourceCounts || {}
   }
 }
 
@@ -298,6 +331,9 @@ async function main() {
       stderrTail: summaryResult.stderr.slice(-2000)
     }
   }
+  const autoExpireResult = result.code === 0
+    ? await autoExpirePosts(summary?.publishResult?.operatorUserId || summary?.operatorUserId || '')
+    : { skipped: true, reason: 'publish step failed' }
   const finishedAt = new Date()
 
   const state = {
@@ -316,6 +352,7 @@ async function main() {
     dbExportResult,
     importResult,
     marketSummaryResult,
+    autoExpireResult,
     runOutputDir,
     exitCode: result.code,
     summary,
