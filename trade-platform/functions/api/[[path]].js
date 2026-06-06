@@ -81,6 +81,7 @@ const MANAGED_SYNC_KIND = 'niuniubase.managed-market-sync'
 const MANAGED_SYNC_PROTOCOL_VERSION = 1
 const POST_VALIDITY_DAYS = 3
 const POST_VALIDITY_HOURS = POST_VALIDITY_DAYS * 24
+const MARKET_SOURCE_FRESHNESS_HOURS = 48
 const AUTO_MARKET_SETTING_CATEGORIES = {
   state: 'wechat_market_state',
   history: 'wechat_market_history',
@@ -217,6 +218,42 @@ const subtractShanghaiDays = (dateKey, days) => {
   const [year, month, day] = dateKey.split('-').map((value) => Number(value))
   const utcTime = Date.UTC(year, month - 1, day) - days * 24 * 60 * 60 * 1000
   return getShanghaiDateKey(new Date(utcTime))
+}
+
+const parseMarketSourceDateTimeMs = (value) => {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/)
+  if (!match) return NaN
+  const [, year, month, day, hour = '0', minute = '0', second = '0'] = match
+  return Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour) - 8, Number(minute), Number(second))
+}
+
+const firstMarketEventMonthDay = (value = '') => {
+  const match = String(value || '').match(/(\d{1,2})\s*(?:月|[./])\s*(\d{1,2})/)
+  if (!match) return null
+  const month = Number(match[1])
+  const day = Number(match[2])
+  if (!Number.isInteger(month) || !Number.isInteger(day) || month < 1 || month > 12 || day < 1 || day > 31) return null
+  return { month, day }
+}
+
+const isPastConcertMarketPost = (post) => {
+  if (post?.market_board !== '演唱会') return false
+  const marketData = typeof post.market_data === 'object' && post.market_data ? post.market_data : {}
+  const monthDay = firstMarketEventMonthDay(marketData.eventDate || post.title || marketData.rawSnapshot || '')
+  if (!monthDay) return false
+  const nowLocal = new Date(Date.now() + 8 * 60 * 60 * 1000)
+  const currentMonth = nowLocal.getUTCMonth() + 1
+  if (currentMonth >= 10 && monthDay.month <= 2) return false
+  const today = Date.UTC(nowLocal.getUTCFullYear(), nowLocal.getUTCMonth(), nowLocal.getUTCDate())
+  const eventDay = Date.UTC(nowLocal.getUTCFullYear(), monthDay.month - 1, monthDay.day)
+  return eventDay < today
+}
+
+const isStaleMarketSourcePost = (post) => {
+  const marketData = typeof post.market_data === 'object' && post.market_data ? post.market_data : {}
+  const sourceMs = parseMarketSourceDateTimeMs(marketData.sourceTime || marketData.source_time || '')
+  if (!Number.isFinite(sourceMs)) return false
+  return Date.now() - sourceMs > MARKET_SOURCE_FRESHNESS_HOURS * 60 * 60 * 1000
 }
 
 const toPositiveInteger = (value, fallback) => {
@@ -886,6 +923,8 @@ const normalizeWechatAutoPost = (rawPost) => {
   const specOrTier = String(rawPost.specOrTier || '').trim()
   const quantity = String(rawPost.quantity || '').trim()
   const sourceRef = String(rawPost.sourceRef || '').trim()
+  const sourceTime = String(rawPost.sourceTime || '').trim()
+  const rawSnapshot = String(rawPost.rawSnapshot || '').trim()
   const marketKey = String(rawPost.marketKey || '').trim()
   const signalCount = Math.max(0, Number(rawPost.signalCount || 0))
   const groupCount = Math.max(0, Number(rawPost.groupCount || 0))
@@ -928,6 +967,8 @@ const normalizeWechatAutoPost = (rawPost) => {
       specOrTier: specOrTier.slice(0, 64),
       quantity: quantity.slice(0, 32),
       sourceRef: sourceRef.slice(0, 200),
+      sourceTime: sourceTime.slice(0, 32),
+      rawSnapshot: rawSnapshot.slice(0, 480),
       marketKey: marketKey.slice(0, 200),
       signalCount,
       groupCount
@@ -1142,6 +1183,8 @@ const insertManagedMarketPost = async ({ config, operatorId, post, expireAt, syn
           specOrTier: post.specOrTier,
           quantity: post.quantity,
           sourceRef: post.sourceRef,
+          sourceTime: post.sourceTime,
+          rawSnapshot: post.rawSnapshot,
           signalCount: post.signalCount,
           groupCount: post.groupCount
         },
@@ -1272,6 +1315,8 @@ const buildManagedPostUpdatePayload = ({ currentPost, post, expireAt, syncMeta }
     specOrTier: post.specOrTier,
     quantity: post.quantity,
     sourceRef: post.sourceRef,
+    sourceTime: post.sourceTime,
+    rawSnapshot: post.rawSnapshot,
     signalCount: post.signalCount,
     groupCount: post.groupCount
   }
@@ -1563,7 +1608,7 @@ const handleAdminAutoExpirePosts = async ({ request, config }) => {
     const now = new Date()
     const nowIso = now.toISOString()
     const expireThreshold = new Date(now.getTime() - expireDays * 24 * 60 * 60 * 1000).toISOString()
-    const selectFields = 'id,user_id,title,source_type,status,created_at,expire_at'
+    const selectFields = 'id,user_id,title,source_type,status,created_at,expire_at,market_board,market_data'
 
     const expiredByExpireAtRes = await restRequest({
       config,
@@ -1593,8 +1638,28 @@ const handleAdminAutoExpirePosts = async ({ request, config }) => {
       throw new Error(expiredByCreatedAtRes.text || 'Failed to query posts by created_at')
     }
 
+    const staleMarketRes = await restRequest({
+      config,
+      resource: 'posts',
+      query:
+        'status=eq.1' +
+        '&source_type=eq.wechat_market' +
+        `&select=${selectFields}` +
+        '&order=created_at.desc' +
+        '&limit=1000',
+      useServiceRole: true
+    })
+
+    if (!staleMarketRes.ok) {
+      throw new Error(staleMarketRes.text || 'Failed to query stale market posts')
+    }
+
+    const staleMarketPosts = (staleMarketRes.data || []).filter(
+      (post) => isStaleMarketSourcePost(post) || isPastConcertMarketPost(post)
+    )
+
     const expiredPostMap = new Map()
-    for (const post of [...(expiredByExpireAtRes.data || []), ...(expiredByCreatedAtRes.data || [])]) {
+    for (const post of [...(expiredByExpireAtRes.data || []), ...(expiredByCreatedAtRes.data || []), ...staleMarketPosts]) {
       if (post?.id) expiredPostMap.set(post.id, post)
     }
     const expiredPosts = [...expiredPostMap.values()]

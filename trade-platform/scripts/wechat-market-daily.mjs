@@ -550,6 +550,7 @@ function buildPlan(clusters, categoryMap) {
     plan.push({
       sourceType: 'wechat_group',
       sourceRef: cluster.source.source_file,
+      sourceTime: cluster.source.source_time,
       title: cluster.title,
       itemName: cluster.itemName,
       city: cluster.city,
