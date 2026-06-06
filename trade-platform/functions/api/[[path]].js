@@ -17,10 +17,10 @@ const INVITE_CODE_RE = /^[A-Z0-9]{6,10}$/
 const INITIAL_REGISTRATION_POINTS = 30
 
 const DEFAULT_GROWTH_SETTINGS = {
-  registrationPoints: 500,
+  registrationPoints: 1000,
   dailyPostReward: 10,
-  dailyPostRewardLimit: 5,
-  dailyCheckinReward: 5,
+  dailyPostRewardLimit: 10,
+  dailyCheckinReward: 10,
   inviterRewardPoints: 10,
   inviteeRewardPoints: 30,
   registrationClaimWindowMs: 24 * 60 * 60 * 1000

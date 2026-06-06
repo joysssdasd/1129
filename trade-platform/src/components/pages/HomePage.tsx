@@ -15,7 +15,6 @@ import {
 import type { RealOrderFormValues } from '../../types/orders'
 // 热力图板块组件 - 显示交易板块热度
 import CategoryCards from '../CategoryCards'
-import HomeGrowthCard from '../../features/growth/HomeGrowthCard'
 
 interface Post {
   id: string
@@ -489,16 +488,6 @@ export default function HomePage() {
       )}
 
       {/* 搜索栏 */}
-      <div className="max-w-7xl mx-auto px-4 py-3">
-        <HomeGrowthCard
-          user={user}
-          onUserChange={setUser}
-          onGoLogin={() => navigate('/login')}
-          onGoPublish={() => navigate('/publish')}
-          onGoGrowth={() => navigate('/profile?tab=growth')}
-          onGoLeaderboard={() => navigate('/profile?tab=leaderboard')}
-        />
-      </div>
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex gap-2">

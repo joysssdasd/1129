@@ -25,6 +25,8 @@ const DATE_OVERRIDE = getCliValue('--date') || ''
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/.test(DATE_OVERRIDE) ? DATE_OVERRIDE : getShanghaiDateKey(new Date())
 const SINCE_HOURS = Number(getCliValue('--since-hours') || process.env.WECHAT_MARKET_SINCE_HOURS || 0)
 const SINCE_CUTOFF_MS = Number.isFinite(SINCE_HOURS) && SINCE_HOURS > 0 ? Date.now() - SINCE_HOURS * 60 * 60 * 1000 : 0
+const SOURCE_FRESHNESS_HOURS = Number(getCliValue('--source-freshness-hours') || process.env.WECHAT_MARKET_SOURCE_FRESHNESS_HOURS || 48)
+const ALLOW_STALE_PUBLISH = process.argv.includes('--allow-stale-publish') || process.env.WECHAT_MARKET_ALLOW_STALE_PUBLISH === '1'
 const DEFAULT_OPERATOR_WECHAT = 'niuniubase'
 const MANAGED_SYNC_KIND = 'niuniubase.managed-market-sync'
 const MANAGED_SYNC_PROTOCOL_VERSION = 1
@@ -461,7 +463,130 @@ function familyKeyForCluster(cluster) {
   if (cluster.boardName === '演唱会') return `concert:${String(cluster.itemName || '').toLowerCase()}`
   return ''
 }
-function buildPlan(clusters, categoryMap) { const caps = { '演唱会': 6, '数码和茅台': 6, '贵金属': 1, '纪念币/钞': 4, '其他分类': 1 }; const sourceCaps = { '演唱会': 2, '数码和茅台': 6, '贵金属': 2, '纪念币/钞': 4, '其他分类': 2 }; const familyCaps = { '演唱会': 2, '数码和茅台': 1 }; const seedBoards = ['贵金属', '数码和茅台', '纪念币/钞', '演唱会']; const used = {}; const sourceUsed = {}; const familyUsed = {}; const identityUsed = new Set(); const ordered = [...clusters].sort((a, b) => b.confidenceScore - a.confidenceScore || (b.signalCount || 0) - (a.signalCount || 0) || (b.groupCount || 0) - (a.groupCount || 0)); const plan = []; const canUse = (cluster) => { if (cluster.kind !== 'publishable' || !cluster.directPublish) return false; if (!categoryMap[cluster.categoryName]) return false; const cap = Object.prototype.hasOwnProperty.call(caps, cluster.boardName) ? caps[cluster.boardName] : 2; if ((used[cluster.boardName] || 0) >= cap) return false; const identityKey = marketKeyForCluster(cluster); if (identityUsed.has(identityKey)) return false; const sourceCap = Object.prototype.hasOwnProperty.call(sourceCaps, cluster.boardName) ? sourceCaps[cluster.boardName] : 2; if ((sourceUsed[cluster.source.source_file] || 0) >= sourceCap) return false; const familyKey = familyKeyForCluster(cluster); const familyCap = Object.prototype.hasOwnProperty.call(familyCaps, cluster.boardName) ? familyCaps[cluster.boardName] : Infinity; if (familyKey && (familyUsed[familyKey] || 0) >= familyCap) return false; return true }; const addCluster = (cluster) => { const identityKey = marketKeyForCluster(cluster); const familyKey = familyKeyForCluster(cluster); identityUsed.add(identityKey); sourceUsed[cluster.source.source_file] = (sourceUsed[cluster.source.source_file] || 0) + 1; used[cluster.boardName] = (used[cluster.boardName] || 0) + 1; if (familyKey) familyUsed[familyKey] = (familyUsed[familyKey] || 0) + 1; plan.push({ sourceType: 'wechat_group', sourceRef: cluster.source.source_file, title: cluster.title, itemName: cluster.itemName, city: cluster.city, eventDate: cluster.eventDate, specOrTier: cluster.specOrTier, quantity: cluster.quantity || '', marketKey: identityKey, keywords: clip(cluster.keywords.join(','), 198), price: Number(cluster.normalizedPrice), tradeType: cluster.intent === 'buy' ? 1 : 2, intent: cluster.intent, extraInfo: cluster.extraInfo, categoryId: categoryMap[cluster.categoryName], categoryName: cluster.categoryName, expireHours: 24 * 3, viewLimit: 100, originConfidence: cluster.confidenceScore, dedupeKey: cluster.dedupeKey, rawSnapshot: clip(cluster.source.raw_text, 480), signalCount: cluster.signalCount, groupCount: cluster.groupCount }) }; for (const boardName of seedBoards) { const seed = ordered.find((cluster) => cluster.boardName === boardName && canUse(cluster)); if (seed) addCluster(seed) } for (const cluster of ordered) { if (!canUse(cluster)) continue; addCluster(cluster); if (plan.length >= PUBLISH_LIMIT) break } return plan }
+
+function parseShanghaiDateTimeMs(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/)
+  if (!match) return NaN
+  const [, year, month, day, hour = '0', minute = '0', second = '0'] = match
+  return Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour) - 8, Number(minute), Number(second))
+}
+
+function clusterSourceAgeHours(cluster) {
+  const sourceMs = parseShanghaiDateTimeMs(cluster?.source?.source_time)
+  if (!Number.isFinite(sourceMs)) return 0
+  return (Date.now() - sourceMs) / (60 * 60 * 1000)
+}
+
+function isStaleSourceCluster(cluster) {
+  if (ALLOW_STALE_PUBLISH) return false
+  if (!Number.isFinite(SOURCE_FRESHNESS_HOURS) || SOURCE_FRESHNESS_HOURS <= 0) return false
+  return clusterSourceAgeHours(cluster) > SOURCE_FRESHNESS_HOURS
+}
+
+function firstEventMonthDay(value = '') {
+  const match = String(value || '').match(/(\d{1,2})\s*(?:月|[./])\s*(\d{1,2})/)
+  if (!match) return null
+  const month = Number(match[1])
+  const day = Number(match[2])
+  if (!Number.isInteger(month) || !Number.isInteger(day) || month < 1 || month > 12 || day < 1 || day > 31) return null
+  return { month, day }
+}
+
+function isStaleConcertEvent(cluster) {
+  if (cluster?.boardName !== '演唱会') return false
+  const monthDay = firstEventMonthDay(cluster.eventDate || cluster.title || cluster.source?.raw_text || '')
+  if (!monthDay) return false
+  const nowLocal = new Date(Date.now() + 8 * 60 * 60 * 1000)
+  const currentMonth = nowLocal.getUTCMonth() + 1
+  if (currentMonth >= 10 && monthDay.month <= 2) return false
+  const today = Date.UTC(nowLocal.getUTCFullYear(), nowLocal.getUTCMonth(), nowLocal.getUTCDate())
+  const eventDay = Date.UTC(nowLocal.getUTCFullYear(), monthDay.month - 1, monthDay.day)
+  return eventDay < today
+}
+function buildPlan(clusters, categoryMap) {
+  const caps = { '演唱会': 6, '数码和茅台': 6, '贵金属': 1, '纪念币/钞': 4, '其他分类': 1 }
+  const sourceCaps = { '演唱会': 2, '数码和茅台': 6, '贵金属': 2, '纪念币/钞': 4, '其他分类': 2 }
+  const familyCaps = { '演唱会': 2, '数码和茅台': 1 }
+  const seedBoards = PUBLISH_LIMIT <= 6 ? ['演唱会'] : ['演唱会', '数码和茅台', '纪念币/钞', '贵金属']
+  const used = {}
+  const sourceUsed = {}
+  const familyUsed = {}
+  const identityUsed = new Set()
+  const ordered = [...clusters].sort((a, b) =>
+    b.confidenceScore - a.confidenceScore ||
+    (b.signalCount || 0) - (a.signalCount || 0) ||
+    (b.groupCount || 0) - (a.groupCount || 0)
+  )
+  const plan = []
+
+  const canUse = (cluster) => {
+    if (cluster.kind !== 'publishable' || !cluster.directPublish) return false
+    if (!categoryMap[cluster.categoryName]) return false
+    if (isStaleSourceCluster(cluster) || isStaleConcertEvent(cluster)) return false
+
+    const cap = Object.prototype.hasOwnProperty.call(caps, cluster.boardName) ? caps[cluster.boardName] : 2
+    if ((used[cluster.boardName] || 0) >= cap) return false
+
+    const identityKey = marketKeyForCluster(cluster)
+    if (identityUsed.has(identityKey)) return false
+
+    const sourceCap = Object.prototype.hasOwnProperty.call(sourceCaps, cluster.boardName) ? sourceCaps[cluster.boardName] : 2
+    if ((sourceUsed[cluster.source.source_file] || 0) >= sourceCap) return false
+
+    const familyKey = familyKeyForCluster(cluster)
+    const familyCap = Object.prototype.hasOwnProperty.call(familyCaps, cluster.boardName) ? familyCaps[cluster.boardName] : Infinity
+    if (familyKey && (familyUsed[familyKey] || 0) >= familyCap) return false
+
+    return true
+  }
+
+  const addCluster = (cluster) => {
+    const identityKey = marketKeyForCluster(cluster)
+    const familyKey = familyKeyForCluster(cluster)
+    identityUsed.add(identityKey)
+    sourceUsed[cluster.source.source_file] = (sourceUsed[cluster.source.source_file] || 0) + 1
+    used[cluster.boardName] = (used[cluster.boardName] || 0) + 1
+    if (familyKey) familyUsed[familyKey] = (familyUsed[familyKey] || 0) + 1
+    plan.push({
+      sourceType: 'wechat_group',
+      sourceRef: cluster.source.source_file,
+      title: cluster.title,
+      itemName: cluster.itemName,
+      city: cluster.city,
+      eventDate: cluster.eventDate,
+      specOrTier: cluster.specOrTier,
+      quantity: cluster.quantity || '',
+      marketKey: identityKey,
+      keywords: clip(cluster.keywords.join(','), 198),
+      price: Number(cluster.normalizedPrice),
+      tradeType: cluster.intent === 'buy' ? 1 : 2,
+      intent: cluster.intent,
+      extraInfo: cluster.extraInfo,
+      categoryId: categoryMap[cluster.categoryName],
+      categoryName: cluster.categoryName,
+      expireHours: 24 * 3,
+      viewLimit: 100,
+      originConfidence: cluster.confidenceScore,
+      dedupeKey: cluster.dedupeKey,
+      rawSnapshot: clip(cluster.source.raw_text, 480),
+      signalCount: cluster.signalCount,
+      groupCount: cluster.groupCount
+    })
+  }
+
+  for (const boardName of seedBoards) {
+    const seed = ordered.find((cluster) => cluster.boardName === boardName && canUse(cluster))
+    if (seed) addCluster(seed)
+  }
+
+  for (const cluster of ordered) {
+    if (!canUse(cluster)) continue
+    addCluster(cluster)
+    if (plan.length >= PUBLISH_LIMIT) break
+  }
+
+  return plan
+}
 function rowsForBoard(name, clusters, plan) {
   const planRows = plan
     .filter((row) => row.categoryName === name)

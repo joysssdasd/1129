@@ -119,10 +119,10 @@ interface DailyCheckInData {
 }
 
 const DEFAULT_GROWTH_SETTINGS: GrowthSettings = {
-  registrationPoints: 500,
+  registrationPoints: 1000,
   dailyPostReward: 10,
-  dailyPostRewardLimit: 5,
-  dailyCheckinReward: 5,
+  dailyPostRewardLimit: 10,
+  dailyCheckinReward: 10,
   inviterRewardPoints: 10,
   inviteeRewardPoints: 30,
 }

@@ -859,13 +859,6 @@ export default function ProfilePage() {
             </div>
 
             <button
-              onClick={() => setActiveTab('recharge')}
-              className="w-full py-4 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-all"
-            >
-              充值积分
-            </button>
-
-            <button
               onClick={() => {
                 localStorage.removeItem('token')
                 setUser(null)
