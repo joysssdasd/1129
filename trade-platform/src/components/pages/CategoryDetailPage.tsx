@@ -6,6 +6,7 @@ import { useUser } from '../../contexts/UserContext'
 import { toast } from '../../services/toastService'
 import { POINTS } from '../../constants'
 import OrderDraftPrompt from '../../features/orders/OrderDraftPrompt'
+import { getActivePostCutoffIso, isPostCurrentlyActive } from '../../utils/postExpiry'
 import {
   buildOrderDraftFromPost,
   savePendingOrderDraft,
@@ -20,6 +21,8 @@ interface Post {
   view_count: number
   view_limit: number
   created_at: string
+  expire_at?: string | null
+  status?: number | string | null
   user_id: string
   keywords: string
   delivery_days?: number
@@ -64,15 +67,19 @@ export default function CategoryDetailPage() {
       }
 
       // 获取该板块的交易信息
+      const nowIso = new Date().toISOString()
+      const cutoffIso = getActivePostCutoffIso()
       const { data, error } = await supabase
         .from('posts')
         .select('*')
         .eq('category_id', categoryId)
         .eq('status', 1)
+        .gte('expire_at', nowIso)
+        .gte('created_at', cutoffIso)
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setPosts(data || [])
+      setPosts((data || []).filter(isPostCurrentlyActive))
     } catch (error: any) {
       toast.error('加载失败', error.message)
     } finally {
@@ -82,6 +89,12 @@ export default function CategoryDetailPage() {
 
   const handleQuickTrade = async (post: Post, e: React.MouseEvent) => {
     e.stopPropagation()
+
+    if (!isPostCurrentlyActive(post)) {
+      toast.error('该交易信息已超过3天有效期，已自动下架')
+      loadCategoryPosts()
+      return
+    }
 
     if (!user) {
       toast.error('请先登录')

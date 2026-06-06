@@ -11,6 +11,7 @@ import {
 } from '../../features/orders/orderHelpers'
 import type { RealOrderFormValues } from '../../types/orders'
 import { getPublicExtraInfo } from '../../utils/managedMarket'
+import { isPostCurrentlyActive } from '../../utils/postExpiry'
 
 export default function PostDetailPage() {
   const { id } = useParams()
@@ -43,6 +44,12 @@ export default function PostDetailPage() {
       if (postError) throw postError
       if (!postData) {
         alert('信息不存在')
+        navigate('/')
+        return
+      }
+
+      if (!isPostCurrentlyActive(postData)) {
+        alert('该交易信息已超过3天有效期，已自动下架')
         navigate('/')
         return
       }

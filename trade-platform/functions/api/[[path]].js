@@ -79,6 +79,8 @@ const AUTO_MARKET_INFO_PREFIX = '__managed_market__'
 const LEGACY_AUTO_MARKET_INFO_PREFIX = '自动整理自微信群行情'
 const MANAGED_SYNC_KIND = 'niuniubase.managed-market-sync'
 const MANAGED_SYNC_PROTOCOL_VERSION = 1
+const POST_VALIDITY_DAYS = 3
+const POST_VALIDITY_HOURS = POST_VALIDITY_DAYS * 24
 const AUTO_MARKET_SETTING_CATEGORIES = {
   state: 'wechat_market_state',
   history: 'wechat_market_history',
@@ -873,7 +875,10 @@ const normalizeWechatAutoPost = (rawPost) => {
   const categoryName = String(rawPost.categoryName || '').trim()
   const tradeType = Number(rawPost.tradeType)
   const price = Number(rawPost.price)
-  const expireHours = Math.max(1, Math.min(24 * 30, Number(rawPost.expireHours || 24 * 7)))
+  const requestedExpireHours = Number(rawPost.expireHours ?? POST_VALIDITY_HOURS)
+  const expireHours = Number.isFinite(requestedExpireHours)
+    ? Math.max(1, Math.min(POST_VALIDITY_HOURS, requestedExpireHours))
+    : POST_VALIDITY_HOURS
   const viewLimit = Math.max(1, Math.min(1000, Number(rawPost.viewLimit || 100)))
   const itemName = String(rawPost.itemName || '').trim()
   const city = String(rawPost.city || '').trim() || '全国'
@@ -1540,9 +1545,7 @@ const deactivateManagedMarketPosts = async ({ config, postIds }) => {
   return Array.isArray(updateRes.data) ? updateRes.data : []
 }
 
-// 自动下架超过3天的帖子
-// - 用户发布(source_type='user')：下架 + 退还积分
-// - 管理员发布(source_type='wechat_market')：仅下架
+// Auto-expire active posts once they are older than the public validity window.
 const handleAdminAutoExpirePosts = async ({ request, config }) => {
   const missingServiceRoleResponse = requireServiceRole(config)
   if (missingServiceRoleResponse) return missingServiceRoleResponse
@@ -1553,150 +1556,95 @@ const handleAdminAutoExpirePosts = async ({ request, config }) => {
 
     const payload = await readJsonBody(request)
     const dryRun = payload?.dryRun === true
-    // 超过天数，默认3天
-    const expireDays = Number(payload?.expireDays || 3)
+    const requestedExpireDays = Number(payload?.expireDays ?? POST_VALIDITY_DAYS)
+    const expireDays = Number.isFinite(requestedExpireDays)
+      ? Math.max(1, Math.min(POST_VALIDITY_DAYS, requestedExpireDays))
+      : POST_VALIDITY_DAYS
     const now = new Date()
+    const nowIso = now.toISOString()
     const expireThreshold = new Date(now.getTime() - expireDays * 24 * 60 * 60 * 1000).toISOString()
+    const selectFields = 'id,user_id,title,source_type,status,created_at,expire_at'
 
-    // 查询超过期限的活跃帖子
-    const postsRes = await restRequest({
+    const expiredByExpireAtRes = await restRequest({
+      config,
+      resource: 'posts',
+      query:
+        'status=eq.1' +
+        `&expire_at=lt.${encodeURIComponent(nowIso)}` +
+        `&select=${selectFields}`,
+      useServiceRole: true
+    })
+
+    if (!expiredByExpireAtRes.ok) {
+      throw new Error(expiredByExpireAtRes.text || 'Failed to query posts by expire_at')
+    }
+
+    const expiredByCreatedAtRes = await restRequest({
       config,
       resource: 'posts',
       query:
         'status=eq.1' +
         `&created_at=lt.${encodeURIComponent(expireThreshold)}` +
-        '&select=id,user_id,title,price,source_type,status,created_at,points_cost',
+        `&select=${selectFields}`,
       useServiceRole: true
     })
 
-    if (!postsRes.ok) {
-      throw new Error(postsRes.text || 'Failed to query expired posts')
+    if (!expiredByCreatedAtRes.ok) {
+      throw new Error(expiredByCreatedAtRes.text || 'Failed to query posts by created_at')
     }
 
-    const expiredPosts = Array.isArray(postsRes.data) ? postsRes.data : []
-    const result = {
-      total: expiredPosts.length,
-      userPosts: { expired: 0, pointsRefunded: 0 },
-      adminPosts: { expired: 0 },
-      errors: []
+    const expiredPostMap = new Map()
+    for (const post of [...(expiredByExpireAtRes.data || []), ...(expiredByCreatedAtRes.data || [])]) {
+      if (post?.id) expiredPostMap.set(post.id, post)
     }
+    const expiredPosts = [...expiredPostMap.values()]
+    const expiredIds = expiredPosts.map((post) => post.id)
+    const sourceCounts = expiredPosts.reduce((counts, post) => {
+      const sourceType = post.source_type || 'unknown'
+      counts[sourceType] = (counts[sourceType] || 0) + 1
+      return counts
+    }, {})
 
-    // 分别处理用户帖子和管理员帖子
-    const userPosts = expiredPosts.filter(p => p.source_type === 'user')
-    const adminPosts = expiredPosts.filter(p => p.source_type === 'wechat_market')
-
-    // 处理用户帖子：下架 + 退还积分
-    for (const post of userPosts) {
-      try {
-        // 下架帖子
-        const updateRes = await restRequest({
-          config,
-          resource: 'posts',
-          query: `id=eq.${encodeURIComponent(post.id)}`,
-          method: 'PATCH',
-          body: {
-            status: 0,
-            is_manually_hidden: true,
-            hide_reason: 'auto_expired',
-            updated_at: now.toISOString()
-          },
-          useServiceRole: true
-        })
-
-        if (!updateRes.ok) {
-          throw new Error(updateRes.text || 'Failed to update post')
-        }
-
-        // 退还积分
-        const pointsToRefund = Number(post.points_cost || 1)
-        if (pointsToRefund > 0) {
-          // 获取当前用户积分
-          const userRes = await restRequest({
-            config,
-            resource: 'users',
-            query: `id=eq.${encodeURIComponent(post.user_id)}&select=id,points`,
-            useServiceRole: true
-          })
-
-          if (userRes.ok && Array.isArray(userRes.data) && userRes.data.length > 0) {
-            const currentPoints = Number(userRes.data[0].points || 0)
-            const newPoints = currentPoints + pointsToRefund
-
-            await updateUserPoints(config, post.user_id, newPoints)
-
-            await insertPointTransaction(config, {
-              user_id: post.user_id,
-              change_type: POINT_CHANGE_TYPES.postExpireRefund,
-              change_amount: pointsToRefund,
-              balance_after: newPoints,
-              related_id: post.id,
-              description: `帖子到期下架退还：${post.title}`,
-              created_at: now.toISOString()
-            })
-          }
-        }
-
-        result.userPosts.expired++
-        result.userPosts.pointsRefunded += pointsToRefund
-      } catch (err) {
-        result.errors.push(`Post ${post.id}: ${err.message}`)
-      }
-    }
-
-    // 处理管理员帖子：仅下架
-    for (const post of adminPosts) {
-      try {
-        const updateRes = await restRequest({
-          config,
-          resource: 'posts',
-          query: `id=eq.${encodeURIComponent(post.id)}`,
-          method: 'PATCH',
-          body: {
-            status: 0,
-            hide_reason: 'auto_expired',
-            updated_at: now.toISOString()
-          },
-          useServiceRole: true
-        })
-
-        if (!updateRes.ok) {
-          throw new Error(updateRes.text || 'Failed to update post')
-        }
-
-        result.adminPosts.expired++
-      } catch (err) {
-        result.errors.push(`Admin Post ${post.id}: ${err.message}`)
-      }
-    }
-
-    if (dryRun) {
-      return json({
-        success: true,
-        data: {
-          dryRun: true,
-          expireDays,
-          expireThreshold,
-          message: 'Dry run - no changes made',
-          wouldExpire: expiredPosts.map(p => ({
-            id: p.id,
-            title: p.title,
-            sourceType: p.source_type,
-            createdAt: p.created_at,
-            pointsCost: p.points_cost
-          })),
-          ...result
+    let updatedPosts = []
+    if (!dryRun && expiredIds.length) {
+      const updateRes = await restRequest({
+        config,
+        resource: 'posts',
+        query:
+          `id=in.(${expiredIds.map((id) => `"${id}"`).join(',')})` +
+          `&select=${selectFields},updated_at`,
+        method: 'PATCH',
+        body: {
+          status: 0,
+          expire_at: nowIso,
+          updated_at: nowIso
+        },
+        useServiceRole: true,
+        extraHeaders: {
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation'
         }
       })
+
+      if (!updateRes.ok) {
+        throw new Error(updateRes.text || 'Failed to update expired posts')
+      }
+
+      updatedPosts = Array.isArray(updateRes.data) ? updateRes.data : []
     }
 
     return json({
       success: true,
       data: {
-        dryRun: false,
+        dryRun,
         expireDays,
         expireThreshold,
-        executedAt: now.toISOString(),
-        ...result
+        executedAt: nowIso,
+        total: expiredPosts.length,
+        expiredCount: dryRun ? 0 : updatedPosts.length,
+        sourceCounts,
+        wouldExpire: dryRun ? expiredPosts : undefined,
+        expiredPosts: dryRun ? undefined : updatedPosts
       }
     })
   } catch (error) {

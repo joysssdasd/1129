@@ -7,6 +7,7 @@ import { log } from '../../utils/logger'
 import { searchAndSort, extractKeywordStats, getSearchSuggestions } from '../../utils/searchUtils'
 import { cache, CACHE_KEYS, CACHE_TTL } from '../../services/cacheService'
 import OrderDraftPrompt from '../../features/orders/OrderDraftPrompt'
+import { getActivePostCutoffIso, isPostCurrentlyActive } from '../../utils/postExpiry'
 import {
   buildOrderDraftFromPost,
   savePendingOrderDraft,
@@ -24,6 +25,8 @@ interface Post {
   view_count: number
   view_limit: number
   created_at: string
+  expire_at?: string | null
+  status?: number | string | null
   user_id: string
   keywords: string
   delivery_days?: number
@@ -133,10 +136,14 @@ export default function HomePage() {
       const data = await cache.getOrFetch(
         CACHE_KEYS.POSTS,
         async () => {
+          const nowIso = new Date().toISOString()
+          const cutoffIso = getActivePostCutoffIso()
           const { data, error } = await supabase
             .from('posts')
             .select('*')
             .eq('status', 1)
+            .gte('expire_at', nowIso)
+            .gte('created_at', cutoffIso)
             .order('created_at', { ascending: false })
             .limit(200)
           if (error) throw error
@@ -145,11 +152,12 @@ export default function HomePage() {
         CACHE_TTL.SHORT // 10秒缓存
       )
       
-      setAllPosts(data)
+      const activeData = data.filter(isPostCurrentlyActive)
+      setAllPosts(activeData)
       
       // 提取热门关键词（带缓存）
       const stats = cache.get<{ keyword: string; count: number }[]>(CACHE_KEYS.HOT_KEYWORDS) 
-        || extractKeywordStats(data)
+        || extractKeywordStats(activeData)
       cache.set(CACHE_KEYS.HOT_KEYWORDS, stats, CACHE_TTL.MEDIUM)
       setHotKeywords(stats.slice(0, 10))
     } catch (error) {
@@ -160,10 +168,14 @@ export default function HomePage() {
   const loadPosts = async () => {
     setLoading(true)
     try {
+      const nowIso = new Date().toISOString()
+      const cutoffIso = getActivePostCutoffIso()
       let query = supabase
         .from('posts')
         .select('*')
         .eq('status', 1)
+        .gte('expire_at', nowIso)
+        .gte('created_at', cutoffIso)
         .order('created_at', { ascending: false })
         .limit(50)
 
@@ -181,7 +193,7 @@ export default function HomePage() {
       const { data, error } = await query
 
       if (error) throw error
-      setPosts(data || [])
+      setPosts((data || []).filter(isPostCurrentlyActive))
     } catch (error) {
       log.error('加载失败:', error)
     } finally {
@@ -202,10 +214,14 @@ export default function HomePage() {
     setLoading(true)
     try {
       // 先从数据库获取所有数据
+      const nowIso = new Date().toISOString()
+      const cutoffIso = getActivePostCutoffIso()
       const { data, error } = await supabase
         .from('posts')
         .select('*')
         .eq('status', 1)
+        .gte('expire_at', nowIso)
+        .gte('created_at', cutoffIso)
         .order('created_at', { ascending: false })
         .limit(200)
 
@@ -213,7 +229,7 @@ export default function HomePage() {
 
       // 使用本地模糊搜索和排序
       const filtered = searchAndSort(
-        data || [],
+        (data || []).filter(isPostCurrentlyActive),
         searchTerm,
         (post) => [post.title, post.keywords || '']
       )
@@ -264,6 +280,12 @@ export default function HomePage() {
 
   const handleQuickTrade = async (post: Post, e: React.MouseEvent) => {
     e.stopPropagation()
+
+    if (!isPostCurrentlyActive(post)) {
+      alert('该交易信息已超过3天有效期，已自动下架')
+      loadPosts()
+      return
+    }
     
     if (!user) {
       alert('请先登录')

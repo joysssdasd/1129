@@ -74,6 +74,18 @@ Deno.serve(async (req) => {
         }
 
         // 检查剩余查看次数（优先级：无论是否查看过，都要检查总次数限制）
+        const postValidityMs = 3 * 24 * 60 * 60 * 1000;
+        const nowMs = Date.now();
+        const expireMs = post.expire_at ? new Date(post.expire_at).getTime() : NaN;
+        const createdMs = post.created_at ? new Date(post.created_at).getTime() : NaN;
+
+        if (
+            (Number.isFinite(expireMs) && expireMs <= nowMs) ||
+            (Number.isFinite(createdMs) && nowMs - createdMs >= postValidityMs)
+        ) {
+            throw new Error('该交易信息已超过3天有效期，已自动下架');
+        }
+
         if (post.view_count >= post.view_limit) {
             throw new Error('该信息查看次数已用完');
         }
