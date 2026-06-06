@@ -3820,7 +3820,13 @@ export async function onRequest(context) {
   try {
     const reqUrl = new URL(request.url)
     const targetUrl = `${config.supabaseUrl}/${path}${reqUrl.search}`
-    const headers = new Headers(request.headers)
+    const incomingHeaders = new Headers(request.headers)
+    const headers = new Headers()
+
+    for (const name of ['accept', 'authorization', 'content-type', 'apikey', 'prefer', 'range']) {
+      const value = incomingHeaders.get(name)
+      if (value) headers.set(name, value)
+    }
 
     if (!headers.has('apikey')) {
       headers.set('apikey', config.anonKey)
@@ -3837,8 +3843,9 @@ export async function onRequest(context) {
 
     const responseHeaders = new Headers(response.headers)
     responseHeaders.set('Access-Control-Allow-Origin', '*')
+    const responseBody = await response.arrayBuffer()
 
-    return new Response(response.body, {
+    return new Response(responseBody, {
       status: response.status,
       statusText: response.statusText,
       headers: responseHeaders
