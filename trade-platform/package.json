@@ -7,7 +7,7 @@
     "setup:virtual-node-modules": "node scripts/ensure-virtual-node-modules.mjs",
     "dev": "pnpm install --prefer-offline && pnpm run setup:virtual-node-modules && vite",
     "build": "pnpm install --prefer-offline && pnpm run setup:virtual-node-modules && node -e \"try{require('fs').rmSync('node_modules/.vite-temp',{recursive:true,force:true})}catch(e){}\" && tsc -b && vite build",
-    "build:prod": "pnpm install --prefer-offline && pnpm run setup:virtual-node-modules && node -e \"try{require('fs').rmSync('node_modules/.vite-temp',{recursive:true,force:true})}catch(e){}\" && BUILD_MODE=prod tsc -b && vite build",
+    "build:prod": "pnpm install --prefer-offline && pnpm run setup:virtual-node-modules && node -e \"try{require('fs').rmSync('node_modules/.vite-temp',{recursive:true,force:true})}catch(e){}\" && node scripts/build-prod.mjs",
     "lint": "pnpm install --prefer-offline && pnpm run setup:virtual-node-modules && eslint .",
     "preview": "pnpm install --prefer-offline && pnpm run setup:virtual-node-modules && vite preview",
     "install-deps": "pnpm install --prefer-offline",
@@ -20,10 +20,17 @@
     "check:edge-functions": "node scripts/check-edge-functions.mjs",
     "mcp:supabase": "node supabase-mcp-server.js",
     "wechat:daily": "node scripts/wechat-market-daily.mjs",
-    "wechat:publish": "node scripts/wechat-market-daily.mjs --publish"
+    "wechat:publish": "node scripts/wechat-market-daily.mjs --publish",
+    "wechat:export-db": "node scripts/echotrace-db-export.mjs",
+    "wechat:summary": "node scripts/wechat-market-summary.mjs --mode=auto",
+    "wechat:query": "node scripts/wechat-market-summary.mjs --mode=manual",
+    "wechat:auto": "node scripts/wechat-market-auto.mjs --mode=preview",
+    "wechat:auto-publish": "node scripts/wechat-market-auto.mjs --mode=publish",
+    "wechat:install-task": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-wechat-market-task.ps1"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@radix-ui/react-accordion": "^1.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.4",
     "@radix-ui/react-aspect-ratio": "^1.1.1",

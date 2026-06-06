@@ -1,21 +1,40 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useUser } from '../../contexts/UserContext'
 import { supabase } from '../../services/supabase'
-import { ArrowLeft, Copy, Upload, MessageCircle, Receipt, TrendingUp, FileText, Edit, Trash2, Clock, CheckCircle, XCircle, Key, Users, Sparkles, Archive, AlertTriangle, Megaphone, X, CalendarCheck2, Trophy } from 'lucide-react'
+import { ArrowLeft, Copy, Upload, MessageCircle, Receipt, TrendingUp, FileText, Edit, Trash2, Clock, CheckCircle, XCircle, Key, Users, Sparkles, Archive, AlertTriangle, Megaphone, X, PackageCheck, Plus } from 'lucide-react'
 import InvitationStatistics from '../../features/InvitationStatistics'
 import UserAIBatchPublish from '../../features/forms/UserAIBatchPublish'
 import { autoHideService } from '../../services/autoHideService'
 import { POST_STATUS } from '../../constants'
 import { log } from '../../utils/logger'
-import GrowthCenter from '../../features/growth/GrowthCenter'
-import PublishLeaderboard from '../../features/growth/PublishLeaderboard'
+import OrderFormModal from '../../features/orders/OrderFormModal'
+import OrderStatsCards from '../../features/orders/OrderStatsCards'
+import {
+  ORDER_SIDE_LABELS,
+  ORDER_SOURCE_LABELS,
+  ORDER_SOURCE_STYLES,
+  ORDER_STATUS_LABELS,
+  ORDER_STATUS_STYLES,
+  buildOrderDraftFromPost,
+  consumePendingOrderDraft,
+  createEmptyOrderDraft,
+  formatCurrency,
+  formatDateTime,
+} from '../../features/orders/orderHelpers'
+import { orderService } from '../../services/orderService'
+import type {
+  OrderSide,
+  OrderSourceType,
+  OrderStatus,
+  RealOrder,
+  RealOrderFormValues,
+} from '../../types/orders'
 
 const PROFILE_TABS = new Set([
   'overview',
-  'growth',
-  'leaderboard',
   'posts',
+  'orders',
   'expired',
   'history',
   'points',
@@ -48,6 +67,16 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [paymentQRCodes, setPaymentQRCodes] = useState<{wechat?: string, alipay?: string}>({})
+  const [orders, setOrders] = useState<RealOrder[]>([])
+  const [ordersLoading, setOrdersLoading] = useState(false)
+  const [orderModalOpen, setOrderModalOpen] = useState(false)
+  const [orderSubmitting, setOrderSubmitting] = useState(false)
+  const [editingOrder, setEditingOrder] = useState<RealOrder | null>(null)
+  const [orderDraft, setOrderDraft] = useState<RealOrderFormValues>(createEmptyOrderDraft())
+  const [orderSearch, setOrderSearch] = useState('')
+  const [orderSourceFilter, setOrderSourceFilter] = useState<'all' | OrderSourceType>('all')
+  const [orderStatusFilter, setOrderStatusFilter] = useState<'all' | OrderStatus>('all')
+  const [orderSideFilter, setOrderSideFilter] = useState<'all' | OrderSide>('all')
 
   // 修改密码相关
   const [oldPassword, setOldPassword] = useState('')
@@ -65,6 +94,26 @@ export default function ProfilePage() {
     navigate(tab === 'overview' ? '/profile' : `/profile?tab=${tab}`)
   }
 
+  const filteredOrders = useMemo(() => {
+    return orders.filter((order) => {
+      const searchValue = orderSearch.trim().toLowerCase()
+      const matchesSearch =
+        !searchValue ||
+        order.subject_title?.toLowerCase().includes(searchValue) ||
+        order.counterparty_name?.toLowerCase().includes(searchValue) ||
+        order.counterparty_contact?.toLowerCase().includes(searchValue) ||
+        order.category_name?.toLowerCase().includes(searchValue)
+
+      const matchesSource =
+        orderSourceFilter === 'all' || order.source_type === orderSourceFilter
+      const matchesStatus =
+        orderStatusFilter === 'all' || order.status === orderStatusFilter
+      const matchesSide = orderSideFilter === 'all' || order.my_side === orderSideFilter
+
+      return matchesSearch && matchesSource && matchesStatus && matchesSide
+    })
+  }, [orders, orderSearch, orderSideFilter, orderSourceFilter, orderStatusFilter])
+
   useEffect(() => {
     const nextTab = new URLSearchParams(location.search).get('tab') || 'overview'
     const normalizedTab = PROFILE_TABS.has(nextTab) ? nextTab : 'overview'
@@ -79,6 +128,7 @@ export default function ProfilePage() {
     if (activeTab === 'rechargeHistory') loadRechargeRecords()
     if (activeTab === 'recharge') loadPaymentQRCodes()
     if (activeTab === 'service') loadServiceSettings()
+    if (activeTab === 'orders') loadOrders()
   }, [activeTab])
 
   // 初始加载公告和刷新用户数据
@@ -91,6 +141,20 @@ export default function ProfilePage() {
       setClosedAnnouncements(JSON.parse(closed))
     }
   }, [])
+
+  useEffect(() => {
+    if (activeTab !== 'orders') return
+
+    const pendingDraft = consumePendingOrderDraft()
+    if (pendingDraft) {
+      openCreateOrderModal(pendingDraft)
+    }
+  }, [activeTab])
+
+  useEffect(() => {
+    if (!user?.id) return
+    loadOrders()
+  }, [user?.id])
 
   // 刷新用户数据，确保积分等信息是最新的
   const refreshUserData = async () => {
@@ -192,7 +256,7 @@ export default function ProfilePage() {
     if (!user) return
     const { data } = await supabase
       .from('view_history')
-      .select('*, posts(*)')
+      .select('*, posts(*, user:users(id, phone, wechat_id))')
       .eq('user_id', user.id)
       .order('viewed_at', { ascending: false })
     setViewHistory(data || [])
@@ -217,6 +281,92 @@ export default function ProfilePage() {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
     setRechargeRecords(data || [])
+  }
+
+  const loadOrders = async () => {
+    if (!user) return
+
+    setOrdersLoading(true)
+    try {
+      const data = await orderService.listOrders(user.id)
+      setOrders(data)
+    } catch (error) {
+      log.error('加载订单失败:', error)
+      setOrders([])
+    } finally {
+      setOrdersLoading(false)
+    }
+  }
+
+  const openCreateOrderModal = (draft?: Partial<RealOrderFormValues> | null) => {
+    setEditingOrder(null)
+    setOrderDraft({
+      ...createEmptyOrderDraft(),
+      ...draft,
+    })
+    setOrderModalOpen(true)
+  }
+
+  const openEditOrderModal = (order: RealOrder) => {
+    setEditingOrder(order)
+    setOrderDraft({
+      ...createEmptyOrderDraft(),
+      ...order,
+      quantity:
+        order.quantity === null || order.quantity === undefined
+          ? ''
+          : String(order.quantity),
+      unit_price:
+        order.unit_price === null || order.unit_price === undefined
+          ? ''
+          : String(order.unit_price),
+      total_amount: String(order.total_amount || ''),
+      deal_at: order.deal_at,
+      source_post_id: order.source_post_id || null,
+      category_name: order.category_name || '',
+      trade_type_label: order.trade_type_label || '',
+      counterparty_name: order.counterparty_name || '',
+      counterparty_contact: order.counterparty_contact || '',
+      delivery_method: order.delivery_method || '',
+      payment_method: order.payment_method || '',
+      notes: order.notes || '',
+      subject_snapshot: order.subject_snapshot || null,
+    })
+    setOrderModalOpen(true)
+  }
+
+  const handleOrderSubmit = async (values: RealOrderFormValues) => {
+    if (!user) return
+
+    setOrderSubmitting(true)
+    try {
+      if (editingOrder) {
+        await orderService.updateOrder(user.id, editingOrder.id, values)
+      } else {
+        await orderService.createOrder(user.id, values)
+      }
+
+      setOrderModalOpen(false)
+      setEditingOrder(null)
+      setOrderDraft(createEmptyOrderDraft())
+      loadOrders()
+    } catch (error) {
+      log.error('保存订单失败:', error)
+      alert((error as Error).message || '保存订单失败')
+    } finally {
+      setOrderSubmitting(false)
+    }
+  }
+
+  const handleCreateOrderFromPost = (post: any, postUser?: any) => {
+    openCreateOrderModal(
+      buildOrderDraftFromPost({
+        post,
+        postUser,
+        contact: postUser?.wechat_id,
+        isOwner: post?.user_id === user?.id,
+      })
+    )
   }
 
   const handleDeletePost = async (postId: string) => {
@@ -579,119 +729,132 @@ export default function ProfilePage() {
               </p>
             </div>
 
-            <div className="bg-white rounded-lg p-4">
-              <h3 className="font-semibold mb-3">快捷功能</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => switchTab('growth')}
-                  className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-emerald-400 hover:bg-emerald-50 transition-all"
-                >
-                  <CalendarCheck2 className="w-5 h-5 text-emerald-600" />
-                  <div className="text-left">
-                    <div className="font-medium text-sm">活跃中心</div>
-                    <div className="text-xs text-gray-500">签到任务与奖励</div>
+            <div className="space-y-4">
+              <div className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900">我的订单</h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                      统一记录真实成交，平台内外的订单都可以在这里管理
+                    </p>
                   </div>
-                </button>
-                <button
-                  onClick={() => setActiveTab('posts')}
-                  className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all"
-                >
-                  <FileText className="w-5 h-5 text-blue-600" />
-                  <div className="text-left">
-                    <div className="font-medium text-sm">我的发布</div>
-                    <div className="text-xs text-gray-500">{user?.total_posts}条</div>
-                  </div>
-                </button>
-                <button
-                  onClick={() => setActiveTab('aiPublish')}
-                  className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-purple-400 hover:bg-purple-50 transition-all"
-                >
-                  <Sparkles className="w-5 h-5 text-purple-600" />
-                  <div className="text-left">
-                    <div className="font-medium text-sm">AI批量发布</div>
-                    <div className="text-xs text-gray-500">智能生成</div>
-                  </div>
-                </button>
-                <button
-                  onClick={() => switchTab('leaderboard')}
-                  className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-orange-400 hover:bg-orange-50 transition-all"
-                >
-                  <Trophy className="w-5 h-5 text-orange-600" />
-                  <div className="text-left">
-                    <div className="font-medium text-sm">发帖榜</div>
-                    <div className="text-xs text-gray-500">看看谁最活跃</div>
-                  </div>
-                </button>
-                <button
-                  onClick={() => setActiveTab('history')}
-                  className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all"
-                >
-                  <Clock className="w-5 h-5 text-blue-600" />
-                  <div className="text-left">
-                    <div className="font-medium text-sm">查看历史</div>
-                    <div className="text-xs text-gray-500">最近记录</div>
-                  </div>
-                </button>
-                <button
-                  onClick={() => setActiveTab('expired')}
-                  className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-orange-400 hover:bg-orange-50 transition-all"
-                >
-                  <Archive className="w-5 h-5 text-orange-600" />
-                  <div className="text-left">
-                    <div className="font-medium text-sm">过期帖子</div>
-                    <div className="text-xs text-gray-500">已下架</div>
-                  </div>
-                </button>
-                <button
-                  onClick={() => setActiveTab('rechargeHistory')}
-                  className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all"
-                >
-                  <Receipt className="w-5 h-5 text-green-600" />
-                  <div className="text-left">
-                    <div className="font-medium text-sm">充值记录</div>
-                    <div className="text-xs text-gray-500">查看历史</div>
-                  </div>
-                </button>
-                <button
-                  onClick={() => setActiveTab('points')}
-                  className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all"
-                >
-                  <TrendingUp className="w-5 h-5 text-purple-600" />
-                  <div className="text-left">
-                    <div className="font-medium text-sm">积分明细</div>
-                    <div className="text-xs text-gray-500">收支记录</div>
-                  </div>
-                </button>
-                <button
-                  onClick={() => setActiveTab('invitations')}
-                  className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all"
-                >
-                  <Users className="w-5 h-5 text-blue-600" />
-                  <div className="text-left">
-                    <div className="font-medium text-sm">邀请奖励</div>
-                    <div className="text-xs text-gray-500">{user?.total_invites || 0}人</div>
-                  </div>
-                </button>
-                <button
-                  onClick={() => setActiveTab('changePassword')}
-                  className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all"
-                >
-                  <Key className="w-5 h-5 text-red-600" />
-                  <div className="text-left">
-                    <div className="font-medium text-sm">修改密码</div>
-                    <div className="text-xs text-gray-500">账号安全</div>
-                  </div>
-                </button>
-                <button
-                  onClick={() => setActiveTab('service')}
-                  className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all"
-                >
-                  <MessageCircle className="w-5 h-5 text-orange-600" />
-                  <div className="text-left">
-                    <div className="font-medium text-sm">联系客服</div>
-                    <div className="text-xs text-gray-500">在线帮助</div>
-                  </div>
-                </button>
+                  <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-600">
+                    {orders.length} 笔记录
+                  </span>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => switchTab('orders')}
+                    className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700 transition-all"
+                  >
+                    <PackageCheck className="h-4 w-4" />
+                    进入管理
+                  </button>
+                  <button
+                    onClick={() => openCreateOrderModal()}
+                    className="flex items-center justify-center gap-2 rounded-lg border border-blue-200 px-4 py-3 text-sm font-medium text-blue-700 hover:bg-blue-50 transition-all"
+                  >
+                    <Plus className="h-4 w-4" />
+                    手动新建
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg p-4">
+                <h3 className="font-semibold mb-3">常用功能</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => switchTab('posts')}
+                    className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all"
+                  >
+                    <FileText className="w-5 h-5 text-blue-600" />
+                    <div className="text-left">
+                      <div className="font-medium text-sm">我的发布</div>
+                      <div className="text-xs text-gray-500">{user?.total_posts}条</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => switchTab('history')}
+                    className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all"
+                  >
+                    <Clock className="w-5 h-5 text-blue-600" />
+                    <div className="text-left">
+                      <div className="font-medium text-sm">查看历史</div>
+                      <div className="text-xs text-gray-500">最近记录</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => switchTab('expired')}
+                    className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-orange-400 hover:bg-orange-50 transition-all"
+                  >
+                    <Archive className="w-5 h-5 text-orange-600" />
+                    <div className="text-left">
+                      <div className="font-medium text-sm">过期帖子</div>
+                      <div className="text-xs text-gray-500">已下架内容</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => switchTab('points')}
+                    className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all"
+                  >
+                    <TrendingUp className="w-5 h-5 text-purple-600" />
+                    <div className="text-left">
+                      <div className="font-medium text-sm">积分明细</div>
+                      <div className="text-xs text-gray-500">收支记录</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => switchTab('rechargeHistory')}
+                    className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all"
+                  >
+                    <Receipt className="w-5 h-5 text-green-600" />
+                    <div className="text-left">
+                      <div className="font-medium text-sm">充值记录</div>
+                      <div className="text-xs text-gray-500">查看历史</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => switchTab('invitations')}
+                    className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all"
+                  >
+                    <Users className="w-5 h-5 text-blue-600" />
+                    <div className="text-left">
+                      <div className="font-medium text-sm">邀请奖励</div>
+                      <div className="text-xs text-gray-500">{user?.total_invites || 0}人</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => switchTab('changePassword')}
+                    className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all"
+                  >
+                    <Key className="w-5 h-5 text-red-600" />
+                    <div className="text-left">
+                      <div className="font-medium text-sm">修改密码</div>
+                      <div className="text-xs text-gray-500">账号安全</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => switchTab('service')}
+                    className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all"
+                  >
+                    <MessageCircle className="w-5 h-5 text-orange-600" />
+                    <div className="text-left">
+                      <div className="font-medium text-sm">联系客服</div>
+                      <div className="text-xs text-gray-500">在线帮助</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => switchTab('aiPublish')}
+                    className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-purple-400 hover:bg-purple-50 transition-all"
+                  >
+                    <Sparkles className="w-5 h-5 text-purple-600" />
+                    <div className="text-left">
+                      <div className="font-medium text-sm">AI批量发布</div>
+                      <div className="text-xs text-gray-500">智能生成</div>
+                    </div>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -712,40 +875,6 @@ export default function ProfilePage() {
             >
               退出登录
             </button>
-          </div>
-        )}
-
-        {activeTab === 'growth' && user && (
-          <div className="space-y-4">
-            <button
-              onClick={() => switchTab('overview')}
-              className="text-blue-600 text-sm flex items-center gap-1"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              返回
-            </button>
-
-            <GrowthCenter
-              user={user}
-              onUserChange={setUser}
-              onGoPublish={() => navigate('/publish')}
-              onGoInvites={() => switchTab('invitations')}
-              onGoLeaderboard={() => switchTab('leaderboard')}
-            />
-          </div>
-        )}
-
-        {activeTab === 'leaderboard' && user && (
-          <div className="space-y-4">
-            <button
-              onClick={() => switchTab('overview')}
-              className="text-blue-600 text-sm flex items-center gap-1"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              返回
-            </button>
-
-            <PublishLeaderboard userId={user.id} />
           </div>
         )}
 
@@ -796,11 +925,11 @@ export default function ProfilePage() {
                     发布时间：{new Date(post.created_at).toLocaleString()}
                   </div>
                   
-                  <div className="flex gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleTogglePostStatus(post.id, post.status, post.view_count, post.view_limit)
+                    <div className="flex gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleTogglePostStatus(post.id, post.status, post.view_count, post.view_limit)
                       }}
                       disabled={loading}
                       className="flex-1 py-2 px-3 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
@@ -812,16 +941,26 @@ export default function ProfilePage() {
                         e.stopPropagation()
                         navigate(`/post/${post.id}`)
                       }}
-                      className="flex-1 py-2 px-3 border border-blue-300 text-blue-600 rounded-lg text-sm hover:bg-blue-50 flex items-center justify-center gap-1"
-                    >
-                      <Edit className="w-4 h-4" />
-                      查看详情
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDeletePost(post.id)
-                      }}
+                        className="flex-1 py-2 px-3 border border-blue-300 text-blue-600 rounded-lg text-sm hover:bg-blue-50 flex items-center justify-center gap-1"
+                      >
+                        <Edit className="w-4 h-4" />
+                        查看详情
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleCreateOrderFromPost(post)
+                        }}
+                        className="flex-1 py-2 px-3 border border-emerald-300 text-emerald-700 rounded-lg text-sm hover:bg-emerald-50 flex items-center justify-center gap-1"
+                      >
+                        <Receipt className="w-4 h-4" />
+                        记录成交
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeletePost(post.id)
+                        }}
                       disabled={loading}
                       className="py-2 px-3 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50"
                     >
@@ -830,6 +969,212 @@ export default function ProfilePage() {
                   </div>
                 </div>
               ))
+            )}
+          </div>
+        )}
+
+        {activeTab === 'orders' && (
+          <div className="space-y-4">
+            <button
+              onClick={() => switchTab('overview')}
+              className="text-blue-600 text-sm flex items-center gap-1"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              返回
+            </button>
+
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">我的订单</h2>
+                <p className="text-sm text-gray-500 mt-1">记录真实成交，统一管理平台内外交易</p>
+              </div>
+              <button
+                onClick={() => openCreateOrderModal()}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                <Plus className="w-4 h-4" />
+                手动新建
+              </button>
+            </div>
+
+            <OrderStatsCards orders={orders} />
+
+            <div className="bg-white rounded-xl p-4 shadow-sm space-y-3">
+              <input
+                type="text"
+                value={orderSearch}
+                onChange={(event) => setOrderSearch(event.target.value)}
+                placeholder="搜索标的、交易对象、联系方式、分类"
+                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    ['all', '全部来源'],
+                    ['platform_post', '平台帖子'],
+                    ['manual', '手动录入'],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      onClick={() => setOrderSourceFilter(value)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                        orderSourceFilter === value
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    ['all', '全部状态'],
+                    ['draft', '草稿'],
+                    ['completed', '已成交'],
+                    ['cancelled', '已取消'],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      onClick={() => setOrderStatusFilter(value)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                        orderStatusFilter === value
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    ['all', '全部角色'],
+                    ['buy', '我是买方'],
+                    ['sell', '我是卖方'],
+                    ['other', '其他'],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      onClick={() => setOrderSideFilter(value)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                        orderSideFilter === value
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {ordersLoading ? (
+              <div className="bg-white rounded-lg p-8 text-center text-gray-500">
+                订单加载中...
+              </div>
+            ) : filteredOrders.length === 0 ? (
+              <div className="bg-white rounded-2xl p-8 text-center">
+                <PackageCheck className="mx-auto h-12 w-12 text-gray-300" />
+                <h3 className="mt-4 text-base font-semibold text-gray-900">还没有订单记录</h3>
+                <p className="mt-2 text-sm text-gray-500">
+                  你可以从查看联系方式后的一键入口生成草稿，也可以先手动记一笔。
+                </p>
+                <button
+                  onClick={() => openCreateOrderModal()}
+                  className="mt-5 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                  <Plus className="w-4 h-4" />
+                  新建第一笔订单
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredOrders.map((order) => (
+                  <div key={order.id} className="bg-white rounded-2xl p-4 shadow-sm">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-base font-semibold text-gray-900">
+                            {order.subject_title}
+                          </h3>
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-xs font-medium ${ORDER_STATUS_STYLES[order.status]}`}
+                          >
+                            {ORDER_STATUS_LABELS[order.status]}
+                          </span>
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-xs font-medium ${ORDER_SOURCE_STYLES[order.source_type]}`}
+                          >
+                            {ORDER_SOURCE_LABELS[order.source_type]}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {ORDER_SIDE_LABELS[order.my_side]}
+                          {order.counterparty_name ? ` · ${order.counterparty_name}` : ''}
+                          {order.counterparty_contact ? ` · ${order.counterparty_contact}` : ''}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-lg font-semibold text-gray-900">
+                          ¥ {formatCurrency(Number(order.total_amount || 0))}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {formatDateTime(order.deal_at)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-gray-600">
+                      <div className="rounded-xl bg-gray-50 px-3 py-2">
+                        数量：{order.quantity ?? '--'}
+                      </div>
+                      <div className="rounded-xl bg-gray-50 px-3 py-2">
+                        单价：{order.unit_price ? `¥ ${formatCurrency(order.unit_price)}` : '--'}
+                      </div>
+                      <div className="rounded-xl bg-gray-50 px-3 py-2">
+                        分类：{order.category_name || '--'}
+                      </div>
+                      <div className="rounded-xl bg-gray-50 px-3 py-2">
+                        交割：{order.delivery_method || '--'}
+                      </div>
+                    </div>
+
+                    {(order.trade_type_label || order.notes) && (
+                      <div className="mt-4 space-y-2 text-sm text-gray-600">
+                        {order.trade_type_label && (
+                          <div>交易类型：{order.trade_type_label}</div>
+                        )}
+                        {order.notes && (
+                          <div className="rounded-xl bg-slate-50 px-3 py-3 text-gray-600">
+                            备注：{order.notes}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        onClick={() => openEditOrderModal(order)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50"
+                      >
+                        <Edit className="w-4 h-4" />
+                        编辑
+                      </button>
+                      {order.source_post_id && (
+                        <button
+                          onClick={() => navigate(`/post/${order.source_post_id}`)}
+                          className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                        >
+                          查看原帖
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -855,6 +1200,23 @@ export default function ProfilePage() {
                   onClick={() => navigate(`/post/${item.post_id}`)}
                   className="bg-white rounded-lg p-4 cursor-pointer hover:bg-gray-50"
                 >
+                  <div className="mb-3 flex justify-end">
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        openCreateOrderModal(
+                          buildOrderDraftFromPost({
+                            post: item.posts,
+                            postUser: item.posts?.user,
+                            contact: item.posts?.user?.wechat_id,
+                          })
+                        )
+                      }}
+                      className="rounded-lg border border-blue-200 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50"
+                    >
+                      补记订单
+                    </button>
+                  </div>
                   <h3 className="font-semibold mb-2">{item.posts?.title}</h3>
                   <div className="text-sm text-gray-600">
                     查看时间：{new Date(item.viewed_at).toLocaleString()}
@@ -1414,6 +1776,19 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+
+      <OrderFormModal
+        open={orderModalOpen}
+        order={editingOrder}
+        initialValues={orderDraft}
+        submitting={orderSubmitting}
+        onClose={() => {
+          setOrderModalOpen(false)
+          setEditingOrder(null)
+          setOrderDraft(createEmptyOrderDraft())
+        }}
+        onSubmit={handleOrderSubmit}
+      />
     </div>
   )
 }

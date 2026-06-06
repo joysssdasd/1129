@@ -49,3 +49,9 @@ simple-db-*
 init-db-*
 complete-*
 final-*
+
+# Tencent Cloud EdgeOne
+.env
+.edgeone/*
+.tef_dist/*
+  

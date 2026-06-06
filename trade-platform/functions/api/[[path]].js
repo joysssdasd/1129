@@ -71,7 +71,8 @@ const POINT_CHANGE_TYPES = {
   inviteReward: 4,
   dailyPostReward: 9,
   registrationTopUp: 10,
-  dailyCheckIn: 11
+  dailyCheckIn: 11,
+  postExpireRefund: 12  // 帖子过期下架退还积分
 }
 
 const AUTO_MARKET_INFO_PREFIX = '__managed_market__'
@@ -1017,7 +1018,7 @@ const loadPostById = async (config, postId) => {
     resource: 'posts',
     query:
       `id=eq.${encodeURIComponent(postId)}` +
-      '&select=id,user_id,title,keywords,price,trade_type,category_id,extra_info,view_limit,status,expire_at,created_at,updated_at' +
+      '&select=id,user_id,title,keywords,price,trade_type,category_id,extra_info,view_limit,status,expire_at,source_type,market_key,market_board,market_data,run_id,created_at,updated_at' +
       '&limit=1',
     useServiceRole: true
   })
@@ -1108,7 +1109,7 @@ const insertManagedMarketPost = async ({ config, operatorId, post, expireAt, syn
     config,
     resource: 'posts',
     query:
-      'select=id,user_id,title,keywords,price,trade_type,category_id,extra_info,view_limit,status,expire_at,created_at,updated_at',
+      'select=id,user_id,title,keywords,price,trade_type,category_id,extra_info,view_limit,status,expire_at,source_type,market_key,market_board,market_data,run_id,created_at,updated_at',
     method: 'POST',
     body: [
       {
@@ -1162,7 +1163,7 @@ const updateManagedMarketPost = async ({ config, postId, payload }) => {
     resource: 'posts',
     query:
       `id=eq.${encodeURIComponent(postId)}` +
-      '&select=id,user_id,title,keywords,price,trade_type,category_id,extra_info,view_limit,status,expire_at,created_at,updated_at',
+      '&select=id,user_id,title,keywords,price,trade_type,category_id,extra_info,view_limit,status,expire_at,source_type,market_key,market_board,market_data,run_id,created_at,updated_at',
     method: 'PATCH',
     body: payload,
     useServiceRole: true,
@@ -1190,7 +1191,7 @@ const shouldRefreshManagedExpireAt = (currentExpireAt, nextExpireAt) => {
   return currentMs <= Date.now() + refreshThresholdMs || currentMs > nextMs
 }
 
-const buildManagedPostUpdatePayload = ({ currentPost, post, expireAt }) => {
+const buildManagedPostUpdatePayload = ({ currentPost, post, expireAt, syncMeta }) => {
   const payload = {}
   const changedFields = []
 
@@ -1232,6 +1233,26 @@ const buildManagedPostUpdatePayload = ({ currentPost, post, expireAt }) => {
   if (Number(currentPost.status || 0) !== 1) {
     payload.status = 1
     changedFields.push('status')
+  }
+
+  if ((currentPost.source_type || '') !== 'wechat_market') {
+    payload.source_type = 'wechat_market'
+    changedFields.push('sourceType')
+  }
+
+  if ((currentPost.market_key || null) !== (post.marketKey || null)) {
+    payload.market_key = post.marketKey || null
+    changedFields.push('marketKey')
+  }
+
+  if ((currentPost.market_board || null) !== (post.categoryName || null)) {
+    payload.market_board = post.categoryName || null
+    changedFields.push('marketBoard')
+  }
+
+  if ((currentPost.run_id || null) !== (syncMeta?.runId || null)) {
+    payload.run_id = syncMeta?.runId || null
+    changedFields.push('runId')
   }
 
   if (shouldRefreshManagedExpireAt(currentPost.expire_at, expireAt)) {
@@ -1477,7 +1498,7 @@ const loadRecentOperatorMarketPosts = async ({ config, operatorId, categoryIds }
       `user_id=eq.${encodeURIComponent(operatorId)}` +
       `&category_id=in.(${categoryIds.map((id) => `"${id}"`).join(',')})` +
       `&created_at=gte.${encodeURIComponent(since)}` +
-      '&select=id,title,price,trade_type,category_id,extra_info,status,expire_at,created_at,updated_at' +
+      '&select=id,title,price,trade_type,category_id,extra_info,status,expire_at,source_type,market_key,market_board,market_data,run_id,created_at,updated_at' +
       '&order=created_at.desc' +
       '&limit=200',
     useServiceRole: true
@@ -1517,6 +1538,179 @@ const deactivateManagedMarketPosts = async ({ config, postIds }) => {
   }
 
   return Array.isArray(updateRes.data) ? updateRes.data : []
+}
+
+// 自动下架超过3天的帖子
+// - 用户发布(source_type='user')：下架 + 退还积分
+// - 管理员发布(source_type='wechat_market')：仅下架
+const handleAdminAutoExpirePosts = async ({ request, config }) => {
+  const missingServiceRoleResponse = requireServiceRole(config)
+  if (missingServiceRoleResponse) return missingServiceRoleResponse
+
+  try {
+    const adminCheck = await verifyAdminRequest({ config, request })
+    if (!adminCheck.ok) return adminCheck.response
+
+    const payload = await readJsonBody(request)
+    const dryRun = payload?.dryRun === true
+    // 超过天数，默认3天
+    const expireDays = Number(payload?.expireDays || 3)
+    const now = new Date()
+    const expireThreshold = new Date(now.getTime() - expireDays * 24 * 60 * 60 * 1000).toISOString()
+
+    // 查询超过期限的活跃帖子
+    const postsRes = await restRequest({
+      config,
+      resource: 'posts',
+      query:
+        'status=eq.1' +
+        `&created_at=lt.${encodeURIComponent(expireThreshold)}` +
+        '&select=id,user_id,title,price,source_type,status,created_at,points_cost',
+      useServiceRole: true
+    })
+
+    if (!postsRes.ok) {
+      throw new Error(postsRes.text || 'Failed to query expired posts')
+    }
+
+    const expiredPosts = Array.isArray(postsRes.data) ? postsRes.data : []
+    const result = {
+      total: expiredPosts.length,
+      userPosts: { expired: 0, pointsRefunded: 0 },
+      adminPosts: { expired: 0 },
+      errors: []
+    }
+
+    // 分别处理用户帖子和管理员帖子
+    const userPosts = expiredPosts.filter(p => p.source_type === 'user')
+    const adminPosts = expiredPosts.filter(p => p.source_type === 'wechat_market')
+
+    // 处理用户帖子：下架 + 退还积分
+    for (const post of userPosts) {
+      try {
+        // 下架帖子
+        const updateRes = await restRequest({
+          config,
+          resource: 'posts',
+          query: `id=eq.${encodeURIComponent(post.id)}`,
+          method: 'PATCH',
+          body: {
+            status: 0,
+            is_manually_hidden: true,
+            hide_reason: 'auto_expired',
+            updated_at: now.toISOString()
+          },
+          useServiceRole: true
+        })
+
+        if (!updateRes.ok) {
+          throw new Error(updateRes.text || 'Failed to update post')
+        }
+
+        // 退还积分
+        const pointsToRefund = Number(post.points_cost || 1)
+        if (pointsToRefund > 0) {
+          // 获取当前用户积分
+          const userRes = await restRequest({
+            config,
+            resource: 'users',
+            query: `id=eq.${encodeURIComponent(post.user_id)}&select=id,points`,
+            useServiceRole: true
+          })
+
+          if (userRes.ok && Array.isArray(userRes.data) && userRes.data.length > 0) {
+            const currentPoints = Number(userRes.data[0].points || 0)
+            const newPoints = currentPoints + pointsToRefund
+
+            await updateUserPoints(config, post.user_id, newPoints)
+
+            await insertPointTransaction(config, {
+              user_id: post.user_id,
+              change_type: POINT_CHANGE_TYPES.postExpireRefund,
+              change_amount: pointsToRefund,
+              balance_after: newPoints,
+              related_id: post.id,
+              description: `帖子到期下架退还：${post.title}`,
+              created_at: now.toISOString()
+            })
+          }
+        }
+
+        result.userPosts.expired++
+        result.userPosts.pointsRefunded += pointsToRefund
+      } catch (err) {
+        result.errors.push(`Post ${post.id}: ${err.message}`)
+      }
+    }
+
+    // 处理管理员帖子：仅下架
+    for (const post of adminPosts) {
+      try {
+        const updateRes = await restRequest({
+          config,
+          resource: 'posts',
+          query: `id=eq.${encodeURIComponent(post.id)}`,
+          method: 'PATCH',
+          body: {
+            status: 0,
+            hide_reason: 'auto_expired',
+            updated_at: now.toISOString()
+          },
+          useServiceRole: true
+        })
+
+        if (!updateRes.ok) {
+          throw new Error(updateRes.text || 'Failed to update post')
+        }
+
+        result.adminPosts.expired++
+      } catch (err) {
+        result.errors.push(`Admin Post ${post.id}: ${err.message}`)
+      }
+    }
+
+    if (dryRun) {
+      return json({
+        success: true,
+        data: {
+          dryRun: true,
+          expireDays,
+          expireThreshold,
+          message: 'Dry run - no changes made',
+          wouldExpire: expiredPosts.map(p => ({
+            id: p.id,
+            title: p.title,
+            sourceType: p.source_type,
+            createdAt: p.created_at,
+            pointsCost: p.points_cost
+          })),
+          ...result
+        }
+      })
+    }
+
+    return json({
+      success: true,
+      data: {
+        dryRun: false,
+        expireDays,
+        expireThreshold,
+        executedAt: now.toISOString(),
+        ...result
+      }
+    })
+  } catch (error) {
+    return json(
+      {
+        success: false,
+        error: {
+          code: 'AUTO_EXPIRE_ERROR',
+          message: error?.message || 'Failed to auto-expire posts'
+        }
+      },
+      500
+    )
+  }
 }
 
 const handleAdminWechatAutoPublish = async ({ request, config }) => {
@@ -1806,7 +2000,8 @@ const handleAdminWechatAutoPublish = async ({ request, config }) => {
         const { payload: updatePayload, changedFields, shouldUpdate } = buildManagedPostUpdatePayload({
           currentPost,
           post,
-          expireAt
+          expireAt,
+          syncMeta
         })
 
         touchedPostIds.add(currentPost.id)
@@ -3538,6 +3733,14 @@ export async function onRequest(context) {
     pathSegments[1] === 'wechat-auto-publish'
   ) {
     return handleAdminWechatAutoPublish({ request, config })
+  }
+
+  if (
+    request.method === 'POST' &&
+    pathSegments[0] === 'admin' &&
+    pathSegments[1] === 'auto-expire-posts'
+  ) {
+    return handleAdminAutoExpirePosts({ request, config })
   }
 
   if (

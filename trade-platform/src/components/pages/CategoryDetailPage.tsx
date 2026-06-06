@@ -5,6 +5,12 @@ import { ArrowLeft, Search, TrendingUp } from 'lucide-react'
 import { useUser } from '../../contexts/UserContext'
 import { toast } from '../../services/toastService'
 import { POINTS } from '../../constants'
+import OrderDraftPrompt from '../../features/orders/OrderDraftPrompt'
+import {
+  buildOrderDraftFromPost,
+  savePendingOrderDraft,
+} from '../../features/orders/orderHelpers'
+import type { RealOrderFormValues } from '../../types/orders'
 
 interface Post {
   id: string
@@ -31,6 +37,7 @@ export default function CategoryDetailPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const { user, setUser } = useUser()
+  const [orderPromptDraft, setOrderPromptDraft] = useState<RealOrderFormValues | null>(null)
   
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
@@ -100,6 +107,14 @@ export default function CategoryDetailPage() {
       toast.success(`已复制联系方式：${data.wechat_id}`)
 
       // 更新用户积分
+      setOrderPromptDraft(
+        buildOrderDraftFromPost({
+          post,
+          contact: data.wechat_id,
+          categoryName,
+        })
+      )
+
       if (user && !data?.already_viewed) {
         setUser({
           ...user,
@@ -109,6 +124,13 @@ export default function CategoryDetailPage() {
     } catch (error: any) {
       toast.error('操作失败', error.message)
     }
+  }
+
+  const handleCreateOrderDraft = () => {
+    if (!orderPromptDraft) return
+    savePendingOrderDraft(orderPromptDraft)
+    setOrderPromptDraft(null)
+    navigate('/profile?tab=orders')
   }
 
   const filteredPosts = posts.filter(post => {
@@ -219,6 +241,14 @@ export default function CategoryDetailPage() {
           </div>
         )}
       </div>
+
+      <OrderDraftPrompt
+        open={!!orderPromptDraft}
+        subjectTitle={orderPromptDraft?.subject_title}
+        contact={orderPromptDraft?.counterparty_contact}
+        onClose={() => setOrderPromptDraft(null)}
+        onCreateDraft={handleCreateOrderDraft}
+      />
     </div>
   )
 }
