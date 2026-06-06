@@ -1608,7 +1608,8 @@ const handleAdminAutoExpirePosts = async ({ request, config }) => {
     const now = new Date()
     const nowIso = now.toISOString()
     const expireThreshold = new Date(now.getTime() - expireDays * 24 * 60 * 60 * 1000).toISOString()
-    const selectFields = 'id,user_id,title,source_type,status,created_at,expire_at,market_board,market_data'
+    const selectFields = 'id,user_id,title,source_type,status,created_at,expire_at'
+    const marketSelectFields = `${selectFields},market_board,market_data`
 
     const expiredByExpireAtRes = await restRequest({
       config,
@@ -1616,7 +1617,9 @@ const handleAdminAutoExpirePosts = async ({ request, config }) => {
       query:
         'status=eq.1' +
         `&expire_at=lt.${encodeURIComponent(nowIso)}` +
-        `&select=${selectFields}`,
+        `&select=${selectFields}` +
+        '&order=expire_at.asc' +
+        '&limit=1000',
       useServiceRole: true
     })
 
@@ -1630,7 +1633,9 @@ const handleAdminAutoExpirePosts = async ({ request, config }) => {
       query:
         'status=eq.1' +
         `&created_at=lt.${encodeURIComponent(expireThreshold)}` +
-        `&select=${selectFields}`,
+        `&select=${selectFields}` +
+        '&order=created_at.asc' +
+        '&limit=1000',
       useServiceRole: true
     })
 
@@ -1644,9 +1649,9 @@ const handleAdminAutoExpirePosts = async ({ request, config }) => {
       query:
         'status=eq.1' +
         '&source_type=eq.wechat_market' +
-        `&select=${selectFields}` +
+        `&select=${marketSelectFields}` +
         '&order=created_at.desc' +
-        '&limit=1000',
+        '&limit=500',
       useServiceRole: true
     })
 
